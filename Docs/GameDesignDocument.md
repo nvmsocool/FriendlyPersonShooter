@@ -242,7 +242,7 @@ flowchart LR
 
 A merged lobby can split again later, so the population keeps reshuffling toward players who are about to cross paths.
 
-**Hosting.** Each lobby runs on a dedicated server you run. A merge moves one lobby's players onto the other's server. Account progress (essence, gear, kudos) lives in a central backend that lobby servers read and write.
+**Hosting.** Lobbies run on dedicated servers you run, and each server process hosts many lobbies. A merge inside one process is just a change in who can see whom, so it is invisible by design. Moving players between server processes is added later, only when one machine fills up. Account progress (essence, gear, kudos) lives in a central backend that lobby servers read and write.
 
 ## Social design
 

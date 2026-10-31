@@ -141,3 +141,7 @@ crashlytics-build.properties
 .idea/
 *.csproj
 *.sln
+
+# dotnet test projects
+Tests/**/bin/
+Tests/**/obj/

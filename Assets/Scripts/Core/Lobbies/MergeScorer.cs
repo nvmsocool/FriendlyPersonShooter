@@ -28,7 +28,7 @@ namespace FriendlyPersonShooter.Core.Lobbies
     /// Scores how likely two lobbies' players are to run into each other.
     /// Hard rules (same layer and seed, size cap, blocks, safe distance) reject a pair outright.
     /// Otherwise the score rewards lobbies that are close and that each sit in zones the other
-    /// hasn't explored yet, which is the design doc's "zone 11 / zone 12" example.
+    /// hasn't explored yet, as in the design doc's "zone 11 / zone 13" example.
     /// </summary>
     public static class MergeScorer
     {

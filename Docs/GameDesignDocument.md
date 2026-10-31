@@ -226,7 +226,7 @@ The world is a set of huge grids of zones that wrap around at the edges, one gri
 - A lobby holds up to 16 players. Below about 4, it is put into matchmaking more eagerly.
 - **Splitting:** when a lobby's players end up more than 3 zones apart, it splits into two lobbies by location. Groups never split; a group's members always share a lobby.
 - **Matching:** each new lobby enters a hidden lobby matchmaker that pairs lobbies on the same layer, weighing in this order:
-    1. Proximity and unvisited zones. For example, lobby A is in zone 11, near zone 12, and hasn't visited it; lobby B is in zone 12 and hasn't visited zone 11. They're a good pair.
+    1. Proximity and unvisited zones. For example, lobby A is in zone 11 and lobby B is in zone 13, with zone 12 between them. Neither has visited the other's zone, so they're a good pair. Lobbies in neighboring zones never merge, so nobody pops into view in a zone they already have loaded.
     2. Complementary essence needs: what each lobby carries and is looking for.
     3. Past kudos between players, as a small bonus.
     4. Blocks always keep two players apart.

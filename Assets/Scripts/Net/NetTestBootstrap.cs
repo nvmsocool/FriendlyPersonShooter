@@ -1,4 +1,5 @@
 using Unity.NetCode;
+using Unity.Scenes;
 using Unity.Networking.Transport;
 using UnityEngine;
 
@@ -39,7 +40,9 @@ namespace FriendlyPersonShooter.Net
             {
                 for (int i = 0; i < NetTestSettings.BotCount; i++)
                 {
-                    CreateThinClientWorld();
+                    var bot = CreateThinClientWorld();
+                    // Bots never load scenes; drop the idle background loading worlds each one gets.
+                    bot.GetExistingSystemManaged<SceneSectionStreamingSystem>().ConcurrentSectionStreamCount = 0;
                 }
             }
 

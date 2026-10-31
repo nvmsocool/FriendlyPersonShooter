@@ -5,6 +5,7 @@
         "FriendlyPersonShooter.Core",
         "Unity.NetCode",
         "Unity.Entities",
+        "Unity.Scenes",
         "Unity.Transforms",
         "Unity.Mathematics",
         "Unity.Collections",

@@ -46,13 +46,15 @@ namespace FriendlyPersonShooter.Core.Lobbies
             if (a.Players.Count + b.Players.Count > rules.MaxPlayers) return MergeEvaluation.Reject("too many players");
             if (HasBlock(a, b)) return MergeEvaluation.Reject("blocked player");
 
+            // A merged lobby farther apart than the split distance would split on the next pass.
+            int maxDistance = Math.Min(rules.MaxMergeDistance, rules.SplitDistance);
             int minDistance = MinDistance(a, b, grid);
             if (minDistance < rules.MinMergeGap) return MergeEvaluation.Reject("too close");
-            if (minDistance > rules.MaxMergeDistance) return MergeEvaluation.Reject("too far");
+            if (minDistance > maxDistance) return MergeEvaluation.Reject("too far");
 
             // 1.0 at the minimum gap, falling toward 0 at the maximum distance.
-            int span = rules.MaxMergeDistance - rules.MinMergeGap + 1;
-            double proximity = (double)(rules.MaxMergeDistance - minDistance + 1) / span;
+            int span = Math.Max(1, maxDistance - rules.MinMergeGap + 1);
+            double proximity = (double)(maxDistance - minDistance + 1) / span;
 
             // Share of each lobby's occupied zones that the other lobby hasn't visited, averaged.
             double discovery = (Novelty(b, a) + Novelty(a, b)) / 2.0;

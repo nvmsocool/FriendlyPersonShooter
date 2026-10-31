@@ -44,13 +44,14 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var a = LobbyAt(1, new ZoneCoord(2, 2));
             var near = LobbyAt(2, new ZoneCoord(4, 2));
-            var far = LobbyAt(3, new ZoneCoord(7, 2));
+            var far = LobbyAt(3, new ZoneCoord(5, 2));
             Assert.That(MergeScorer.Evaluate(a, near, _grid, _rules).Score,
                 Is.GreaterThan(MergeScorer.Evaluate(a, far, _grid, _rules).Score));
         }
 
         [TestCase(0, "too close")]
         [TestCase(1, "too close")]
+        [TestCase(4, "too far")]
         [TestCase(6, "too far")]
         public void DistanceLimits_RejectMerges(int dx, string reason)
         {
@@ -59,6 +60,18 @@ namespace FriendlyPersonShooter.Core.Tests
             var eval = MergeScorer.Evaluate(a, b, _grid, _rules);
             Assert.That(eval.Allowed, Is.False);
             Assert.That(eval.RejectReason, Is.EqualTo(reason));
+        }
+
+        [Test]
+        public void MergeThatWouldSplitAgain_IsRejected_EvenWithLargeMergeRange()
+        {
+            // Lobbies 4 zones apart would split on the next pass, so merging them only causes churn.
+            var rules = new LobbyRules { MaxMergeDistance = 6 };
+            var a = LobbyAt(1, new ZoneCoord(2, 2));
+            var b = LobbyAt(2, new ZoneCoord(6, 2));
+            var eval = MergeScorer.Evaluate(a, b, _grid, rules);
+            Assert.That(eval.Allowed, Is.False);
+            Assert.That(eval.RejectReason, Is.EqualTo("too far"));
         }
 
         [Test]

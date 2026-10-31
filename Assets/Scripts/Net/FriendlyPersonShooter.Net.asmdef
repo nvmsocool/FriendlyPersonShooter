@@ -1,0 +1,25 @@
+{
+    "name": "FriendlyPersonShooter.Net",
+    "rootNamespace": "FriendlyPersonShooter.Net",
+    "references": [
+        "FriendlyPersonShooter.Core",
+        "Unity.NetCode",
+        "Unity.Entities",
+        "Unity.Transforms",
+        "Unity.Mathematics",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Networking.Transport",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

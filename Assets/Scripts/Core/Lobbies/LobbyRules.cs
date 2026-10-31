@@ -18,8 +18,11 @@ namespace FriendlyPersonShooter.Core.Lobbies
         /// </summary>
         public int MinMergeGap { get; set; } = 2;
 
-        /// <summary>Lobbies farther apart than this aren't considered for a merge.</summary>
-        public int MaxMergeDistance { get; set; } = 5;
+        /// <summary>
+        /// Lobbies farther apart than this aren't considered for a merge. Never more than
+        /// <see cref="SplitDistance"/>, or the merged lobby would split straight away.
+        /// </summary>
+        public int MaxMergeDistance { get; set; } = 3;
 
         /// <summary>Lobbies this size or smaller get a bonus so they merge more eagerly.</summary>
         public int SmallLobbySize { get; set; } = 4;

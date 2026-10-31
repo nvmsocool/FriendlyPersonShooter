@@ -19,6 +19,34 @@ namespace FriendlyPersonShooter.Net
         public static int TotalMerges;
         /// <summary>Lobby id for each network id, so a client view can show its own lobby.</summary>
         public static readonly Dictionary<int, int> LobbyOfPlayer = new Dictionary<int, int>();
+
+        /// <summary>The latest splits and merges, oldest first, for the lobby map.</summary>
+        public static readonly List<LobbyEvent> RecentEvents = new List<LobbyEvent>();
+        private const int MaxEvents = 40;
+
+        public static void Record(LobbyEvent e)
+        {
+            e.Time = Time.unscaledTimeAsDouble;
+            RecentEvents.Add(e);
+            if (RecentEvents.Count > MaxEvents) RecentEvents.RemoveAt(0);
+        }
+    }
+
+    public enum LobbyEventKind { Split, Merge }
+
+    /// <summary>One split or merge. For a split, B is the new lobby; for a merge, B joined A.</summary>
+    public struct LobbyEvent
+    {
+        public LobbyEventKind Kind;
+        public double Time;
+        public int LobbyA;
+        public int LobbyB;
+        /// <summary>Where it happened: the zone of the first player who moved lobby.</summary>
+        public ZoneCoord Zone;
+        /// <summary>Players in A afterwards.</summary>
+        public int PlayersA;
+        /// <summary>Players in B afterwards (0 for a merge).</summary>
+        public int PlayersB;
     }
 
     /// <summary>
@@ -141,6 +169,11 @@ namespace FriendlyPersonShooter.Net
                     var split = NewLobby();
                     split.Players.AddRange(clusters[i]);
                     _noMergeUntil[split.Id] = now + MergeCooldown;
+                    LobbyStats.Record(new LobbyEvent
+                    {
+                        Kind = LobbyEventKind.Split, LobbyA = lobby.Id, LobbyB = split.Id,
+                        Zone = clusters[i][0].Zone, PlayersA = clusters[0].Count, PlayersB = clusters[i].Count,
+                    });
                     foreach (var p in clusters[i]) _lobbyOf[p.Id] = split.Id;
                 }
                 LobbyStats.TotalSplits += clusters.Count - 1;
@@ -157,6 +190,7 @@ namespace FriendlyPersonShooter.Net
             var merges = LobbyMatchmaker.ChooseMerges(candidates, _grid, _rules);
             foreach (var merge in merges)
             {
+                var zone = merge.B.Players[0].Zone;
                 foreach (var p in merge.B.Players)
                 {
                     merge.A.Players.Add(p);
@@ -164,6 +198,11 @@ namespace FriendlyPersonShooter.Net
                 }
                 _lobbies.Remove(merge.B.Id);
                 _noMergeUntil.Remove(merge.B.Id);
+                LobbyStats.Record(new LobbyEvent
+                {
+                    Kind = LobbyEventKind.Merge, LobbyA = merge.A.Id, LobbyB = merge.B.Id,
+                    Zone = zone, PlayersA = merge.A.Players.Count,
+                });
                 LobbyStats.TotalMerges++;
             }
         }

@@ -28,7 +28,8 @@ namespace FriendlyPersonShooter.Net
         private const float FlashSeconds = 2.5f;
 
         private Mesh _cube;
-        private Material _localMat, _otherMat, _tileMatA, _tileMatB, _mergeMat, _splitMat;
+        private Material _localMat, _otherMat, _tileMatA, _tileMatB, _mergeMat, _splitMat, _duplicateMat;
+        private readonly List<Matrix4x4> _duplicates = new List<Matrix4x4>();
         private readonly Material[] _lobbyMats = new Material[PaletteSize];
         private readonly List<Matrix4x4>[] _byColor = new List<Matrix4x4>[PaletteSize];
         private readonly List<Matrix4x4> _others = new List<Matrix4x4>();
@@ -75,6 +76,7 @@ namespace FriendlyPersonShooter.Net
             _tileMatB = MakeMat(baseMat, new Color(0.26f, 0.28f, 0.25f));
             _mergeMat = MakeMat(baseMat, Color.white);
             _splitMat = MakeMat(baseMat, new Color(1f, 0.15f, 0.15f));
+            _duplicateMat = MakeMat(baseMat, new Color(0.75f, 0.42f, 0.12f));
             for (int i = 0; i < PaletteSize; i++)
             {
                 // Golden-ratio hue steps keep consecutive colors far apart.
@@ -182,6 +184,15 @@ namespace FriendlyPersonShooter.Net
             DrawList(_tilesA, _tileMatA, Matrix4x4.identity);
             DrawList(_tilesB, _tileMatB, Matrix4x4.identity);
             PlaceMapCamera(size);
+
+            // Zones that more than one lobby has loaded, so the server simulates them more than once.
+            _duplicates.Clear();
+            foreach (var z in LobbyStats.Cost.DuplicatedZones)
+            {
+                _duplicates.Add(Matrix4x4.TRS(new Vector3((z.X + 0.5f) * zone, 0.05f, (z.Y + 0.5f) * zone),
+                    Quaternion.identity, new Vector3(zone * 0.94f, 0.2f, zone * 0.94f)));
+            }
+            DrawList(_duplicates, _duplicateMat, Matrix4x4.identity);
 
             if (_serverQueryWorld != server)
             {
@@ -295,8 +306,12 @@ namespace FriendlyPersonShooter.Net
             _text.Append($"Lobby map   {_fps:0} fps   (M: player view)\n");
             _text.Append($"{LobbyStats.Players} players, {LobbyStats.Lobbies} lobbies, " +
                          $"avg {LobbyStats.AverageSize:0.0}, largest {LobbyStats.LargestLobby}\n");
-            _text.Append($"Splits {LobbyStats.TotalSplits}, merges {LobbyStats.TotalMerges}\n\n");
+            _text.Append($"Splits {LobbyStats.TotalSplits}, merges {LobbyStats.TotalMerges}\n");
+            var cost = LobbyStats.Cost;
+            _text.Append($"Zone copies {cost.LoadedInstances} for {cost.DistinctLoadedZones} zones in use " +
+                         $"(duplication {cost.Duplication:0.00}x), {cost.LoadedZonesPerPlayer:0.0} per player\n\n");
             _text.Append("Each color is one lobby. Lines join each player\nto the nearest player in the same lobby.\n");
+            _text.Append("Orange zones are loaded by 2+ lobbies (simulated twice).\n");
             _text.Append($"White flash = merge, red flash = split.\nYellow frame = you (lobby {myLobby}).\n\n");
             _text.Append("Latest:\n");
             var events = LobbyStats.RecentEvents;

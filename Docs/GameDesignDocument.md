@@ -244,6 +244,8 @@ A merged lobby can split again later, so the population keeps reshuffling toward
 
 **Hosting.** Lobbies run on dedicated servers you run, and each server process hosts many lobbies. A merge inside one process is just a change in who can see whom, so it is invisible by design. Moving players between server processes is added later, only when one machine fills up. Account progress (essence, gear, kudos) lives in a central backend that lobby servers read and write.
 
+**Server cost.** A lobby is a tag on entities inside one shared server world, never a world of its own, so the number of lobbies costs almost nothing. Cost follows zone copies: each lobby simulates its own copy of the zones its players have loaded, and open-world enemies don't scale with players. In a 100-bot test, cost stayed at about 6–7 zone copies per player whether players were split into 7 lobbies or 26. The levers are how many zones each player keeps fully simulated (for example, only the zone a player stands in runs enemies at full rate) and how closely players gather.
+
 ## Social design
 
 The game makes every encounter between strangers either useful or harmless, never costly. Players can't hurt each other, can't steal kills, can't compete for loot, and nearly always have something to offer: a buff, a direction, or a few essence.

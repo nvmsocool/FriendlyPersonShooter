@@ -17,6 +17,8 @@ namespace FriendlyPersonShooter.Net
         public static int LargestLobby;
         public static int TotalSplits;
         public static int TotalMerges;
+        /// <summary>Zone simulation cost of the current lobbies; see <see cref="LobbyCost"/>.</summary>
+        public static LobbyCostReport Cost = new LobbyCostReport();
         /// <summary>Lobby id for each network id, so a client view can show its own lobby.</summary>
         public static readonly Dictionary<int, int> LobbyOfPlayer = new Dictionary<int, int>();
 
@@ -97,7 +99,9 @@ namespace FriendlyPersonShooter.Net
                 _nextLog = now + 5.0;
                 Debug.Log($"[Lobbies] players={LobbyStats.Players} lobbies={LobbyStats.Lobbies} " +
                           $"avg={LobbyStats.AverageSize:0.0} max={LobbyStats.LargestLobby} " +
-                          $"splits={LobbyStats.TotalSplits} merges={LobbyStats.TotalMerges}");
+                          $"splits={LobbyStats.TotalSplits} merges={LobbyStats.TotalMerges} " +
+                          $"zoneCopies={LobbyStats.Cost.LoadedInstances} zones={LobbyStats.Cost.DistinctLoadedZones} " +
+                          $"duplication={LobbyStats.Cost.Duplication:0.00} zonesPerPlayer={LobbyStats.Cost.LoadedZonesPerPlayer:0.0}");
             }
 
             UpdateRelevancy();
@@ -241,6 +245,7 @@ namespace FriendlyPersonShooter.Net
             LobbyStats.Lobbies = _lobbies.Count;
             LobbyStats.AverageSize = _lobbies.Count == 0 ? 0f : (float)_players.Count / _lobbies.Count;
             LobbyStats.LargestLobby = largest;
+            LobbyStats.Cost = LobbyCost.Estimate(_lobbies.Values, _grid);
             LobbyStats.LobbyOfPlayer.Clear();
             foreach (var kv in _lobbyOf) LobbyStats.LobbyOfPlayer[kv.Key] = kv.Value;
         }

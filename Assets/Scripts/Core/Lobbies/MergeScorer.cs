@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.World;
 
 namespace FriendlyPersonShooter.Core.Lobbies
@@ -28,11 +29,16 @@ namespace FriendlyPersonShooter.Core.Lobbies
     /// Scores how likely two lobbies' players are to run into each other.
     /// Hard rules (same layer and seed, size cap, blocks, safe distance) reject a pair outright.
     /// Otherwise the score rewards lobbies that are close and that each sit in zones the other
-    /// hasn't explored yet, as in the design doc's "zone 11 / zone 13" example.
+    /// hasn't explored yet, as in the design doc's "zone 11 / zone 13" example, then (smaller) lobbies
+    /// whose essence needs the other can meet, then (smaller still) players with past kudos between them.
     /// </summary>
     public static class MergeScorer
     {
-        public static MergeEvaluation Evaluate(Lobby a, Lobby b, WorldGrid grid, LobbyRules rules)
+        public static MergeEvaluation Evaluate(Lobby a, Lobby b, WorldGrid grid, LobbyRules rules) =>
+            Evaluate(a, b, grid, rules, null);
+
+        /// <param name="kudos">Past kudos between players, for the small kudos bonus; null for none.</param>
+        public static MergeEvaluation Evaluate(Lobby a, Lobby b, WorldGrid grid, LobbyRules rules, IKudosLookup kudos)
         {
             if (a == null) throw new ArgumentNullException(nameof(a));
             if (b == null) throw new ArgumentNullException(nameof(b));
@@ -60,13 +66,60 @@ namespace FriendlyPersonShooter.Core.Lobbies
             double discovery = (Novelty(b, a) + Novelty(a, b)) / 2.0;
 
             double score = rules.ProximityWeight * proximity + rules.DiscoveryWeight * discovery +
-                           rules.ApproachWeight * Approach(a, b, grid, rules);
+                           rules.ApproachWeight * Approach(a, b, grid, rules) +
+                           rules.EssenceWeight * Complement(a, b) +
+                           KudosBonus(a, b, kudos, rules);
             if (a.Players.Count <= rules.SmallLobbySize || b.Players.Count <= rules.SmallLobbySize)
             {
                 score += rules.SmallLobbyBonus;
             }
 
             return MergeEvaluation.Accept(score);
+        }
+
+        /// <summary>
+        /// Share of both lobbies' wanted essence that the other lobby has to spare, from 0 (nothing
+        /// matches, or nobody wants anything) to 1 (every want is covered by the other side).
+        /// </summary>
+        internal static double Complement(Lobby a, Lobby b)
+        {
+            var wantsA = Sum(a, true);
+            var wantsB = Sum(b, true);
+            int total = wantsA.Total + wantsB.Total;
+            if (total == 0) return 0;
+            var spareA = Sum(a, false);
+            var spareB = Sum(b, false);
+            int matched = 0;
+            foreach (var color in EssenceColors.All)
+            {
+                matched += Math.Min(wantsA[color], spareB[color]) + Math.Min(wantsB[color], spareA[color]);
+            }
+            return (double)matched / total;
+        }
+
+        /// <summary>
+        /// <see cref="LobbyRules.KudosWeight"/> per kudos between the two lobbies' players, capped at
+        /// <see cref="LobbyRules.MaxKudosBonus"/>.
+        /// </summary>
+        internal static double KudosBonus(Lobby a, Lobby b, IKudosLookup kudos, LobbyRules rules)
+        {
+            if (kudos == null || rules.KudosWeight <= 0) return 0;
+            int count = 0;
+            foreach (var pa in a.Players)
+            {
+                foreach (var pb in b.Players)
+                {
+                    count += kudos.KudosBetween(pa.Id, pb.Id);
+                }
+            }
+            return Math.Min(Math.Max(0, rules.MaxKudosBonus), rules.KudosWeight * count);
+        }
+
+        private static EssenceAmounts Sum(Lobby lobby, bool wants)
+        {
+            var sum = new EssenceAmounts();
+            foreach (var p in lobby.Players) sum.Add(wants ? p.Wants : p.Spare);
+            return sum;
         }
 
         /// <summary>Fraction of the zones <paramref name="occupier"/> stands in that no player in <paramref name="explorer"/> has visited.</summary>

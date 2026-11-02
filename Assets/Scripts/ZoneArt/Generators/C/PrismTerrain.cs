@@ -15,7 +15,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public const int N = 251;
         public const int C = 250;
         public const float Climb = 0.75f;
-        public const float MaxGrad = 0.85f;
+        public static float MaxGrad = 0.85f;
+        public static bool Debugging;
 
         public readonly ZoneRequest Zone;
         public readonly float[] H = new float[N * N];
@@ -47,6 +48,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public float HeightAt(float lx, float lz) => Bilinear(H, lx, lz);
         public float RampAt(float lx, float lz) => Bilinear(Ramp, lx, lz);
+
+        /// <summary>Marks a disc as path (keeps flora off causeways built after the ground mesh).</summary>
+        public void MarkRamp(Vector2 c, float r)
+        {
+            for (int iz = Mathf.Max(0, (int)(c.y - r)); iz <= Mathf.Min(N - 1, (int)(c.y + r) + 1); iz++)
+            {
+                for (int ix = Mathf.Max(0, (int)(c.x - r)); ix <= Mathf.Min(N - 1, (int)(c.x + r) + 1); ix++)
+                {
+                    if ((new Vector2(ix, iz) - c).sqrMagnitude <= r * r) Ramp[iz * N + ix] = 1f;
+                }
+            }
+        }
         public float PadAt(float lx, float lz) => Bilinear(Pad, lx, lz);
 
         private static float Bilinear(float[] a, float lx, float lz)
@@ -442,7 +455,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     if (edge) list.Add(k);
                 }
                 var merged = new HashSet<int>();
-                int carved = 0;
+                int carved = 0, failed = 0;
                 foreach (int c in order)
                 {
                     if (carved > 150) break;
@@ -453,7 +466,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         carved++;
                         RampsCarved++;
                     }
+                    else
+                    {
+                        failed++;
+                        if (Debugging)
+                        {
+                            var bl = bounds[c];
+                            int b0 = bl.Count > 0 ? bl[0] : 0;
+                            Debug.Log($"[Prismatica] failed comp size {sizes[c]} at {b0 % C},{b0 / C} h {S[b0]:0.0} boundary {bl.Count}");
+                        }
+                    }
                 }
+                if (Debugging) Debug.Log($"[Prismatica] connect it {it}: comps {order.Count} biggest {sizes[order[0]]} main {sizes[main]} carved {carved} failed {failed}");
             }
             BuildHexes(s, hexThreshold);
             ComputeSurface();
@@ -489,7 +513,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         int cq = Comp[q];
                         if (cq == main || merged.Contains(cq))
                         {
-                            if (Mathf.Abs(S[q] - hs) <= g * t)
+                            if (Mathf.Abs(S[q] - hs) <= g * t && !CutsTrench(sx, sz, dx, dz, t, hs, S[q]))
                             {
                                 best = t;
                                 from = s;
@@ -503,6 +527,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
             if (from < 0) return false;
             merged.Add(comp);
             return true;
+        }
+
+        /// <summary>True when a straight ramp would slice a deep trench through higher ground (which splits that ground in two).</summary>
+        private bool CutsTrench(int sx, int sz, float dx, float dz, int t, float h0, float h1)
+        {
+            for (int i = 2; i < t; i++)
+            {
+                int qx = Mathf.RoundToInt(sx + dx * i), qz = Mathf.RoundToInt(sz + dz * i);
+                float line = Mathf.Lerp(h0, h1, i / (float)t);
+                if (S[qz * C + qx] > line + 1.6f) return true;
+            }
+            return false;
         }
 
         private bool Protected(float x, float z)
@@ -538,6 +574,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float dist = (p - (a + dir * u)).magnitude;
                     float w = Smooth(halfW + fall, halfW, dist);
                     if (w <= 0f) continue;
+                    if (Protected(ix, iz)) continue; // shrine and gate pads stay flat
                     float t = Mathf.Clamp01((u - 1.5f) / Mathf.Max(len, 0.01f));
                     float rh = Mathf.Lerp(ha, hb, t);
                     int k = iz * N + ix;

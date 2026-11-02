@@ -18,6 +18,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var times = new System.Text.StringBuilder();
+            int LinksBuilt = 0;
+            PrismTerrain.MaxGrad = float.TryParse(System.Environment.GetEnvironmentVariable("PRISM_GRAD"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var gEnv) ? gEnv : 0.85f;
+            PrismTerrain.Debugging = System.Environment.GetEnvironmentVariable("PRISM_DEBUG") == "1";
             void Mark(string what) { times.Append($"{what} {sw.Elapsed.TotalSeconds:0.0} "); }
             var root = new GameObject($"Prismatica {zone.Coord}");
             root.transform.SetParent(parent, false);
@@ -50,6 +53,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     case ZoneAnchorKind.Shrine:
                         t.Flatten(p, ZoneRequest.ShrineClearRadius + 2f, 7f, SafeBase(p), true);
                         t.Protect(p, ZoneRequest.ShrineClearRadius + 2f);
+                        if (PrismTerrain.Debugging) Debug.Log($"[Prismatica] {a.Name} at {p.x:0},{p.y:0} base {SafeBase(p):0.0}");
                         break;
                     case ZoneAnchorKind.Gate:
                         t.Flatten(p, ZoneRequest.GateClearRadius + 2.5f, 7f, SafeBase(p), true);
@@ -123,7 +127,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
             // ---------------------------------------------------------------- hexes and connectivity
             float thr = HexThreshold(zone, shape.HexFrac);
-            t.Connect(shape, thr);
+            t.Connect(shape, thr, 12);
             Mark("ground");
             if (System.Environment.GetEnvironmentVariable("PRISM_DEBUG") == "1") t.DebugPng($"D:/Projects/ZoneArtRenders/c/debug/comp_{zone.Seed}.png");
 
@@ -346,6 +350,26 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             st.Finish(solid, hexMat, crystal, foliage, plantable);
             Mark("structures");
+
+            // Any anchor the real walk analysis cannot reach gets a stepped hex causeway to two-way ground.
+            {
+                var walk = Walkability.Analyze(zone);
+                var links = new MeshBuilder();
+                var lrng = ZoneRandom.For(zone.Seed, "links");
+                foreach (var a in zone.Anchors)
+                {
+                    if (!walk.UnreachableAnchors.Contains(a.Name)) continue;
+                    float startR = a.Kind == ZoneAnchorKind.Shrine ? ZoneRequest.ShrineClearRadius + 1.6f : a.Kind == ZoneAnchorKind.Gate ? ZoneRequest.GateClearRadius + 1.6f : 2.2f;
+                    if (BuildLink(L(a.World), startR, walk.Map, links, ref lrng)) LinksBuilt++;
+                }
+                if (links.VertexCount > 0)
+                {
+                    var go = links.ToGameObject("Causeways", root.transform, hexMat, collider: true);
+                    plantable.Add(go.GetComponent<Collider>());
+                    Physics.SyncTransforms();
+                }
+            }
+            Mark("links");
             if (debug) DebugWalk(zone, t, "D:/Projects/ZoneArtRenders/c/debug/walk_structures.png");
 
             // ---------------------------------------------------------------- water
@@ -416,7 +440,73 @@ namespace FriendlyPersonShooter.ZoneArt.C
             PrismFar.Clouds(zone, pal, root.transform, cloudMat);
             Mark("far");
 
-            result.Notes = $"{pal.Mood}; stranded {t.StrandedShare * 100f:0.0}%; t[{times}]; towers {st.Towers}, bridges {st.Bridges}, ramps {t.RampsCarved}, landmarks {string.Join("/", landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {florals}";
+            bool BuildLink(Vector2 anchor, float startR, byte[] map, MeshBuilder mb, ref ZoneRandom lr)
+            {
+                float Ground(Vector2 q)
+                {
+                    var origin = new Vector3(o.x + q.x, 800f, o.z + q.y);
+                    return Physics.Raycast(origin, Vector3.down, out var hit, 2000f) ? hit.point.y : t.SurfaceAt(q.x, q.y);
+                }
+                const float riseMax = 0.45f, spacing = 1.35f, colR = 1.25f;
+                float bestCost = float.MaxValue;
+                Vector2 bestA = default, bestB = default;
+                float bestYa = 0f, bestYb = 0f;
+                for (int k = 0; k < 24; k++)
+                {
+                    float ang = k / 24f * Mathf.PI * 2f;
+                    var dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
+                    var pa = anchor + dir * startR;
+                    if (pa.x < 3f || pa.y < 3f || pa.x > 247f || pa.y > 247f) continue;
+                    float ya = Ground(pa);
+                    for (float d = 4f; d < 110f; d += 1.5f)
+                    {
+                        var pb = pa + dir * d;
+                        if (pb.x < 2f || pb.y < 2f || pb.x > 248f || pb.y > 248f) break;
+                        int cell = Mathf.Clamp((int)pb.y, 0, 249) * 250 + Mathf.Clamp((int)pb.x, 0, 249);
+                        if (map[cell] != 2) continue;
+                        float yb = Ground(pb);
+                        int steps = Mathf.CeilToInt(d / spacing);
+                        if (Mathf.Abs(yb - ya) / steps > riseMax) continue;
+                        if (d >= bestCost) break;
+                        // Nothing may poke above the walkway along the way.
+                        bool clear = true;
+                        for (float u = 1.5f; u < d - 1f && clear; u += 1f)
+                        {
+                            var q = pa + dir * u;
+                            float line = Mathf.Lerp(ya, yb, u / d);
+                            for (int sd = -1; sd <= 1 && clear; sd++)
+                            {
+                                var qq = q + new Vector2(-dir.y, dir.x) * (sd * 1.2f);
+                                if (Ground(qq) > line + 0.35f) clear = false;
+                            }
+                        }
+                        if (!clear) continue;
+                        bestCost = d;
+                        bestA = pa;
+                        bestB = pb;
+                        bestYa = ya;
+                        bestYb = yb;
+                        break;
+                    }
+                }
+                if (PrismTerrain.Debugging) Debug.Log($"[Prismatica] link from {anchor} r {startR}: {bestA} y {bestYa:0.0} -> {bestB} y {bestYb:0.0} cost {bestCost}");
+                if (bestCost == float.MaxValue) return false;
+                var ab = bestB - bestA;
+                int n = Mathf.CeilToInt(ab.magnitude / spacing);
+                for (int i = 0; i <= n; i++)
+                {
+                    float u = i / (float)n;
+                    var q = bestA + ab * u;
+                    float top = Mathf.Lerp(bestYa, bestYb, u) + 0.05f;
+                    float bottom = Mathf.Min(t.HeightAt(Mathf.Clamp(q.x, 0f, 250f), Mathf.Clamp(q.y, 0f, 250f)), top) - 1.5f;
+                    var col = Color.Lerp(pal.HexTop[i % pal.HexTop.Length], pal.Strata[(i / 3) % pal.Strata.Length], 0.35f);
+                    st.HexColumn(mb, new Vector3(o.x + q.x, 0f, o.z + q.y), colR, top, bottom, col);
+                    t.MarkRamp(q, 2.2f);
+                }
+                return true;
+            }
+
+            result.Notes = $"{pal.Mood}; links {LinksBuilt}; stranded {t.StrandedShare * 100f:0.0}%; t[{times}]; towers {st.Towers}, bridges {st.Bridges}, ramps {t.RampsCarved}, landmarks {string.Join("/", landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {florals}";
             return result;
         }
 
@@ -431,6 +521,29 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 int m = rep.Map[(i / n / sc) * n0 + (i % n) / sc];
                 px[i] = m == 2 ? new Color32(60, 200, 90, 255) : m == 1 ? new Color32(230, 170, 40, 255) : new Color32(30, 30, 40, 255);
+            }
+            var probe = System.Environment.GetEnvironmentVariable("PRISM_PROBE");
+            if (!string.IsNullOrEmpty(probe))
+            {
+                var pp = probe.Split(',');
+                var pc = new Vector2(float.Parse(pp[0]), float.Parse(pp[1]));
+                foreach (var (a, b) in t.RampSegments)
+                {
+                    if ((a - pc).magnitude > 16f && (b - pc).magnitude > 16f) continue;
+                    var sb = new System.Text.StringBuilder($"[Prismatica] ramp {a} -> {b}: ");
+                    float len = (b - a).magnitude;
+                    for (float u = 0; u <= len; u += 1f)
+                    {
+                        var q = Vector2.Lerp(a, b, u / len);
+                        var origin = new Vector3(zone.Origin.x + q.x, 800f, zone.Origin.z + q.y);
+                        if (Physics.Raycast(origin, Vector3.down, out var hit, 2000f))
+                        {
+                            int m = rep.Map[Mathf.Clamp((int)q.y, 0, 249) * 250 + Mathf.Clamp((int)q.x, 0, 249)];
+                            sb.Append($"{hit.point.y:0.0}/{hit.normal.y:0.00}/{m} ");
+                        }
+                    }
+                    Debug.Log(sb.ToString());
+                }
             }
             foreach (var (a, b) in t.RampSegments)
             {

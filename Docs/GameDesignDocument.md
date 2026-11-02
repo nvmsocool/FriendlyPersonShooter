@@ -119,7 +119,7 @@ Buffs passed from player to player build a **chain**, and the last player's hit 
 ```mermaid
 flowchart LR
     A["Player A<br/>Scout, Haste SMG"] -- Haste --> B["Player B<br/>now Hasted, Might rifle"]
-    B -- Might --> C["Player C<br/>Hasted + Might<br/>chain: 2 links"]
+    B -- Might --> C["Player C<br/>Might<br/>chain: 2 links"]
     C -- cash in --> E["Bulwark<br/>+15% chain bonus<br/>on top of Might"]
 ```
 
@@ -132,6 +132,9 @@ A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cash
 - The chain is cashed by the last player's next enemy hit within 5 seconds. Weak-point hits cash it for 1.5x the bonus, so the damage player still needs good aim.
 - Chains cap at 4 links (+60%). The Conductor mod adds a link when you start a chain, but the cap still applies.
 - Raids and Deeps are tuned around 2–3 link chains; the Wilds never require them.
+- **Counting links:** links = players in the chain minus one, so A → B is 1 link (no bonus yet) and A → B → C is 2. A shot carried by Relay adds one more link, once per chain. With four players, the 4-link cap needs Relay or Conductor.
+- Buffs don't travel along the chain: in the example C gets B's Might, not A's Haste.
+- A player holds one chain at a time; if they're handed a second, they keep the longer one.
 
 **Combos.** When two specific buffs sit on one player, or two debuffs on one enemy, they trigger a stronger effect. The game doesn't list combos until someone discovers them in your lobby, which gives players something else to share.
 
@@ -143,6 +146,9 @@ A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cash
 | Pinned | Slow + Mark (enemy) | Enemy freezes for 1 second, a free shot for everyone |
 | Shatter | Expose + Brittle (enemy) | Armor and shells break outright |
 | Plague | Wither + Tag (enemy) | Damage over time spreads to nearby enemies |
+| Blitz | Haste + Might (ally) | Might's damage bonus doubles while both last |
+
+The prototype (MVP step 3) has Plague and Blitz, the two combos possible with Vigor, Might, Haste and Relay. Plague spreads a Wither at 75% strength to enemies within 4 m every second.
 
 ## Downed and revive
 

@@ -168,6 +168,8 @@ namespace FriendlyPersonShooter.Net
                 {
                     player = new LobbyPlayer(id, zone, group);
                     _players[id] = player;
+                    // Netcode reuses network ids, so metrics track each connection by its own number.
+                    _sessionOf[id] = ++_nextSession;
                     // A party member logs in next to their party, so they join its lobby straight away.
                     var lobby = GroupLobbyWithRoom(group) ?? NewLobby();
                     lobby.Players.Add(player);
@@ -196,6 +198,7 @@ namespace FriendlyPersonShooter.Net
                 _ghostIdOf.Remove(id);
                 _posOf.Remove(id);
                 _lastPassPos.Remove(id);
+                _sessionOf.Remove(id);
             }
         }
 
@@ -279,7 +282,7 @@ namespace FriendlyPersonShooter.Net
                     }
                     target.Players.Add(p);
                     _lobbyOf[p.Id] = target.Id;
-                    _metrics.RecordPartyMove(new[] { p.Id });
+                    _metrics.RecordPartyMove(new[] { _sessionOf[p.Id] });
                     LobbyStats.TotalGroupJoins++;
                 }
                 LobbyStats.Record(new LobbyEvent
@@ -400,10 +403,14 @@ namespace FriendlyPersonShooter.Net
             return d;
         }
 
-        private static List<int> Ids(Lobby lobby)
+        private readonly Dictionary<int, int> _sessionOf = new Dictionary<int, int>();
+        private int _nextSession;
+
+        /// <summary>The lobby's players as metric ids (one per connection, never reused).</summary>
+        private List<int> Ids(Lobby lobby)
         {
             var ids = new List<int>(lobby.Players.Count);
-            foreach (var p in lobby.Players) ids.Add(p.Id);
+            foreach (var p in lobby.Players) ids.Add(_sessionOf[p.Id]);
             return ids;
         }
 
@@ -413,7 +420,7 @@ namespace FriendlyPersonShooter.Net
             foreach (var p in _players.Values)
             {
                 if (!_posOf.TryGetValue(p.Id, out var pos)) continue;
-                _samples.Add(new PlayerSample(p.Id, pos.x, pos.z, _lobbyOf[p.Id], p.GroupId));
+                _samples.Add(new PlayerSample(_sessionOf[p.Id], pos.x, pos.z, _lobbyOf[p.Id], p.GroupId));
             }
             _metrics.Observe(now, _samples);
         }

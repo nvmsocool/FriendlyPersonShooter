@@ -30,7 +30,7 @@ namespace FriendlyPersonShooter.Net
     /// <summary>
     /// Settings for the networking test, read from the command line:
     /// <c>-fps-mode all|server|client|bots -fps-bots 50 -fps-port 7979 -fps-connect 127.0.0.1 -fps-grid 8 -fps-zone 40
-    /// -fps-seed 1 -fps-account-base 1000 -fps-timescale 48 -fps-hour 12</c>.
+    /// -fps-seed 1 -fps-account-base 1000 -fps-timescale 48 -fps-hour 12 -fps-approach 1</c>.
     /// </summary>
     public static class NetTestSettings
     {
@@ -84,7 +84,15 @@ namespace FriendlyPersonShooter.Net
 
         public static WorldGrid CreateGrid() => new WorldGrid(GridSize, GridSize, ZoneSize);
 
-        public static LobbyRules CreateRules() => new LobbyRules();
+        /// <summary>Matchmaker weight for lobbies heading toward each other (-fps-approach); null keeps the default.</summary>
+        public static double? ApproachWeight;
+
+        public static LobbyRules CreateRules()
+        {
+            var rules = new LobbyRules();
+            if (ApproachWeight.HasValue) rules.ApproachWeight = ApproachWeight.Value;
+            return rules;
+        }
 
         public static BotSimSettings CreateBotSettings() => new BotSimSettings
         {
@@ -151,6 +159,10 @@ namespace FriendlyPersonShooter.Net
                     case "-fps-zone":
                         if (float.TryParse(value, System.Globalization.NumberStyles.Float,
                                 System.Globalization.CultureInfo.InvariantCulture, out float zone)) ZoneSize = Math.Max(1f, zone);
+                        break;
+                    case "-fps-approach":
+                        if (double.TryParse(value, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out double approach)) ApproachWeight = approach;
                         break;
                 }
             }

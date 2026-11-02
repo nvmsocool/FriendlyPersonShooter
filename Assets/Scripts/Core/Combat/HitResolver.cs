@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Numerics;
+
 namespace FriendlyPersonShooter.Core.Combat
 {
     /// <summary>What one bullet hit did, so the game can show hit markers, numbers and sounds.</summary>
@@ -12,22 +15,56 @@ namespace FriendlyPersonShooter.Core.Combat
         public float DamageDealt;
         public bool WeakPoint;
         public bool Killed;
+        /// <summary>
+        /// The target was Tagged when hit: deal this much to each enemy near it (see
+        /// <see cref="HitResolver.SplashTargets"/> and <see cref="HitResolver.ApplySplash"/>). 0 otherwise.
+        /// </summary>
+        public float SplashDamage;
 
         // Player hits.
+        /// <summary>Health restored, by the shooter's own Vigor and by a relayed Vigor together.</summary>
         public float Healed;
+        /// <summary>Shield added, by the shooter's own Vigor and by a relayed Vigor together.</summary>
         public float ShieldGained;
 
         /// <summary>Which effect the payload tried to apply (meaningless when Effect is None).</summary>
         public EffectKind Effect;
         public EffectOutcome EffectOutcome;
         public RefuseReason Refused;
+
+        // Relay.
+        /// <summary>True when the shooter was Relayed: this hit also carried <see cref="RelayedPayload"/> and used up one relayed hit.</summary>
+        public bool Relayed;
+        public PayloadKind RelayedPayload;
+        /// <summary>The relayed payload's effect on the target.</summary>
+        public EffectKind RelayedEffect;
+        /// <summary>
+        /// What happened to the relayed effect. None when the hit killed the enemy; Refused when the
+        /// target is the relayer themselves (no self-buffing).
+        /// </summary>
+        public EffectOutcome RelayedOutcome;
+
+        // Chains (filled in by LobbyCombat; see ChainTracker).
+        /// <summary>Bonus fraction this hit got from cashing a chain (weak-point factor included). 0 if none.</summary>
+        public float ChainBonus;
+        /// <summary>Links in the chain this hit cashed (enemy hits) or now sits in (ally hits). 0 if none.</summary>
+        public int ChainLinks;
+        /// <summary>What this hit did to chains.</summary>
+        public ChainEvent ChainEvent;
     }
 
     /// <summary>
     /// Turns "this shooter's bullet hit that target" into changes to health and effects.
-    /// Enemy damage = base x (1 + shooter's Empower) x (1 + target's Expose) x weak-point multiplier.
+    /// Enemy damage = base x (1 + shooter's Empower, doubled under Blitz) x (1 + target's Expose)
+    /// x weak-point multiplier x (1 + chain bonus).
     /// The bullet's own debuff lands after its damage, so a first Might shot isn't boosted by the
-    /// Expose it applies.
+    /// Expose it applies, and a first Relay shot doesn't splash from the Tag it applies.
+    ///
+    /// Relay: while the shooter is Relayed, each hit (on an enemy, an ally or a soul fragment) also
+    /// applies the relayed payload's normal effect, with the relayer as its source, and uses up one
+    /// relayed hit. Misses don't use any up.
+    ///
+    /// Chains and combos live per lobby; <see cref="LobbyCombat"/> wraps this class to feed them.
     /// </summary>
     public sealed class HitResolver
     {
@@ -46,7 +83,20 @@ namespace FriendlyPersonShooter.Core.Combat
             return damage;
         }
 
+        /// <summary>Same, with a chain bonus fraction (from <see cref="ChainTracker.OnEnemyHit"/>) on top.</summary>
+        public float EnemyDamage(PlayerVitals shooter, EnemyVitals target, float baseDamage, bool weakPoint, float chainBonus)
+        {
+            return EnemyDamage(shooter, target, baseDamage, weakPoint) * (1f + chainBonus);
+        }
+
         public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, PayloadKind payload, float baseDamage, bool weakPoint)
+        {
+            return HitEnemy(shooter, target, payload, baseDamage, weakPoint, 0f);
+        }
+
+        /// <summary>An enemy hit that also cashes a chain for <paramref name="chainBonus"/> (0.15 = +15%).</summary>
+        public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, PayloadKind payload, float baseDamage, bool weakPoint,
+            float chainBonus)
         {
             var result = new HitResult
             {
@@ -54,7 +104,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 TargetIsPlayer = false,
                 TargetId = target.Id,
                 WeakPoint = weakPoint,
-                Effect = payload == PayloadKind.Vigor ? EffectKind.Wither : EffectKind.Expose,
+                Effect = Payloads.EnemyEffect(payload),
             };
             if (target.IsDead)
             {
@@ -63,8 +113,23 @@ namespace FriendlyPersonShooter.Core.Combat
                 return result;
             }
 
-            result.DamageDealt = target.TakeDamage(EnemyDamage(shooter, target, baseDamage, weakPoint));
+            // Read before the hit changes anything: Tag splashes only if it was already there.
+            float splashShare = target.SplashShare;
+            bool relayed = shooter.HasRelay;
+            int relaySource = shooter.RelaySourceId;
+
+            float damage = EnemyDamage(shooter, target, baseDamage, weakPoint, chainBonus);
+            result.ChainBonus = chainBonus;
+            result.DamageDealt = target.TakeDamage(damage);
+            result.SplashDamage = damage * splashShare;
             result.Killed = target.IsDead;
+            if (relayed)
+            {
+                result.Relayed = true;
+                result.RelayedPayload = shooter.RelayPayload;
+                result.RelayedEffect = Payloads.EnemyEffect(shooter.RelayPayload);
+                shooter.UseRelayHit();
+            }
             if (result.Killed)
             {
                 // No point debuffing a corpse.
@@ -72,10 +137,8 @@ namespace FriendlyPersonShooter.Core.Combat
                 return result;
             }
 
-            var s = Settings;
-            result.EffectOutcome = payload == PayloadKind.Vigor
-                ? target.Debuffs.Apply(EffectKind.Wither, shooter.Id, s.WitherDps, s.WitherDuration)
-                : target.Debuffs.Apply(EffectKind.Expose, shooter.Id, s.ExposeBonus, s.ExposeDuration);
+            result.EffectOutcome = ApplyDebuff(target, shooter.Id, payload);
+            if (relayed) result.RelayedOutcome = ApplyDebuff(target, relaySource, result.RelayedPayload);
             return result;
         }
 
@@ -100,7 +163,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 Payload = payload,
                 TargetIsPlayer = true,
                 TargetId = target.Id,
-                Effect = payload == PayloadKind.Vigor ? EffectKind.Shield : EffectKind.Empower,
+                Effect = Payloads.AllyEffect(payload),
             };
 
             result.Refused = CheckBuff(shooter, target);
@@ -110,26 +173,106 @@ namespace FriendlyPersonShooter.Core.Combat
                 return result;
             }
 
-            var s = Settings;
-            if (payload == PayloadKind.Vigor)
+            bool relayed = shooter.HasRelay;
+            int relaySource = shooter.RelaySourceId;
+            PayloadKind relayPayload = shooter.RelayPayload;
+
+            result.EffectOutcome = ApplyBuff(target, shooter.Id, payload, shooter.RelayCarry, ref result);
+            if (relayed)
             {
-                float overflow = target.Heal(s.VigorHeal, out float healed);
-                result.Healed = healed;
-                if (overflow > 0f)
-                {
-                    result.ShieldGained = target.Buffs.AddShield(shooter.Id, overflow, s.ShieldCap, s.ShieldDuration, out var outcome);
-                    result.EffectOutcome = outcome;
-                }
-                else
-                {
-                    result.EffectOutcome = EffectOutcome.None;
-                }
-            }
-            else
-            {
-                result.EffectOutcome = target.Buffs.Apply(EffectKind.Empower, shooter.Id, s.MightDamageBonus, s.MightDuration);
+                result.Relayed = true;
+                result.RelayedPayload = relayPayload;
+                result.RelayedEffect = Payloads.AllyEffect(relayPayload);
+                shooter.UseRelayHit();
+                // The relayed payload still never buffs the player who relayed it.
+                result.RelayedOutcome = target.Id == relaySource
+                    ? EffectOutcome.Refused
+                    : ApplyBuff(target, relaySource, relayPayload, PayloadKind.Might, ref result);
             }
             return result;
+        }
+
+        /// <summary>
+        /// A bullet hit one of a downed player's soul fragments. Any payload counts; Vigor (the
+        /// shooter's own or a relayed one) counts double. Uses up a relayed hit if the shooter has one.
+        /// </summary>
+        public ReviveHit HitFragment(PlayerVitals shooter, ReviveState revive, int fragmentId, PayloadKind payload)
+        {
+            bool relayed = shooter.HasRelay;
+            bool vigor = payload == PayloadKind.Vigor || (relayed && shooter.RelayPayload == PayloadKind.Vigor);
+            int value = vigor ? revive.Settings.VigorHitValue : 1;
+            var hit = revive.RegisterHit(fragmentId, shooter.Id, value);
+            if (hit.Accepted && relayed) shooter.UseRelayHit();
+            return hit;
+        }
+
+        /// <summary>
+        /// Splash damage from a hit on a Tagged enemy (<see cref="HitResult.SplashDamage"/>). Splash
+        /// is plain damage: no multipliers, no debuffs, no chain. Returns the health lost.
+        /// </summary>
+        public float ApplySplash(EnemyVitals target, float amount)
+        {
+            return target.TakeDamage(amount);
+        }
+
+        /// <summary>
+        /// Lists the enemies a hit on a Tagged enemy splashes to: hittable, non-player targets other
+        /// than <paramref name="hitId"/> whose body centre is within the Tag splash radius of
+        /// <paramref name="center"/>. Adds their ids to <paramref name="results"/>; returns the count added.
+        /// </summary>
+        public int SplashTargets(Vector3 center, int hitId, IReadOnlyList<HitTarget> enemies, List<int> results)
+        {
+            float r2 = Settings.TagSplashRadius * Settings.TagSplashRadius;
+            int added = 0;
+            for (int i = 0; i < enemies.Count; i++)
+            {
+                var e = enemies[i];
+                if (e.IsPlayer || !e.Hittable || e.Id == hitId) continue;
+                if (Vector3.DistanceSquared(e.BodyCenter, center) > r2) continue;
+                results.Add(e.Id);
+                added++;
+            }
+            return added;
+        }
+
+        private EffectOutcome ApplyDebuff(EnemyVitals target, int sourceId, PayloadKind payload)
+        {
+            var s = Settings;
+            switch (payload)
+            {
+                case PayloadKind.Vigor: return target.Debuffs.Apply(EffectKind.Wither, sourceId, s.WitherDps, s.WitherDuration);
+                case PayloadKind.Haste: return target.Debuffs.Apply(EffectKind.Slow, sourceId, s.SlowAmount, s.SlowDuration);
+                case PayloadKind.Relay: return target.Debuffs.Apply(EffectKind.Tag, sourceId, s.TagSplashShare, s.TagDuration);
+                default: return target.Debuffs.Apply(EffectKind.Expose, sourceId, s.ExposeBonus, s.ExposeDuration);
+            }
+        }
+
+        /// <summary>Applies a payload's buff; heals and shield are added to <paramref name="result"/>.</summary>
+        private EffectOutcome ApplyBuff(PlayerVitals target, int sourceId, PayloadKind payload, PayloadKind relayCarry,
+            ref HitResult result)
+        {
+            var s = Settings;
+            switch (payload)
+            {
+                case PayloadKind.Vigor:
+                {
+                    float overflow = target.Heal(s.VigorHeal, out float healed);
+                    result.Healed += healed;
+                    if (overflow <= 0f) return EffectOutcome.None;
+                    result.ShieldGained += target.Buffs.AddShield(sourceId, overflow, s.ShieldCap, s.ShieldDuration, out var outcome);
+                    return outcome;
+                }
+                case PayloadKind.Haste:
+                    return target.Buffs.Apply(EffectKind.Hasted, sourceId, s.HasteMoveBonus, s.HasteDuration);
+                case PayloadKind.Relay:
+                {
+                    var outcome = target.Buffs.Apply(EffectKind.Relayed, sourceId, 1f, s.RelayDuration);
+                    target.SetRelay(sourceId, relayCarry, s.RelayHits);
+                    return outcome;
+                }
+                default:
+                    return target.Buffs.Apply(EffectKind.Empower, sourceId, s.MightDamageBonus, s.MightDuration);
+            }
         }
     }
 }

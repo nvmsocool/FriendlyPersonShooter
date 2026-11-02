@@ -4,12 +4,17 @@ namespace FriendlyPersonShooter.Core.Combat
 {
     /// <summary>
     /// An enemy's health and debuff slots. Wither deals its damage over time in <see cref="Tick"/>;
-    /// Expose raises all damage the enemy takes, Wither included.
+    /// Expose raises all damage the enemy takes, Wither included. Slow lowers its move and turn
+    /// speed (the game scales its behavior's speeds by <see cref="MoveMultiplier"/>), and Tag makes
+    /// hits on it splash to enemies nearby (see <see cref="HitResult.SplashDamage"/>).
     /// </summary>
     public sealed class EnemyVitals
     {
+        private readonly float _slowFloor;
+
         public EnemyVitals(int id, EnemyFamily family, CombatSettings settings)
         {
+            _slowFloor = settings.SlowFloor;
             Id = id;
             Family = family;
             MaxHealth = settings.EnemyHealth(family);
@@ -26,6 +31,23 @@ namespace FriendlyPersonShooter.Core.Combat
 
         /// <summary>Damage multiplier from Expose (1 when not exposed).</summary>
         public float DamageTakenMultiplier => 1f + Debuffs.StrengthOf(EffectKind.Expose);
+
+        /// <summary>Multiply the enemy's move speed by this (1 when not Slowed; never below the Slow floor).</summary>
+        public float MoveMultiplier => Math.Max(_slowFloor, 1f - Debuffs.StrengthOf(EffectKind.Slow));
+
+        /// <summary>Multiply the enemy's turn speed by this. Slow affects turning as much as moving.</summary>
+        public float TurnMultiplier => MoveMultiplier;
+
+        public bool IsTagged => Debuffs.Has(EffectKind.Tag);
+
+        /// <summary>Share of each hit's damage that splashes to nearby enemies (0 when not Tagged).</summary>
+        public float SplashShare => Debuffs.StrengthOf(EffectKind.Tag);
+
+        /// <summary>True while the Plague combo (Wither + Tag) is active; see <see cref="Plague"/>.</summary>
+        public bool IsPlagued => Debuffs.Has(EffectKind.Wither) && Debuffs.Has(EffectKind.Tag);
+
+        /// <summary>Seconds until this enemy's Plague spreads again (managed by <see cref="Plague"/>).</summary>
+        internal float PlagueTimer;
 
         /// <summary>Takes damage that is already fully scaled. Returns the health actually lost.</summary>
         public float TakeDamage(float amount)

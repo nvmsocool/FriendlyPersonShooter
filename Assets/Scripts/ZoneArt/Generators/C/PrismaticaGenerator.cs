@@ -213,10 +213,24 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 }
                 return c;
             }
-            t.BuildMesh(root.transform, ground, (w, n) => ColorAt(w, n, true), plantable);
-            st.HexField(hexMat, plantable);
+            var terrainGo = t.BuildMesh(root.transform, ground, (w, n) => ColorAt(w, n, true), plantable);
+            var hexGo = st.HexField(hexMat, plantable);
+            Mark("mesh");
+            // Check the built ground with the real walk analysis and carve extra ramps where it disagrees with the model.
+            for (int pass = 0; pass < (System.Environment.GetEnvironmentVariable("PRISM_REPAIR") == "1" ? 2 : 0); pass++)
+            {
+                var walk = Walkability.Analyze(zone);
+                if (walk.TwoWayShare > 0.99f) break;
+                if (t.RepairFromWalk(walk.Map, shape, thr) == 0) break;
+                Object.DestroyImmediate(terrainGo);
+                Object.DestroyImmediate(hexGo);
+                plantable.RemoveAll(c => c == null);
+                terrainGo = t.BuildMesh(root.transform, ground, (w, n) => ColorAt(w, n, true), plantable);
+                hexGo = st.HexField(hexMat, plantable);
+            }
+            Mark("repair");
             bool debug = System.Environment.GetEnvironmentVariable("PRISM_DEBUG") == "1";
-            if (debug) DebugWalk(zone, "D:/Projects/ZoneArtRenders/c/debug/walk_terrain.png");
+            if (debug) DebugWalk(zone, t, "D:/Projects/ZoneArtRenders/c/debug/walk_terrain.png");
 
             var srng = ZoneRandom.For(zone.Seed, "structures");
             foreach (var tw in towers) st.Tower(tw, ref srng);
@@ -332,7 +346,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             st.Finish(solid, hexMat, crystal, foliage, plantable);
             Mark("structures");
-            if (debug) DebugWalk(zone, "D:/Projects/ZoneArtRenders/c/debug/walk_structures.png");
+            if (debug) DebugWalk(zone, t, "D:/Projects/ZoneArtRenders/c/debug/walk_structures.png");
 
             // ---------------------------------------------------------------- water
             if (t.HasWater)
@@ -406,14 +420,29 @@ namespace FriendlyPersonShooter.ZoneArt.C
             return result;
         }
 
-        private static void DebugWalk(ZoneRequest zone, string path)
+        private static void DebugWalk(ZoneRequest zone, PrismTerrain t, string path)
         {
             Physics.SyncTransforms();
             var rep = Walkability.Analyze(zone);
-            int n = rep.MapSize;
+            int n0 = rep.MapSize, sc = 3, n = n0 * sc;
             var tex = new Texture2D(n, n, TextureFormat.RGB24, false);
             var px = new Color32[n * n];
-            for (int i = 0; i < px.Length; i++) px[i] = rep.Map[i] == 2 ? new Color32(60, 200, 90, 255) : rep.Map[i] == 1 ? new Color32(230, 170, 40, 255) : new Color32(30, 30, 40, 255);
+            for (int i = 0; i < px.Length; i++)
+            {
+                int m = rep.Map[(i / n / sc) * n0 + (i % n) / sc];
+                px[i] = m == 2 ? new Color32(60, 200, 90, 255) : m == 1 ? new Color32(230, 170, 40, 255) : new Color32(30, 30, 40, 255);
+            }
+            foreach (var (a, b) in t.RampSegments)
+            {
+                float len = (b - a).magnitude;
+                for (float u = 0; u <= len; u += 0.3f)
+                {
+                    var p = Vector2.Lerp(a, b, u / Mathf.Max(len, 0.01f)) * sc;
+                    int x = (int)p.x, y = (int)p.y;
+                    if (x < 0 || y < 0 || x >= n || y >= n) continue;
+                    px[y * n + x] = u < 3f ? new Color32(30, 60, 255, 255) : new Color32(255, 40, 200, 255);
+                }
+            }
             tex.SetPixels32(px);
             tex.Apply();
             System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
@@ -515,6 +544,19 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     {
                         if (Physics.Raycast(eye + Vector3.up * (hgt * 1.5f - 0.6f), d3, out var wh, 14f))
                             score -= (2f + 6f * facing) * (14f / Mathf.Max(wh.distance, 2f)) * 0.25f;
+                    }
+                }
+                // Foreground crest check: the ground must stay below a ray 14 degrees under the view centre.
+                {
+                    var fwd = (look - eye);
+                    float fl = fwd.magnitude;
+                    float pitch = Mathf.Asin(Mathf.Clamp(fwd.y / Mathf.Max(fl, 0.01f), -1f, 1f)) - 14f * Mathf.Deg2Rad;
+                    for (float dd2 = 3f; dd2 < Mathf.Min(fl * 0.7f, 40f); dd2 += 2f)
+                    {
+                        var q = lp + new Vector2(dir.x, dir.z) * dd2;
+                        if (q.x < 0f || q.y < 0f || q.x > 250f || q.y > 250f) break;
+                        float lineY = eye.y + Mathf.Tan(pitch) * dd2;
+                        if (t.SurfaceAt(q.x, q.y) > lineY) { score -= 6f; }
                     }
                 }
                 if (RenderSettings.sun != null) score -= Mathf.Abs(Vector3.Dot(dir, RenderSettings.sun.transform.forward)) * 6f;

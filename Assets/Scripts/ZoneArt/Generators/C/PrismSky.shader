@@ -283,7 +283,7 @@ Shader "ZoneArtC/PrismSky"
                 // Swirling stylized clouds on a dome.
                 if (elev > 0)
                 {
-                    float2 uv = d.xz / (elev + 0.22) * _CloudScale + _CloudSeed.xy;
+                    float2 uv = d.xz / (elev + 0.32) * _CloudScale + _CloudSeed.xy;
                     uv = swirl(uv, _Swirl1 + float4(_CloudSeed.xy, 0, 0));
                     uv = swirl(uv, _Swirl2 + float4(_CloudSeed.xy, 0, 0));
                     float n = fbm(uv * 0.8);

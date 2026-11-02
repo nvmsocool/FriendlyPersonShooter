@@ -168,16 +168,12 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 for (int x = 0; x <= n; x++) heights[z * (n + 1) + x] = hf(o.x + min + x * cell, o.z + min + z * cell);
             }
             int w = n + 1;
-            for (int z = 0; z <= n; z++)
+            // Flat-shaded facets (like the zone itself), colored per face so cliffs and grass stay crisp.
+            Vector3 P(int x, int z) => new Vector3(o.x + min + x * cell, heights[z * w + x], o.z + min + z * cell);
+            void T(Vector3 a, Vector3 b, Vector3 c)
             {
-                for (int x = 0; x <= n; x++)
-                {
-                    float hl = heights[z * w + Mathf.Max(x - 1, 0)], hr = heights[z * w + Mathf.Min(x + 1, n)];
-                    float hd = heights[Mathf.Max(z - 1, 0) * w + x], hu = heights[Mathf.Min(z + 1, n) * w + x];
-                    var nrm = new Vector3(hl - hr, 2f * cell, hd - hu).normalized;
-                    var p = new Vector3(o.x + min + x * cell, heights[z * w + x], o.z + min + z * cell);
-                    mb.Vertex(p, colorAt(p, nrm), nrm);
-                }
+                var nrm = Vector3.Cross(b - a, c - a).normalized;
+                mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, nrm));
             }
             for (int z = 0; z < n; z++)
             {
@@ -185,12 +181,16 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     float lx0 = min + x * cell, lz0 = min + z * cell;
                     if (lx0 >= holeMin - 0.01f && lx0 + cell <= holeMax + 0.01f && lz0 >= holeMin - 0.01f && lz0 + cell <= holeMax + 0.01f) continue;
-                    int i = z * w + x;
-                    if (((x + z) & 1) == 0) mb.Quad(i, i + w, i + w + 1, i + 1);
+                    Vector3 a = P(x, z), bb = P(x, z + 1), c = P(x + 1, z + 1), d = P(x + 1, z);
+                    if (((x + z) & 1) == 0)
+                    {
+                        T(a, bb, c);
+                        T(a, c, d);
+                    }
                     else
                     {
-                        mb.Triangle(i, i + w, i + 1);
-                        mb.Triangle(i + w, i + w + 1, i + 1);
+                        T(a, bb, d);
+                        T(bb, c, d);
                     }
                 }
             }

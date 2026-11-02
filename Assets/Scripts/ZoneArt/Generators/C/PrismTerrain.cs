@@ -15,7 +15,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public const int N = 251;
         public const int C = 250;
         public const float Climb = 0.75f;
-        public const float MaxGrad = 0.95f;
+        public const float MaxGrad = 0.85f;
 
         public readonly ZoneRequest Zone;
         public readonly float[] H = new float[N * N];
@@ -332,9 +332,19 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     else
                     {
                         float h00 = H[iz * N + ix], h10 = H[iz * N + ix + 1], h01 = H[(iz + 1) * N + ix], h11 = H[(iz + 1) * N + ix + 1];
-                        float g = Mathf.Max(Mathf.Max(Mathf.Abs(h10 - h00), Mathf.Abs(h11 - h01)), Mathf.Max(Mathf.Abs(h01 - h00), Mathf.Abs(h11 - h10)));
-                        g = Mathf.Max(g, Mathf.Max(Mathf.Abs(h11 - h00), Mathf.Abs(h10 - h01)) * 0.7071f);
-                        Steep[k] = g > MaxGrad;
+                        // Exact gradients of the two mesh triangles in this cell (same split as BuildMesh).
+                        float g1, g2;
+                        if (((ix + iz) & 1) == 0)
+                        {
+                            g1 = Sq(h01 - h00) + Sq(h11 - h01);
+                            g2 = Sq(h10 - h00) + Sq(h11 - h10);
+                        }
+                        else
+                        {
+                            g1 = Sq(h01 - h00) + Sq(h10 - h00);
+                            g2 = Sq(h11 - h01) + Sq(h11 - h10);
+                        }
+                        Steep[k] = Mathf.Max(g1, g2) > MaxGrad * MaxGrad;
                     }
                 }
             }
@@ -540,7 +550,79 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         // ------------------------------------------------------------------ mesh
 
-        public void BuildMesh(Transform parent, Material material, System.Func<Vector3, Vector3, Color> colorAt, List<Collider> plantable)
+        /// <summary>
+        /// Second opinion from the real walk analysis: cells that are standable but not two-way get ramps
+        /// carved to two-way ground, exactly like the model-based pass. Returns the number of ramps carved.
+        /// </summary>
+        public int RepairFromWalk(byte[] map, Shape s, float hexThreshold, int minSize = 6)
+        {
+            int main = MainComp;
+            const int baseId = 1000000;
+            for (int k = 0; k < C * C; k++) Comp[k] = map[k] == 2 ? main : map[k] == 1 ? -2 : -1;
+            var sizes = new List<int>();
+            var stack = new Stack<int>();
+            for (int k = 0; k < C * C; k++)
+            {
+                if (Comp[k] != -2) continue;
+                int id = baseId + sizes.Count;
+                int size = 0;
+                Comp[k] = id;
+                stack.Push(k);
+                while (stack.Count > 0)
+                {
+                    int cur = stack.Pop();
+                    size++;
+                    int x = cur % C, z = cur / C;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), nz = z + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                        if (nx < 0 || nz < 0 || nx >= C || nz >= C) continue;
+                        int q = nz * C + nx;
+                        if (Comp[q] != -2) continue;
+                        Comp[q] = id;
+                        stack.Push(q);
+                    }
+                }
+                sizes.Add(size);
+            }
+            var order = new List<int>();
+            for (int i = 0; i < sizes.Count; i++) if (sizes[i] >= minSize) order.Add(baseId + i);
+            order.Sort((a, b) => sizes[b - baseId].CompareTo(sizes[a - baseId]));
+            var bounds = new Dictionary<int, List<int>>();
+            foreach (int c in order) bounds[c] = new List<int>();
+            for (int k = 0; k < C * C; k++)
+            {
+                if (!bounds.TryGetValue(Comp[k], out var list)) continue;
+                int x = k % C, z = k / C;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), nz = z + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                    if (nx < 0 || nz < 0 || nx >= C || nz >= C) continue;
+                    if (Comp[nz * C + nx] != Comp[k]) { list.Add(k); break; }
+                }
+            }
+            var merged = new HashSet<int>();
+            int carved = 0;
+            foreach (int c in order)
+            {
+                if (carved > 60) break;
+                if (FindRamp(bounds[c], c, main, merged, out int from, out int to))
+                {
+                    Carve(from, to);
+                    carved++;
+                    RampsCarved++;
+                }
+            }
+            BuildHexes(s, hexThreshold);
+            ComputeSurface();
+            Label(out _, out _);
+            int stranded = 0;
+            for (int k = 0; k < C * C; k++) if (Comp[k] != MainComp) stranded++;
+            StrandedShare = stranded / (float)(C * C);
+            return carved;
+        }
+
+        public GameObject BuildMesh(Transform parent, Material material, System.Func<Vector3, Vector3, Color> colorAt, List<Collider> plantable)
         {
             var root = new GameObject("Terrain");
             root.transform.SetParent(parent, false);
@@ -576,6 +658,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     plantable.Add(go.GetComponent<Collider>());
                 }
             }
+            return root;
         }
 
         private static void Tri(MeshBuilder mb, Vector3 a, Vector3 b, Vector3 c, System.Func<Vector3, Vector3, Color> colorAt)

@@ -114,7 +114,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         // ------------------------------------------------------------------ hex fields
 
-        public void HexField(Material mat, List<Collider> plantable)
+        public GameObject HexField(Material mat, List<Collider> plantable)
         {
             var g = _t.Hex;
             var rng = ZoneRandom.For(_zone.Seed, "hexcolor");
@@ -153,6 +153,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 var go = builders[i].ToGameObject($"Hex {i}", root.transform, mat, collider: true);
                 plantable.Add(go.GetComponent<Collider>());
             }
+            return root;
         }
 
         // ------------------------------------------------------------------ towers

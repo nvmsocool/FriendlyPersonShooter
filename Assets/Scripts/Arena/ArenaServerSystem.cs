@@ -25,6 +25,7 @@ namespace FriendlyPersonShooter.Arena
     [UpdateAfter(typeof(PredictedSimulationSystemGroup))]
     public partial class ArenaServerSystem : SystemBase
     {
+        // The expedition half (MVP step 4) is in ArenaServerExpedition.cs.
         private const int WispCount = 3;
         private const int SkitterCount = 3;
         private const float EnemyRespawnDelay = 4f;
@@ -60,6 +61,8 @@ namespace FriendlyPersonShooter.Arena
             public MiteSwarm Swarm;
             public int MiteIndex;
             public bool Telegraph;
+            /// <summary>Expedition: the spawn event this enemy came from.</summary>
+            public SpawnKey Spawn;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -99,7 +102,7 @@ namespace FriendlyPersonShooter.Arena
 
         protected override void OnCreate()
         {
-            if (NetTestSettings.Game != GameMode.Arena)
+            if (!NetTestSettings.IsFirstPerson)
             {
                 Enabled = false;
                 return;
@@ -107,6 +110,7 @@ namespace FriendlyPersonShooter.Arena
             RequireForUpdate<ArenaEnemyPrefab>();
             RequireForUpdate<NetworkTime>();
             _lobby = new LobbyCombat(_combat);
+            if (ExpeditionWorld.Active) CreateExpedition();
         }
 
         protected override void OnUpdate()
@@ -119,9 +123,12 @@ namespace FriendlyPersonShooter.Arena
             if (!_seeded)
             {
                 _seeded = true;
-                for (int i = 0; i < WispCount; i++) SpawnWisp();
-                for (int i = 0; i < SkitterCount; i++) SpawnSkitter();
-                SpawnSwarm();
+                if (!ExpeditionWorld.Active)
+                {
+                    for (int i = 0; i < WispCount; i++) SpawnWisp();
+                    for (int i = 0; i < SkitterCount; i++) SpawnSkitter();
+                    SpawnSwarm();
+                }
             }
 
             var ecb = new EntityCommandBuffer(Allocator.Temp);
@@ -129,7 +136,8 @@ namespace FriendlyPersonShooter.Arena
             StepEnemies(dt, tickIndex, ecb);
             SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
-            RespawnEnemies();
+            if (ExpeditionWorld.Active) StepExpedition(ecb);
+            else RespawnEnemies();
             SendAnnouncements(ecb);
             ecb.Playback(EntityManager);
 
@@ -144,6 +152,7 @@ namespace FriendlyPersonShooter.Arena
                           $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
                           $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
                           $"plagueSpreads={_plagueSpreads} hp=[{hp}]");
+                if (ExpeditionWorld.Active) LogExpedition();
             }
         }
 
@@ -185,7 +194,9 @@ namespace FriendlyPersonShooter.Arena
                         _bleedOuts++;
                         _announce.Add((AnnounceKind.BledOut, 0, id, 0));
                         state.Revive = null;
-                        var spawn = ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
+                        float3 spawn;
+                        if (ExpeditionWorld.Active) spawn = BledOutInExpedition(id, transform.ValueRO.Position);
+                        else spawn = ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
                         transform.ValueRW.Position = spawn;
                         state.Position = ToVec(spawn);
                         state.History.Record(tick, ToVec(spawn), true, teleported: true);
@@ -226,6 +237,7 @@ namespace FriendlyPersonShooter.Arena
             foreach (var e in _scratch)
             {
                 _lobby.PlayerGone(_players[e].Vitals.Id);
+                if (ExpeditionWorld.Active) ExpeditionPlayerGone(_players[e].Vitals.Id);
                 _playerById.Remove(_players[e].Vitals.Id);
                 _players.Remove(e);
             }
@@ -315,28 +327,29 @@ namespace FriendlyPersonShooter.Arena
             });
             _enemies[e] = state;
             _enemyById[id] = e;
+            _spawned.Add(state);
             return e;
         }
 
         private uint NextSeed() => _seed = _seed * 1664525u + 1013904223u;
 
-        private void SpawnWisp()
+        private void SpawnWisp(Vector3? home = null)
         {
             var state = new EnemyState { Family = EnemyFamily.Wisp };
-            state.Wisp = WispBehavior.Create(RandomHome(2.2f), NextSeed(), _wisp);
+            state.Wisp = WispBehavior.Create(home ?? RandomHome(2.2f), NextSeed(), _wisp);
             SpawnEnemy(state, state.Wisp.Position);
         }
 
-        private void SpawnSkitter()
+        private void SpawnSkitter(Vector3? home = null)
         {
             var state = new EnemyState { Family = EnemyFamily.Skitter };
-            state.Skitter = SkitterBehavior.Create(RandomHome(_skitter.BodyRadius), NextSeed(), _skitter);
+            state.Skitter = SkitterBehavior.Create(home ?? RandomHome(_skitter.BodyRadius), NextSeed(), _skitter);
             SpawnEnemy(state, state.Skitter.Position);
         }
 
-        private void SpawnSwarm()
+        private void SpawnSwarm(Vector3? home = null)
         {
-            var swarm = new MiteSwarm(RandomHome(1.5f), NextSeed(), _mites);
+            var swarm = new MiteSwarm(home ?? RandomHome(1.5f), NextSeed(), _mites);
             for (int i = 0; i < swarm.Mites.Length; i++)
             {
                 var state = new EnemyState { Family = EnemyFamily.Mite, Swarm = swarm, MiteIndex = i };
@@ -384,6 +397,7 @@ namespace FriendlyPersonShooter.Arena
                 }
 
                 float wither = s.Vitals.Tick(dt);
+                if (ExpeditionWorld.Active) NearCandidates(position);
                 var attack = s.Attack.Step(dt, position, _candidates, s.AttackSettings);
                 if (attack.Kind == AttackEventKind.TelegraphStarted) s.Telegraph = true;
                 else if (attack.Kind != AttackEventKind.None) s.Telegraph = false;
@@ -428,6 +442,12 @@ namespace FriendlyPersonShooter.Arena
             _lobby.Combos.Forget(s.Vitals.Id, false);
             _enemyById.Remove(s.Vitals.Id);
             ecb.DestroyEntity(e);
+            if (ExpeditionWorld.Active)
+            {
+                if (s.Family == EnemyFamily.Mite) s.Swarm.Alive[s.MiteIndex] = false;
+                ExpeditionKill(s);
+                return;
+            }
             switch (s.Family)
             {
                 case EnemyFamily.Wisp: _wispRespawns.Add(_time + EnemyRespawnDelay); break;
@@ -491,7 +511,7 @@ namespace FriendlyPersonShooter.Arena
                 var dir = math.normalize(ArenaSettings.Forward(input.ValueRO.Yaw, input.ValueRO.Pitch));
                 float range = math.min(ArenaWeapon.Range, ArenaLayout.RaycastCover(eye, dir, ArenaWeapon.Range));
 
-                BuildTargets(seenTick, shooter.Vitals.Id);
+                BuildTargets(seenTick, shooter.Vitals.Id, eye);
                 var end = eye + dir * range;
                 var payload = loadout.ValueRO.Payload;
                 if (HitScan.Cast(ToVec(eye), ToVec(dir), range, _targets, out var hit, shooter.Vitals.Id))
@@ -539,6 +559,7 @@ namespace FriendlyPersonShooter.Arena
                         var enemyEntity = _enemyById[hit.TargetId];
                         var enemy = _enemies[enemyEntity];
                         var result = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, payload, ArenaWeapon.BaseDamage, hit.WeakPoint, _time, _combos);
+                        _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id);
                         _enemyHits++;
                         if (result.WeakPoint) _weakHits++;
                         _damageDealt += result.DamageDealt;
@@ -626,13 +647,14 @@ namespace FriendlyPersonShooter.Arena
             _announce.Clear();
         }
 
-        private void BuildTargets(int tick, int shooterId)
+        /// <summary>Hit targets as the shooter saw them. In the wrapping expedition world each is moved to its copy nearest the shooter.</summary>
+        private void BuildTargets(int tick, int shooterId, float3 eye)
         {
             _targets.Clear();
             foreach (var kv in _players)
             {
                 if (kv.Value.Vitals.Id == shooterId || kv.Value.Vitals.IsDown) continue;
-                var p = kv.Value.History.Sample(tick, 0f);
+                var p = NearVec(kv.Value.History.Sample(tick, 0f), eye);
                 var center = p + new Vector3(0f, ArenaWeapon.PlayerHitHeight, 0f);
                 _targets.Add(HitTarget.Body(kv.Value.Vitals.Id, center, ArenaWeapon.PlayerHitRadius, isPlayer: true));
             }
@@ -640,6 +662,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 var s = kv.Value;
                 var past = s.History.SampleState(tick, 0f);
+                past.Position = NearVec(past.Position, eye);
                 HitTarget target;
                 switch (s.Family)
                 {
@@ -662,12 +685,14 @@ namespace FriendlyPersonShooter.Arena
             {
                 int ownerId = (kv.Key - FragmentIdBase) / FragmentIdsPerPlayer;
                 if (ownerId == shooterId) continue;
-                var p = kv.Value.History.Sample(tick, 0f);
+                var p = NearVec(kv.Value.History.Sample(tick, 0f), eye);
                 _targets.Add(HitTarget.Body(kv.Key, p, _combat.Revive.FragmentRadius));
             }
         }
 
         private static Vector3 ToVec(float3 v) => new Vector3(v.x, v.y, v.z);
+
+        private static Vector3 NearVec(Vector3 p, float3 reference) => ToVec(ExpeditionWorld.Near(ToFloat3(p), reference));
         private static float3 ToFloat3(Vector3 v) => new float3(v.X, v.Y, v.Z);
     }
 }

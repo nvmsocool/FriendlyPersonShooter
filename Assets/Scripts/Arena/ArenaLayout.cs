@@ -19,7 +19,10 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        public static readonly Box[] Cover =
+        /// <summary>Cover for the current mode: the arena's blocks, or the expedition's landmarks and gate posts.</summary>
+        public static Box[] Cover => ExpeditionWorld.Active ? ExpeditionWorld.Cover : ArenaCover;
+
+        public static readonly Box[] ArenaCover =
         {
             new Box(-8f, 0f, 2f, 2.5f, 2f),
             new Box(8f, 0f, 2f, 2.5f, 2f),
@@ -34,11 +37,19 @@ namespace FriendlyPersonShooter.Arena
         public static float RaycastCover(float3 origin, float3 dir, float maxDistance)
         {
             float best = float.MaxValue;
+            bool wrap = ExpeditionWorld.Active;
             foreach (var b in Cover)
             {
                 var half = b.Size * 0.5f;
-                var min = new float3(b.Center.x - half.x, 0f, b.Center.y - half.z);
-                var max = new float3(b.Center.x + half.x, b.Size.y, b.Center.y + half.z);
+                var center = new float3(b.Center.x, 0f, b.Center.y);
+                if (wrap)
+                {
+                    // Use the copy of the box nearest the ray, and skip boxes too far to matter.
+                    center = ExpeditionWorld.Near(center, origin);
+                    if (math.distance(center.xz, origin.xz) > maxDistance + half.x + half.z) continue;
+                }
+                var min = new float3(center.x - half.x, 0f, center.z - half.z);
+                var max = new float3(center.x + half.x, b.Size.y, center.z + half.z);
                 if (RayBox(origin, dir, min, max, out float t) && t < best && t <= maxDistance) best = t;
             }
             return best;

@@ -116,6 +116,12 @@ namespace FriendlyPersonShooter.Arena
         Revived = 2,
         BledOut = 3,
         ChainCashed = 4,
+        /// <summary>Expedition: a player paid the gate. Value = essence paid.</summary>
+        GateUnlocked = 5,
+        /// <summary>Expedition: a player walked through the gate. Value = seconds taken.</summary>
+        ExpeditionComplete = 6,
+        /// <summary>Expedition: Other returned Player's cache. Value = essence returned.</summary>
+        CacheReturned = 7,
     }
 
     /// <summary>Server-to-everyone: something worth a message on screen (combo discovered, revive, big chain).</summary>

@@ -59,6 +59,8 @@ namespace FriendlyPersonShooter.Arena
             _allyMat = MakeMat(new Color(0.25f, 0.6f, 1f));
             _allyHeadMat = MakeMat(new Color(0.85f, 0.9f, 1f));
             CreateCombatMaterials();
+            CreateExpeditionMaterials();
+            if (viewCamera != null) viewCamera.farClipPlane = 1500f;
 
             BuildStatic();
             BuildUi();
@@ -121,9 +123,13 @@ namespace FriendlyPersonShooter.Arena
             }
             Cursor.visible = Cursor.lockState != CursorLockMode.Locked;
 
-            DrawList(_static, _floorMat);
-            DrawList(_walls, _wallMat);
-            DrawCover();
+            _wrap = ExpeditionWorld.Active;
+            if (!_wrap)
+            {
+                DrawList(_static, _floorMat);
+                DrawList(_walls, _wallMat);
+                DrawCover();
+            }
 
             var world = ClientServerBootstrap.ClientWorld;
             _text.Clear();
@@ -141,6 +147,7 @@ namespace FriendlyPersonShooter.Arena
                 _localPlayer = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaPlayer>(), ComponentType.ReadOnly<LocalTransform>(),
                     ComponentType.ReadOnly<GhostOwnerIsLocal>());
                 CreateCombatQueries(em);
+                CreateExpeditionQueries(em);
             }
 
             Vector3? eye = null;
@@ -150,7 +157,9 @@ namespace FriendlyPersonShooter.Arena
                 using (var locals = _localPlayer.ToEntityArray(Allocator.Temp)) local = locals[0];
                 Vector3 feet = world.EntityManager.GetComponentData<LocalTransform>(local).Position;
                 eye = feet + Vector3.up * ArenaSettings.EyeHeight;
+                _camRef = feet;
             }
+            if (_wrap) DrawExpeditionWorld();
 
             DrawPlayers(world, local);
             DrawCombat(world, local);
@@ -164,8 +173,9 @@ namespace FriendlyPersonShooter.Arena
                 viewCamera.transform.SetPositionAndRotation(eye.Value, Quaternion.Euler(-look.y, look.x, 0f));
             }
 
-            _text.Append("Arena   (click: capture mouse, Esc: release)\n");
+            _text.Append(_wrap ? "Expedition   (click: capture mouse, Esc: release)\n" : "Arena   (click: capture mouse, Esc: release)\n");
             _text.Append("WASD move, Space jump, LMB fire, Q cycle payload (Vigor, Might, Haste, Relay)\n");
+            if (_wrap) WriteExpeditionHud();
             WriteCombatHud(world, local);
             _hud.text = _text.ToString();
         }
@@ -194,7 +204,7 @@ namespace FriendlyPersonShooter.Arena
                 // Downed players are drawn lying down by the combat view.
                 var em = world.EntityManager;
                 if (em.HasComponent<ArenaVitals>(entities[i]) && em.GetComponentData<ArenaVitals>(entities[i]).Health <= 0f) continue;
-                Vector3 p = transforms[i].Position;
+                Vector3 p = Near(transforms[i].Position);
                 var yaw = Quaternion.Euler(0f, looks[i].Yaw, 0f);
                 _batch.Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));
                 heads.Add(Matrix4x4.TRS(p + Vector3.up * 1.6f + yaw * Vector3.forward * 0.3f, yaw, new Vector3(0.5f, 0.3f, 0.3f)));

@@ -110,7 +110,7 @@ namespace FriendlyPersonShooter.Arena
                 var f = frags[i];
                 bool dim = f.Opacity < 0.6f || f.OwnerNetworkId == myId;
                 float size = 0.4f * math.lerp(0.5f, 1f, math.saturate(f.Opacity));
-                (dim ? _h : _g).Add(Matrix4x4.TRS(transforms[i].Position, Quaternion.Euler(spin, spin * 0.7f, 0f), Vector3.one * size));
+                (dim ? _h : _g).Add(Matrix4x4.TRS(Near(transforms[i].Position), Quaternion.Euler(spin, spin * 0.7f, 0f), Vector3.one * size));
             }
             DrawList(_g, _fragmentMat);
             DrawList(_h, _fragmentFadeMat);
@@ -130,7 +130,7 @@ namespace FriendlyPersonShooter.Arena
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
-                Vector3 p = transforms[i].Position;
+                Vector3 p = Near(transforms[i].Position);
                 float size;
                 switch (en.Family)
                 {
@@ -205,7 +205,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 if (entities[i] == local) continue;
                 var v = vitals[i];
-                Vector3 feet = transforms[i].Position;
+                Vector3 feet = Near(transforms[i].Position);
                 if (v.Health <= 0f)
                 {
                     // Downed: a slab on the floor and a revive bar that fills as fragments are shot.
@@ -271,7 +271,9 @@ namespace FriendlyPersonShooter.Arena
                 var s = ArenaFx.Shots[i];
                 if (now - s.Time > TracerSeconds) { ArenaFx.Shots.RemoveAt(i); continue; }
                 if (s.Shot.ShooterNetworkId == myId) continue;
-                AddLine(s.Shot.From, s.Shot.To, TracerList(s.Shot.Payload));
+                // Move the whole tracer by the same offset as its start, so it isn't stretched across the wrap.
+                Vector3 from = Near(s.Shot.From);
+                AddLine(from, from + (Vector3)(s.Shot.To - s.Shot.From), TracerList(s.Shot.Payload));
             }
             DrawList(_a, _vigorMat);
             DrawList(_b, _mightMat);

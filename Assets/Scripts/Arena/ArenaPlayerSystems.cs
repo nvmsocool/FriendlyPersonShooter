@@ -19,7 +19,7 @@ namespace FriendlyPersonShooter.Arena
         protected override void OnUpdate()
         {
             Enabled = false;
-            if (NetTestSettings.Game != GameMode.Arena || SystemAPI.HasSingleton<PlayerPrefab>()) return;
+            if (!NetTestSettings.IsFirstPerson || SystemAPI.HasSingleton<PlayerPrefab>()) return;
 
             var prefab = EntityManager.CreateEntity();
             EntityManager.AddComponentData(prefab, LocalTransform.Identity);
@@ -51,6 +51,7 @@ namespace FriendlyPersonShooter.Arena
                 var random = new Unity.Mathematics.Random(0xA7E4A1u);
                 ServerAccounts.SpawnOverride = () =>
                 {
+                    if (ExpeditionWorld.Active) return ExpeditionWorld.StartSpawn(ref random);
                     var p = random.NextFloat2Direction() * random.NextFloat(2f, 8f);
                     return new float3(p.x, 0f, p.y - 10f);
                 };
@@ -116,8 +117,15 @@ namespace FriendlyPersonShooter.Arena
                     m.VerticalSpeed = 0f;
                     m.Grounded = true;
                 }
-                pos.x = math.clamp(pos.x, -limit, limit);
-                pos.z = math.clamp(pos.z, -limit, limit);
+                if (ExpeditionWorld.Active)
+                {
+                    pos = ExpeditionWorld.Wrap(pos);
+                }
+                else
+                {
+                    pos.x = math.clamp(pos.x, -limit, limit);
+                    pos.z = math.clamp(pos.z, -limit, limit);
+                }
                 transform.ValueRW.Position = pos;
             }
         }

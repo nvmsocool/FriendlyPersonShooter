@@ -35,7 +35,7 @@ namespace FriendlyPersonShooter.Core.Lobbies
         /// Weight for lobbies heading toward each other (positive) or apart (negative), judged from the
         /// closest pair of players. Players with no velocity add nothing.
         /// </summary>
-        public double ApproachWeight { get; set; } = 1.0;
+        public double ApproachWeight { get; set; } = 3.0;
 
         /// <summary>Closing speed (metres per second) that earns the full approach score.</summary>
         public double ApproachFullSpeed { get; set; } = 6.0;

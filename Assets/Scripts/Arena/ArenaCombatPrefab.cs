@@ -15,6 +15,7 @@ namespace FriendlyPersonShooter.Arena
             em.AddComponentData(prefab, new ArenaVitals { Health = settings.PlayerMaxHealth, MaxHealth = settings.PlayerMaxHealth });
             em.AddComponentData(prefab, new ArenaBuffs { MoveMultiplier = 1f, JumpMultiplier = 1f });
             em.AddComponentData(prefab, new ArenaLoadout { Payload = PayloadKind.Vigor });
+            if (ExpeditionWorld.Active) em.AddComponent<ExpeditionStatus>(prefab);
             // Lets the server rewind other ghosts to what this player saw when they fired.
             em.AddComponent<CommandDataInterpolationDelay>(prefab);
         }
@@ -28,7 +29,7 @@ namespace FriendlyPersonShooter.Arena
         protected override void OnUpdate()
         {
             Enabled = false;
-            if (NetTestSettings.Game != GameMode.Arena || SystemAPI.HasSingleton<ArenaEnemyPrefab>()) return;
+            if (!NetTestSettings.IsFirstPerson || SystemAPI.HasSingleton<ArenaEnemyPrefab>()) return;
 
             var prefab = EntityManager.CreateEntity();
             EntityManager.AddComponentData(prefab, LocalTransform.Identity);
@@ -58,6 +59,20 @@ namespace FriendlyPersonShooter.Arena
                 UsePreSerialization = false,
             });
             EntityManager.AddComponentData(holder, new ArenaFragmentPrefab { Value = fragment });
+
+            var cache = EntityManager.CreateEntity();
+            EntityManager.AddComponentData(cache, LocalTransform.Identity);
+            EntityManager.AddComponent<ArenaCache>(cache);
+            GhostPrefabCreation.ConvertToGhostPrefab(EntityManager, cache, new GhostPrefabCreation.Config
+            {
+                Name = "ArenaCache",
+                Importance = 2,
+                SupportedGhostModes = GhostModeMask.Interpolated,
+                DefaultGhostMode = GhostMode.Interpolated,
+                OptimizationMode = GhostOptimizationMode.Static,
+                UsePreSerialization = false,
+            });
+            EntityManager.AddComponentData(holder, new ArenaCachePrefab { Value = cache });
         }
     }
 }

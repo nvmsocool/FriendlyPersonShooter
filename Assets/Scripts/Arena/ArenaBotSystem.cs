@@ -35,6 +35,8 @@ namespace FriendlyPersonShooter.Arena
         private BotAim _aim;
         private BotMover _mover;
         private readonly BotMoveSettings _moveSettings = new BotMoveSettings { MinDistance = 6f, MaxDistance = 14f };
+        /// <summary>Expedition travel: walk right up to the objective (shrine pad, gate).</summary>
+        private readonly BotMoveSettings _travelSettings = new BotMoveSettings { MinDistance = 0.3f, MaxDistance = 1.2f };
         private readonly CombatSettings _combat = new CombatSettings();
         private readonly MedicSettings _medic = new MedicSettings { Range = AllyRange };
         private int _seat = -1;
@@ -45,6 +47,12 @@ namespace FriendlyPersonShooter.Arena
         private Entity _target;
         private bool _targetIsPlayer;
         private Unity.Mathematics.Random _random;
+        /// <summary>The bot's own feet; other positions are moved to their copy nearest it (wrapping expedition world).</summary>
+        private float3 _self;
+        /// <summary>Expedition: the player the bot follows (the lowest other network id, normally the human).</summary>
+        private float3 _leader;
+        private bool _hasLeader;
+        private Entity _me;
         private EntityQuery _local, _players, _enemies, _fragments;
 
         private readonly List<MedicAlly> _allies = new List<MedicAlly>();
@@ -83,6 +91,7 @@ namespace FriendlyPersonShooter.Arena
             float dt = SystemAPI.Time.DeltaTime;
             Entity me;
             using (var locals = _local.ToEntityArray(Allocator.Temp)) me = locals[0];
+            _me = me;
             var pos = EntityManager.GetComponentData<LocalTransform>(me).Position;
             var vitals = EntityManager.GetComponentData<ArenaVitals>(me);
             var payload = EntityManager.GetComponentData<ArenaLoadout>(me).Payload;
@@ -112,7 +121,7 @@ namespace FriendlyPersonShooter.Arena
             float3 anchor;
             if (_target != Entity.Null && EntityManager.Exists(_target))
             {
-                var tpos = EntityManager.GetComponentData<LocalTransform>(_target).Position;
+                var tpos = ExpeditionWorld.Near(EntityManager.GetComponentData<LocalTransform>(_target).Position, pos);
                 float radius;
                 float3 aimPoint;
                 if (EntityManager.HasComponent<ArenaFragment>(_target))
@@ -146,7 +155,33 @@ namespace FriendlyPersonShooter.Arena
                 anchor = new float3(0f, 0f, 8f);
             }
 
-            var move = _mover.Step(dt, ToVec(pos), input.Yaw, ToVec(anchor), _moveSettings);
+            // Expedition: the Medic sticks with the leader; the others play their own expedition
+            // (hunt Wisps, bank at a shrine, pay and walk through the gate), fighting on the way.
+            var moveSettings = _moveSettings;
+            if (ExpeditionWorld.Active)
+            {
+                bool travelling = false;
+                if (_profile != Profile.Medic && EntityManager.HasComponent<ExpeditionStatus>(me))
+                {
+                    var status = EntityManager.GetComponentData<ExpeditionStatus>(me);
+                    if (status.HasTarget && !status.Complete)
+                    {
+                        var goal = ExpeditionWorld.Near(new float3(status.Target.x, 0f, status.Target.y), pos);
+                        // While gathering, fight whatever is in reach; otherwise keep walking.
+                        bool fighting = _target != Entity.Null && !_targetIsPlayer && status.Phase == Core.Expedition.ExpeditionPhase.Gather;
+                        if (!fighting || math.distance(goal.xz, pos.xz) > 40f)
+                        {
+                            anchor = goal;
+                            travelling = true;
+                            moveSettings = _travelSettings;
+                            if (_target == Entity.Null) input.Yaw = math.degrees(math.atan2(goal.x - pos.x, goal.z - pos.z));
+                        }
+                    }
+                }
+                if (!travelling && _hasLeader) anchor = ExpeditionWorld.Near(_leader, pos);
+            }
+
+            var move = _mover.Step(dt, ToVec(pos), input.Yaw, ToVec(anchor), moveSettings);
             input.Horizontal = move.Horizontal;
             input.Vertical = move.Vertical;
             if (move.Jump) input.Jump.Set();
@@ -166,6 +201,7 @@ namespace FriendlyPersonShooter.Arena
             var eye = pos + new float3(0f, ArenaSettings.EyeHeight, 0f);
             int myId = EntityManager.GetComponentData<GhostOwner>(me).NetworkId;
             var myBuffs = EntityManager.GetComponentData<ArenaBuffs>(me);
+            _self = pos;
             Gather(eye);
 
             // Anyone helps revive: the Medic always, the others most of the time.
@@ -272,7 +308,7 @@ namespace FriendlyPersonShooter.Arena
                     }
                     // Opacity stands in for time left: fragments about to fade are skipped by the brain.
                     float opacity = math.saturate(fragData[i].Opacity);
-                    list.Add(new SoulFragment { Id = frags[i].Index, Position = ToVec(fragPos[i].Position), Lifetime = 5f, Age = 5f - opacity });
+                    list.Add(new SoulFragment { Id = frags[i].Index, Position = ToVec(ExpeditionWorld.Near(fragPos[i].Position, _self)), Lifetime = 5f, Age = 5f - opacity });
                     _fragmentVersions[frags[i].Index] = frags[i].Version;
                 }
             }
@@ -283,10 +319,19 @@ namespace FriendlyPersonShooter.Arena
             using (var buffs = _players.ToComponentDataArray<ArenaBuffs>(Allocator.Temp))
             using (var owners = _players.ToComponentDataArray<GhostOwner>(Allocator.Temp))
             {
+                int leaderId = int.MaxValue;
+                _hasLeader = false;
                 for (int i = 0; i < players.Length; i++)
                 {
                     int id = owners[i].NetworkId;
-                    var p = ToVec(transforms[i].Position + new float3(0f, ArenaWeapon.PlayerHitHeight, 0f));
+                    var near = ExpeditionWorld.Near(transforms[i].Position, _self);
+                    var p = ToVec(near + new float3(0f, ArenaWeapon.PlayerHitHeight, 0f));
+                    if (players[i] != _me && id < leaderId)
+                    {
+                        leaderId = id;
+                        _leader = near;
+                        _hasLeader = true;
+                    }
                     var b = buffs[i];
                     var effects = new EffectSet(_combat.MaxBuffSlots);
                     if (b.ShieldRemaining > 0f) effects.Apply(EffectKind.Shield, 0, 1f, b.ShieldRemaining);
@@ -313,7 +358,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 for (int i = 0; i < enemies.Length; i++)
                 {
-                    var p = enemyPos[i].Position;
+                    var p = ExpeditionWorld.Near(enemyPos[i].Position, _self);
                     float d = math.distance(eye, p);
                     bool hittable = (enemyData[i].Hittable || enemyData[i].Family == EnemyFamily.Wisp) && d <= ArenaWeapon.Range &&
                                     Visible(eye, ToVec(p));

@@ -17,9 +17,11 @@ namespace FriendlyPersonShooter.Net
         {
             NetTestSettings.ParseCommandLine();
 #if UNITY_EDITOR
-            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Arena") NetTestSettings.Game = GameMode.Arena;
+            var sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            if (sceneName == "Arena") NetTestSettings.Game = GameMode.Arena;
+            if (sceneName == "Expedition") NetTestSettings.Game = GameMode.Expedition;
 #endif
-            if (NetTestSettings.Game == GameMode.Arena && !NetTestSettings.PortGiven) NetTestSettings.Port = NetTestSettings.ArenaPort;
+            if (NetTestSettings.IsFirstPerson && !NetTestSettings.PortGiven) NetTestSettings.Port = NetTestSettings.ArenaPort;
             AutoConnectPort = NetTestSettings.Port;
 
             if (NetworkEndpoint.TryParse(NetTestSettings.ConnectAddress, NetTestSettings.Port, out var endpoint))
@@ -31,7 +33,7 @@ namespace FriendlyPersonShooter.Net
                 Debug.LogError($"[NetTest] Couldn't parse connect address '{NetTestSettings.ConnectAddress}'.");
             }
 
-            if (NetTestSettings.Game == GameMode.Arena) return InitializeArena(defaultWorldName);
+            if (NetTestSettings.IsFirstPerson) return InitializeArena(defaultWorldName);
 
             var mode = NetTestSettings.Mode;
             if (mode == NetMode.All || mode == NetMode.Server)

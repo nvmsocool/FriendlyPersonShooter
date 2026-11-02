@@ -23,8 +23,10 @@ namespace FriendlyPersonShooter.Net
     {
         /// <summary>MVP step 1: cube players and bots on the wrapping grid, lobbies splitting and merging.</summary>
         Lobbies,
-        /// <summary>MVP step 2: one first-person arena with enemies, payloads and bot allies.</summary>
+        /// <summary>MVP steps 2-3: one first-person arena with enemies, payloads and bot allies.</summary>
         Arena,
+        /// <summary>MVP step 4: a generated layer-1 grid with landmarks, essence, shrines, caches and one gate.</summary>
+        Expedition,
     }
 
     /// <summary>
@@ -67,6 +69,12 @@ namespace FriendlyPersonShooter.Net
         public static bool PortGiven;
         /// <summary>The arena's default port, so it can run next to a lobby test.</summary>
         public const ushort ArenaPort = 7980;
+
+        /// <summary>True for the first-person modes (arena and expedition), which share the arena's systems.</summary>
+        public static bool IsFirstPerson => Game == GameMode.Arena || Game == GameMode.Expedition;
+
+        /// <summary>Seed for the expedition layer (-fps-world-seed). Server and clients must agree.</summary>
+        public static uint WorldSeed = 20261102;
         public static string ConnectAddress = "127.0.0.1";
 
         /// <summary>World is GridSize x GridSize zones. Small and fast for testing; the real game is far larger.</summary>
@@ -135,6 +143,9 @@ namespace FriendlyPersonShooter.Net
                         break;
                     case "-fps-game":
                         if (Enum.TryParse(value, true, out GameMode game)) Game = game;
+                        break;
+                    case "-fps-world-seed":
+                        if (uint.TryParse(value, out uint worldSeed)) WorldSeed = worldSeed;
                         break;
                     case "-fps-arena-bots":
                         if (int.TryParse(value, out int arenaBots)) ArenaBots = Math.Max(0, arenaBots);

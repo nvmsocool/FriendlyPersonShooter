@@ -23,6 +23,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public readonly float[] Ramp = new float[N * N];
         public readonly float[] NoHex = new float[N * N];
         public readonly float[] Pad = new float[N * N];
+        // The seam height and how far each grid point is from it (0 on the zone edge, 1 from BorderWidth in).
+        private readonly float[] _border = new float[N * N];
+        private readonly float[] _seamBlend = new float[N * N];
         public readonly float[] S = new float[C * C];
         public readonly int[] CellHex = new int[C * C];
         public readonly int[] Comp = new int[C * C];
@@ -150,8 +153,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float e = Mathf.Min(Mathf.Min(lx, 250f - lx), Mathf.Min(lz, 250f - lz));
                     float inner = Smooth(14f, 14f + s.Fall, e);
                     float border = ZoneEdges.BorderHeight(z, wx, wz);
+                    float blend = ZoneEdges.Blend(z, wx, wz);
+                    _border[iz * N + ix] = border;
+                    _seamBlend[iz * N + ix] = blend;
                     float h = border + Elevation(lx, lz) * inner;
-                    h = Mathf.Lerp(border, h, ZoneEdges.Blend(z, wx, wz));
+                    h = Mathf.Lerp(border, h, blend);
                     if (HasWater) h = Mathf.Max(h, WaterLevel - 1.1f);
                     H[iz * N + ix] = h;
                     // Hex fields stay out of the border strip.
@@ -216,6 +222,12 @@ namespace FriendlyPersonShooter.ZoneArt.C
         }
 
 
+        /// <summary>
+        /// A height for grid point <paramref name="k"/> eased to the seam height near the zone edge, like the base
+        /// ground. Pads and ramps that reach the border strip must not break the seam with the neighbouring zone.
+        /// </summary>
+        private float KeepSeam(int k, float h) => Mathf.Lerp(_border[k], h, _seamBlend[k]);
+
         /// <summary>Flattens a disc to <paramref name="height"/> (full within r, eased out to r + fall).</summary>
         public void Flatten(Vector2 c, float r, float fall, float height, bool noHex, float padValue = 1f)
         {
@@ -230,7 +242,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float w = Smooth(r + fall, r, d);
                     if (w <= 0f) continue;
                     int k = iz * N + ix;
-                    H[k] = Mathf.Lerp(H[k], height, w);
+                    H[k] = KeepSeam(k, Mathf.Lerp(H[k], height, w));
                     if (noHex && d < r + 2f) NoHex[k] = 1f;
                     Pad[k] = Mathf.Max(Pad[k], Smooth(r + 1f, r - 1f, d) * padValue);
                 }
@@ -605,7 +617,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float t = Mathf.Clamp01((u - 1.5f) / Mathf.Max(len, 0.01f));
                     float rh = Mathf.Lerp(ha, hb, t);
                     int k = iz * N + ix;
-                    H[k] = Mathf.Lerp(H[k], rh, w);
+                    H[k] = KeepSeam(k, Mathf.Lerp(H[k], rh, w));
                     Ramp[k] = Mathf.Max(Ramp[k], w);
                     NoHex[k] = 1f;
                 }

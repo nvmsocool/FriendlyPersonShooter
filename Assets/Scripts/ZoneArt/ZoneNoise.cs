@@ -44,6 +44,9 @@ namespace FriendlyPersonShooter.ZoneArt
         {
             float cycles = math.max(1f, math.round(period * frequency));
             float sum = 0f, amp = 1f, norm = 0f;
+            // pnoise only repeats for positive coordinates (its lattice wrap keeps the sign), so wrap into [0, period) first.
+            x -= math.floor(x / period) * period;
+            z -= math.floor(z / period) * period;
             var p = new float2(x, z) * (cycles / period);
             for (int i = 0; i < octaves; i++)
             {

@@ -73,6 +73,7 @@ namespace FriendlyPersonShooter.Arena
             _ledger = new DropLedger();
             _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed);
             _caches = new CacheRegistry();
+            CreateSocial();
             Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} grid={_map.Grid.Width}x{_map.Grid.Height} zone={_map.Grid.ZoneSize}m " +
                       $"start={_map.StartZone} gate={_map.Gates[0].Point.Zone} landmarks={_map.Landmarks.Count} shrines={_map.Shrines.Count}");
         }
@@ -136,6 +137,7 @@ namespace FriendlyPersonShooter.Arena
 
         private void StepExpedition(EntityCommandBuffer ecb)
         {
+            StepSocial(ecb);
             if (_time >= _nextSpawnCheck)
             {
                 _nextSpawnCheck = _time + SpawnCheckInterval;
@@ -273,6 +275,7 @@ namespace FriendlyPersonShooter.Arena
                         if (pickup.Outcome == CachePickupOutcome.Returned)
                         {
                             _cachesReturned++;
+                            SocialCacheReturn(id, pickup.OwnerId);
                             _announce.Add((AnnounceKind.CacheReturned, pickup.Contents.Total, pickup.OwnerId, id));
                         }
                     }
@@ -389,6 +392,7 @@ namespace FriendlyPersonShooter.Arena
             }
             Debug.Log($"[Expedition] t={_time:0} events={_eventsSpawned} essence={_essenceAwarded} banked={_banked} unlocks={_gateUnlocks} " +
                       $"completions={_completions} cachesDropped={_cachesDropped} cachesReturned={_cachesReturned} players=[{sb}]");
+            Debug.Log($"[Social] t={_time:0} {SocialLog()}");
         }
     }
 }

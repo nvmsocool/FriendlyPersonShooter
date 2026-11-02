@@ -523,6 +523,7 @@ namespace FriendlyPersonShooter.Arena
                     {
                         var target = _players[_playerById[hit.TargetId]];
                         var result = _lobby.HitPlayer(shooter.Vitals, target.Vitals, payload, _time, _combos);
+                        SocialBuff(shooter.Vitals.Id, target.Vitals.Id, result);
                         _allyHits++;
                         _healing += result.Healed + result.ShieldGained;
                         confirm.TargetIsPlayer = 1;
@@ -544,7 +545,11 @@ namespace FriendlyPersonShooter.Arena
                             var r = _lobby.HitFragment(shooter.Vitals, revive, fragmentId, payload);
                             confirm.Refused = (byte)(r.Accepted ? 0 : 1);
                             confirm.ReviveProgress = revive.ProgressFraction;
-                            if (r.Accepted) _fragmentHits++;
+                            if (r.Accepted)
+                            {
+                                _fragmentHits++;
+                                SocialFragment(shooter.Vitals.Id, ownerId, revive, r.Revived);
+                            }
                             if (r.Revived)
                             {
                                 _revives++;

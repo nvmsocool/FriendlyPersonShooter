@@ -151,9 +151,40 @@ namespace FriendlyPersonShooter.Arena
             }
             if (s.BloomNear) _text.Append("A Yellow BLOOM is running nearby: lots of Wisps!\n");
             _text.Append($"You are {s.Location}\n");
+            _text.Append("Quick-chat: 1 Thanks  2 Need a res  3 Seen any Yellow?  4 Yellow here  5 Follow me  6 Group up?  7 Gate at...  K kudos\n");
+            WriteSocial();
             if (s.Complete)
             {
                 _center.text = $"EXPEDITION COMPLETE in {minutes:00}:{seconds:00}!";
+            }
+        }
+
+        private const float ChatSeconds = 10f;
+
+        /// <summary>Recent quick-chat lines from players nearby, and kudos given or received.</summary>
+        private void WriteSocial()
+        {
+            float now = Time.unscaledTime;
+            var map = ExpeditionWorld.Map;
+            var lines = ExpeditionSocialClientSystem.Lines;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                var (sender, message, time) = lines[i];
+                if (now - time > ChatSeconds) continue;
+                _text.Append($"  player {sender}: {Core.Social.QuickChatCatalog.Render(message, map, id => $"player {id}")}\n");
+            }
+            var kudos = ExpeditionSocialClientSystem.Kudos;
+            for (int i = kudos.Count - 1; i >= 0; i--)
+            {
+                var (n, time) = kudos[i];
+                if (now - time > ChatSeconds)
+                {
+                    kudos.RemoveAt(i);
+                    continue;
+                }
+                _text.Append(n.Outcome == Core.Social.KudosOutcome.Given
+                    ? $"  * player {n.GiverId} gave kudos to player {n.ReceiverId}\n"
+                    : $"  * kudos not sent ({n.Outcome})\n");
             }
         }
 

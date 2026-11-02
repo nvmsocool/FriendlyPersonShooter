@@ -1,0 +1,10 @@
+{
+    "Mode": 2,
+    "MaxPacketSize": 1400,
+    "MaxPacketCount": 300,
+    "PacketDelayMs": 150,
+    "PacketJitterMs": 50,
+    "PacketDropPercentage": 3,
+    "PacketDuplicationPercentage": 1,
+    "FuzzFactor": 0
+}

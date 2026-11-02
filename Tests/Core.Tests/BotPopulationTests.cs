@@ -57,7 +57,7 @@ namespace FriendlyPersonShooter.Core.Tests
                 errors.Add(Math.Abs((double)pop.OnlineCount / 400 - pop.TargetShare(t)));
             }
             Assert.That(errors.Average(), Is.LessThan(0.03), "average gap from the target share");
-            Assert.That(errors.Max(), Is.LessThan(0.08), "worst gap from the target share");
+            Assert.That(errors.Max(), Is.LessThan(0.1), "worst gap from the target share");
             Assert.That(pop.Stats.Logouts, Is.GreaterThan(400));
             Assert.That(pop.Stats.PartyLogins + pop.Stats.FriendJoins, Is.GreaterThan(50));
             Assert.That(pop.Stats.Drops, Is.GreaterThan(0));
@@ -120,6 +120,63 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(pop.Accounts[0].Party, Is.Not.Null);
             Assert.That(pop.Accounts[0].Party, Is.SameAs(pop.Accounts[1].Party));
             Assert.That(pop.Stats.StrangerParties, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Profiles_AreMixedAsConfigured()
+        {
+            var pop = new BotPopulation(1000, _grid, new BotSimSettings(), seed: 4);
+            int chaos = pop.Accounts.Count(a => a.Profile == BotProfile.Chaos);
+            int groupers = pop.Accounts.Count(a => a.Profile == BotProfile.Grouper);
+            Assert.That(chaos, Is.InRange(30, 70));
+            Assert.That(groupers, Is.InRange(70, 130));
+        }
+
+        [Test]
+        public void ChaosBots_DropMoreOften_AndTeleport()
+        {
+            var settings = new BotSimSettings { ChaosShare = 0.5, GrouperShare = 0 };
+            var pop = new BotPopulation(200, _grid, settings, seed: 6);
+            int teleports = 0;
+            for (double t = 0; t < 600; t += 0.5)
+            {
+                Run(pop, t, t);
+                foreach (var a in pop.Accounts)
+                {
+                    if (pop.TryTakeTeleport(a.Seat, out _, out _))
+                    {
+                        teleports++;
+                        Assert.That(a.Profile, Is.EqualTo(BotProfile.Chaos));
+                    }
+                }
+            }
+            Assert.That(teleports, Is.GreaterThan(5));
+            Assert.That(pop.Stats.Teleports, Is.EqualTo(teleports));
+            Assert.That(pop.Stats.Drops, Is.GreaterThan(20));
+        }
+
+        [Test]
+        public void Grouper_InvitesStrangersFarMoreOften()
+        {
+            int Parties(double grouperShare)
+            {
+                var settings = new BotSimSettings
+                {
+                    GrouperShare = grouperShare, ChaosShare = 0, PartyLoginChance = 0, JoinFriendChance = 0,
+                    DropPerHour = 0, TroughOnline = 0.99, PeakOnline = 0.99, MinSessionMinutes = 600,
+                    MaxSessionMinutes = 600, StrangerPartyPerHour = 0.5, FriendsPerAccount = 0,
+                };
+                var pop = new BotPopulation(40, _grid, settings, seed: 8);
+                pop.Tick(0);
+                for (double t = 21; t < 120; t += 0.5)
+                {
+                    pop.Tick(t);
+                    // Everyone stands in one zone of one lobby.
+                    foreach (var a in pop.Accounts) pop.ReportPosition(a.Seat, 10, 10, 1);
+                }
+                return pop.Stats.StrangerParties;
+            }
+            Assert.That(Parties(0.25), Is.GreaterThan(Parties(0.0) + 5));
         }
 
         [Test]

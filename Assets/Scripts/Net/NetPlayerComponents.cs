@@ -49,6 +49,13 @@ namespace FriendlyPersonShooter.Net
         public int LobbyId;
     }
 
+    /// <summary>Bot-to-server, test only: move my player to this point (Chaos bots jumping between zones).</summary>
+    public struct TeleportRequest : IRpcCommand
+    {
+        public float X;
+        public float Z;
+    }
+
     /// <summary>Server only: who owns a player entity.</summary>
     public struct PlayerAccount : IComponentData
     {

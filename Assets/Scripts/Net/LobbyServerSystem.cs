@@ -24,6 +24,8 @@ namespace FriendlyPersonShooter.Net
         public static int PlayersInParties;
         /// <summary>Zone simulation cost of the current lobbies; see <see cref="LobbyCost"/>.</summary>
         public static LobbyCostReport Cost = new LobbyCostReport();
+        /// <summary>Pass-criteria measurements: pop-ins, encounters after merges, party splits.</summary>
+        public static LobbyMetrics Metrics;
         /// <summary>Lobby id for each network id, so a client view can show its own lobby.</summary>
         public static readonly Dictionary<int, int> LobbyOfPlayer = new Dictionary<int, int>();
 
@@ -74,6 +76,9 @@ namespace FriendlyPersonShooter.Net
         private readonly Dictionary<int, LobbyPlayer> _players = new Dictionary<int, LobbyPlayer>();
         private readonly Dictionary<int, int> _lobbyOf = new Dictionary<int, int>();
         private readonly Dictionary<int, int> _ghostIdOf = new Dictionary<int, int>();
+        private readonly Dictionary<int, Unity.Mathematics.float3> _posOf = new Dictionary<int, Unity.Mathematics.float3>();
+        private readonly List<PlayerSample> _samples = new List<PlayerSample>();
+        private LobbyMetrics _metrics;
         private readonly HashSet<int> _seen = new HashSet<int>();
         /// <summary>Lobbies that just split can't merge until this time, so a pair at the edge can't flicker.</summary>
         private readonly Dictionary<int, double> _noMergeUntil = new Dictionary<int, double>();
@@ -87,6 +92,13 @@ namespace FriendlyPersonShooter.Net
             RequireForUpdate<GhostRelevancy>();
             _grid = NetTestSettings.CreateGrid();
             _rules = NetTestSettings.CreateRules();
+            // Test zones are small, so a player in view is roughly a player within one zone.
+            _metrics = new LobbyMetrics(NetTestSettings.WorldSize, NetTestSettings.WorldSize)
+            {
+                ViewDistance = NetTestSettings.ZoneSize,
+                EncounterDistance = NetTestSettings.ZoneSize,
+            };
+            LobbyStats.Metrics = _metrics;
         }
 
         protected override void OnUpdate()
@@ -101,6 +113,7 @@ namespace FriendlyPersonShooter.Net
                 SplitLobbies(now);
                 MergeLobbies(now);
                 PublishStats();
+                ObserveMetrics(now);
             }
 
             if (now >= _nextLog)
@@ -112,6 +125,10 @@ namespace FriendlyPersonShooter.Net
                           $"parties={LobbyStats.Parties} inParties={LobbyStats.PlayersInParties} " +
                           $"zoneCopies={LobbyStats.Cost.LoadedInstances} zones={LobbyStats.Cost.DistinctLoadedZones} " +
                           $"duplication={LobbyStats.Cost.Duplication:0.00} zonesPerPlayer={LobbyStats.Cost.LoadedZonesPerPlayer:0.0}");
+                var m = _metrics;
+                Debug.Log($"[Metrics] mergePopIns={m.MergePopIns} partyPopIns={m.PartyPopIns} loginPopIns={m.LoginPopIns} " +
+                          $"mergesTracked={m.MergesTracked} met={m.MergesMet} missed={m.MergesMissed} " +
+                          $"avgTimeToMeet={(m.MergesMet > 0 ? m.TotalTimeToMeet / m.MergesMet : 0):0.0} partySplits={m.PartySplits}");
             }
 
             UpdateRelevancy();
@@ -129,6 +146,7 @@ namespace FriendlyPersonShooter.Net
                 var pos = transform.ValueRO.Position;
                 var zone = _grid.ZoneAt(pos.x, pos.z);
                 _seen.Add(id);
+                _posOf[id] = pos;
                 _ghostIdOf[id] = ghost.ValueRO.ghostId;
 
                 int group = account.ValueRO.GroupId;
@@ -167,6 +185,7 @@ namespace FriendlyPersonShooter.Net
                 _players.Remove(id);
                 _lobbyOf.Remove(id);
                 _ghostIdOf.Remove(id);
+                _posOf.Remove(id);
             }
         }
 
@@ -250,6 +269,7 @@ namespace FriendlyPersonShooter.Net
                     }
                     target.Players.Add(p);
                     _lobbyOf[p.Id] = target.Id;
+                    _metrics.RecordPartyMove(new[] { p.Id });
                     LobbyStats.TotalGroupJoins++;
                 }
                 LobbyStats.Record(new LobbyEvent
@@ -300,6 +320,7 @@ namespace FriendlyPersonShooter.Net
             foreach (var merge in merges)
             {
                 var zone = merge.B.Players[0].Zone;
+                _metrics.RecordMerge(now, Ids(merge.A), Ids(merge.B));
                 foreach (var p in merge.B.Players)
                 {
                     merge.A.Players.Add(p);
@@ -337,6 +358,24 @@ namespace FriendlyPersonShooter.Net
                     }
                 }
             }
+        }
+
+        private static List<int> Ids(Lobby lobby)
+        {
+            var ids = new List<int>(lobby.Players.Count);
+            foreach (var p in lobby.Players) ids.Add(p.Id);
+            return ids;
+        }
+
+        private void ObserveMetrics(double now)
+        {
+            _samples.Clear();
+            foreach (var p in _players.Values)
+            {
+                if (!_posOf.TryGetValue(p.Id, out var pos)) continue;
+                _samples.Add(new PlayerSample(p.Id, pos.x, pos.z, _lobbyOf[p.Id], p.GroupId));
+            }
+            _metrics.Observe(now, _samples);
         }
 
         private void PublishStats()

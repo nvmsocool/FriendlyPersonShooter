@@ -46,6 +46,11 @@ namespace FriendlyPersonShooter.Net
         private EntityQuery _clientQuery, _serverQuery, _partyQuery;
         private readonly Dictionary<int, List<Vector3>> _parties = new Dictionary<int, List<Vector3>>();
         private readonly List<Matrix4x4> _partyMarks = new List<Matrix4x4>();
+        /// <summary>When the player view first saw each player, so new arrivals grow in instead of popping.</summary>
+        private readonly Dictionary<int, float> _firstSeen = new Dictionary<int, float>();
+        private readonly HashSet<int> _seenNow = new HashSet<int>();
+        private readonly List<int> _gone = new List<int>();
+        private const float AppearSeconds = 0.6f;
         private World _clientQueryWorld, _serverQueryWorld;
         private bool _mapMode;
         private float _fps;
@@ -357,6 +362,13 @@ namespace FriendlyPersonShooter.Net
             _text.Append($"Splits {LobbyStats.TotalSplits}, merges {LobbyStats.TotalMerges}, " +
                          $"party moves {LobbyStats.TotalGroupJoins}\n");
             _text.Append($"Parties {LobbyStats.Parties} ({LobbyStats.PlayersInParties} players)\n");
+            var metrics = LobbyStats.Metrics;
+            if (metrics != null)
+            {
+                _text.Append($"Pop-ins in view: merge {metrics.MergePopIns}, party {metrics.PartyPopIns}, login {metrics.LoginPopIns}\n");
+                _text.Append($"Merges that met: {metrics.MergesMet} of {metrics.MergesMet + metrics.MergesMissed}, " +
+                             $"party splits {metrics.PartySplits}\n");
+            }
             var pop = BotDirector.Population;
             if (pop != null)
             {
@@ -430,16 +442,33 @@ namespace FriendlyPersonShooter.Net
                 {
                     if (owners[i].NetworkId == myId) localPos = transforms[i].Position;
                 }
+                float now = Time.unscaledTime;
+                _seenNow.Clear();
                 for (int i = 0; i < transforms.Length; i++)
                 {
                     Vector3 p = transforms[i].Position;
                     // Show each other player at whichever wrapped copy is nearest to us.
                     if (localPos.HasValue) p = localPos.Value + WrappedDelta(localPos.Value, p, size);
-                    var m = Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * 1.5f);
+                    int id = owners[i].NetworkId;
+                    _seenNow.Add(id);
+                    if (!_firstSeen.TryGetValue(id, out float since))
+                    {
+                        since = now;
+                        _firstSeen[id] = now;
+                    }
+                    float grow = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - since) / AppearSeconds));
+                    var m = Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * 1.5f * grow);
                     if (owners[i].NetworkId == myId) Graphics.RenderMesh(new RenderParams(_localMat), _cube, 0, m);
                     else _others.Add(m);
                 }
                 DrawList(_others, _otherMat, Matrix4x4.identity);
+
+                _gone.Clear();
+                foreach (int id in _firstSeen.Keys)
+                {
+                    if (!_seenNow.Contains(id)) _gone.Add(id);
+                }
+                foreach (int id in _gone) _firstSeen.Remove(id);
             }
 
             if (localPos.HasValue && viewCamera != null)

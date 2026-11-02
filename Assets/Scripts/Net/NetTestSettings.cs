@@ -21,7 +21,7 @@ namespace FriendlyPersonShooter.Net
     /// <summary>
     /// Settings for the networking test, read from the command line:
     /// <c>-fps-mode all|server|client|bots -fps-bots 50 -fps-port 7979 -fps-connect 127.0.0.1 -fps-grid 8 -fps-zone 40
-    /// -fps-seed 1 -fps-timescale 48 -fps-hour 12</c>.
+    /// -fps-seed 1 -fps-account-base 1000 -fps-timescale 48 -fps-hour 12</c>.
     /// </summary>
     public static class NetTestSettings
     {
@@ -31,6 +31,9 @@ namespace FriendlyPersonShooter.Net
 
         /// <summary>Random seed for bot behavior; the same seed replays the same logins and parties.</summary>
         public static int BotSeed = 1;
+
+        /// <summary>First bot account id. Give each bot process its own range so accounts don't collide.</summary>
+        public static int AccountBase = 1000;
 
         /// <summary>Game seconds per real second for bot sessions; see <see cref="BotSimSettings.TimeScale"/>.</summary>
         public static double TimeScale = 48;
@@ -91,6 +94,9 @@ namespace FriendlyPersonShooter.Net
                         break;
                     case "-fps-grid":
                         if (int.TryParse(value, out int grid)) GridSize = Math.Max(1, grid);
+                        break;
+                    case "-fps-account-base":
+                        if (int.TryParse(value, out int accountBase)) AccountBase = Math.Max(1, accountBase);
                         break;
                     case "-fps-seed":
                         if (int.TryParse(value, out int seed)) BotSeed = seed;

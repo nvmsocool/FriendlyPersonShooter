@@ -20,6 +20,17 @@ namespace FriendlyPersonShooter.Core.Bots
         Follow,
     }
 
+    /// <summary>How a simulated player behaves beyond the normal population model.</summary>
+    public enum BotProfile
+    {
+        /// <summary>Plays like most players.</summary>
+        Normal,
+        /// <summary>Invites strangers and nearly always plays in a party; tests that parties never split.</summary>
+        Grouper,
+        /// <summary>Drops and reconnects often and teleports between zones; tests edge cases.</summary>
+        Chaos,
+    }
+
     /// <summary>A party of friends or teamed-up strangers. The first member leads.</summary>
     public sealed class BotParty
     {
@@ -38,6 +49,12 @@ namespace FriendlyPersonShooter.Core.Bots
     {
         public int Seat { get; }
         public int AccountId { get; }
+
+        public BotProfile Profile { get; internal set; }
+
+        /// <summary>A teleport the game should perform for this bot (test only), or false.</summary>
+        internal bool TeleportPending;
+        internal double TeleportX, TeleportZ;
 
         /// <summary>Seats of this account's friends. Friendships go both ways.</summary>
         public List<int> Friends { get; } = new List<int>();

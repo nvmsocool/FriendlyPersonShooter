@@ -19,6 +19,8 @@ namespace FriendlyPersonShooter.Core.Bots
         public int StrangerParties;
         /// <summary>Members who quit their party but kept playing.</summary>
         public int PartyLeaves;
+        /// <summary>Chaos bots jumping across the world.</summary>
+        public int Teleports;
     }
 
     /// <summary>
@@ -60,7 +62,11 @@ namespace FriendlyPersonShooter.Core.Bots
 
             for (int i = 0; i < seats; i++)
             {
-                _accounts.Add(new BotAccount(i, accountBase + i + 1, _random.Next()));
+                var account = new BotAccount(i, accountBase + i + 1, _random.Next());
+                double roll = _random.NextDouble();
+                if (roll < settings.ChaosShare) account.Profile = BotProfile.Chaos;
+                else if (roll < settings.ChaosShare + settings.GrouperShare) account.Profile = BotProfile.Grouper;
+                _accounts.Add(account);
             }
             BuildFriendships();
             BuildHotspots();
@@ -127,7 +133,15 @@ namespace FriendlyPersonShooter.Core.Bots
                 if (a.WantsOnline)
                 {
                     if (now >= a.SessionEnd) EndSession(a, now);
-                    else if (Chance(Settings.DropPerHour, dtHours)) Drop(a, now);
+                    else if (Chance(a.Profile == BotProfile.Chaos ? Settings.ChaosDropPerHour : Settings.DropPerHour, dtHours))
+                    {
+                        Drop(a, now);
+                    }
+                    else if (a.Profile == BotProfile.Chaos && a.Party == null && a.HasPosition &&
+                             Chance(Settings.ChaosTeleportPerHour, dtHours))
+                    {
+                        Teleport(a, _random.NextDouble() * WorldWidth, _random.NextDouble() * WorldHeight);
+                    }
                     else if (a.Party != null && !a.IsPartyLeader && Chance(Settings.LeavePartyPerHour, dtHours))
                     {
                         LeaveParty(a);
@@ -249,15 +263,16 @@ namespace FriendlyPersonShooter.Core.Bots
 
             a.SessionEnd = now + GameMinutes(SampleSessionMinutes());
 
+            bool grouper = a.Profile == BotProfile.Grouper;
             var friend = PickOnlineFriend(a);
-            if (friend != null && _random.NextDouble() < Settings.JoinFriendChance)
+            if (friend != null && (grouper || _random.NextDouble() < Settings.JoinFriendChance))
             {
                 JoinParty(a, friend);
                 Stats.FriendJoins++;
                 return;
             }
 
-            if (_random.NextDouble() < Settings.PartyLoginChance)
+            if (_random.NextDouble() < (grouper ? 0.8 : Settings.PartyLoginChance))
             {
                 int size = SamplePartySize();
                 _scratch.Clear();
@@ -304,8 +319,32 @@ namespace FriendlyPersonShooter.Core.Bots
             Stats.Drops++;
             GoOffline(a);
             // The party keeps the slot; the server puts them back where they were.
-            a.ReconnectAt = now + GameMinutes(Settings.ReconnectMinMinutes +
-                                              _random.NextDouble() * (Settings.ReconnectMaxMinutes - Settings.ReconnectMinMinutes));
+            double min = a.Profile == BotProfile.Chaos ? Settings.ChaosReconnectMinMinutes : Settings.ReconnectMinMinutes;
+            double max = a.Profile == BotProfile.Chaos ? Settings.ChaosReconnectMaxMinutes : Settings.ReconnectMaxMinutes;
+            a.ReconnectAt = now + GameMinutes(min + _random.NextDouble() * (max - min));
+        }
+
+        private void Teleport(BotAccount a, double x, double z)
+        {
+            Stats.Teleports++;
+            a.TeleportPending = true;
+            a.TeleportX = x;
+            a.TeleportZ = z;
+            // Assume the jump worked until the server says otherwise, and start fresh from there.
+            a.X = x;
+            a.Z = z;
+            a.Activity = BotActivity.Offline;
+        }
+
+        /// <summary>Takes a teleport the game should perform for this bot, if one is waiting.</summary>
+        public bool TryTakeTeleport(int seat, out double x, out double z)
+        {
+            var a = _accounts[seat];
+            x = a.TeleportX;
+            z = a.TeleportZ;
+            if (!a.TeleportPending || !a.WantsOnline) return false;
+            a.TeleportPending = false;
+            return true;
         }
 
         private static void GoOffline(BotAccount a)
@@ -363,7 +402,9 @@ namespace FriendlyPersonShooter.Core.Bots
             var buckets = new Dictionary<(int, ZoneCoord), List<BotAccount>>();
             foreach (var a in _accounts)
             {
-                if (!a.WantsOnline || !a.HasPosition || a.Party != null || a.LobbyId == 0) continue;
+                if (!a.WantsOnline || !a.HasPosition || a.LobbyId == 0) continue;
+                // Solo players, and Grouper-led parties with room, can team up.
+                if (a.Party != null && !(a.IsPartyLeader && a.Profile == BotProfile.Grouper && HasRoom(a))) continue;
                 var key = (a.LobbyId, Grid.ZoneAt(a.X, a.Z));
                 if (!buckets.TryGetValue(key, out var list))
                 {
@@ -374,10 +415,19 @@ namespace FriendlyPersonShooter.Core.Bots
             }
             foreach (var list in buckets.Values)
             {
+                // Groupers go first so they become the host.
+                list.Sort((x, y) => (y.Profile == BotProfile.Grouper).CompareTo(x.Profile == BotProfile.Grouper));
                 for (int i = 0; i + 1 < list.Count; i += 2)
                 {
-                    if (!Chance(Settings.StrangerPartyPerHour, dtHours)) continue;
-                    JoinParty(list[i + 1], list[i]);
+                    var host = list[i];
+                    var guest = list[i + 1];
+                    if (guest.Party != null) continue; // never merge two parties
+                    bool grouper = host.Profile == BotProfile.Grouper || guest.Profile == BotProfile.Grouper;
+                    double rate = Settings.StrangerPartyPerHour * (grouper ? Settings.GrouperInviteMultiplier : 1);
+                    if (!Chance(rate, dtHours)) continue;
+                    if (guest.Profile == BotProfile.Grouper && host.Profile != BotProfile.Grouper) (host, guest) = (guest, host);
+                    if (!HasRoom(host)) continue;
+                    JoinParty(guest, host);
                     Stats.StrangerParties++;
                 }
             }

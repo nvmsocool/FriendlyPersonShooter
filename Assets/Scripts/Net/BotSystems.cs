@@ -27,7 +27,7 @@ namespace FriendlyPersonShooter.Net
         public static void Create(int seats)
         {
             Population = new BotPopulation(seats, NetTestSettings.CreateGrid(), NetTestSettings.CreateBotSettings(),
-                NetTestSettings.BotSeed);
+                NetTestSettings.BotSeed, NetTestSettings.AccountBase);
             _start = Time.realtimeSinceStartupAsDouble;
             _lastFrame = -1;
             _nextLog = 5;
@@ -64,7 +64,7 @@ namespace FriendlyPersonShooter.Net
             sb.Append($"online={pop.OnlineCount}/{pop.Accounts.Count} target={pop.TargetShare(now) * pop.Accounts.Count:0} ");
             sb.Append($"parties={parties} inParties={inParties} ");
             sb.Append($"logins={s.Logins} logouts={s.Logouts} drops={s.Drops} reconnects={s.Reconnects} ");
-            sb.Append($"partyLogins={s.PartyLogins} friendJoins={s.FriendJoins} strangerParties={s.StrangerParties} partyLeaves={s.PartyLeaves} ");
+            sb.Append($"partyLogins={s.PartyLogins} friendJoins={s.FriendJoins} strangerParties={s.StrangerParties} partyLeaves={s.PartyLeaves} teleports={s.Teleports} ");
             sb.Append($"explore={ActivityCounts[(int)BotActivity.Explore]} hunt={ActivityCounts[(int)BotActivity.Hunt]} ");
             sb.Append($"hotspot={ActivityCounts[(int)BotActivity.Hotspot]} afk={ActivityCounts[(int)BotActivity.Afk]} ");
             sb.Append($"follow={ActivityCounts[(int)BotActivity.Follow]} starting={ActivityCounts[(int)BotActivity.Offline]}");
@@ -152,6 +152,17 @@ namespace FriendlyPersonShooter.Net
                     IsBot = 1,
                 });
                 ecb.AddComponent(request, new SendRpcCommandRequest { TargetConnection = connection });
+            }
+
+            if (pop.TryTakeTeleport(_seat, out double tx, out double tz))
+            {
+                foreach (var (_, connection) in SystemAPI.Query<RefRO<NetworkId>>()
+                             .WithAll<NetworkStreamInGame>().WithNone<NetworkStreamRequestDisconnect>().WithEntityAccess())
+                {
+                    var request = ecb.CreateEntity();
+                    ecb.AddComponent(request, new TeleportRequest { X = (float)tx, Z = (float)tz });
+                    ecb.AddComponent(request, new SendRpcCommandRequest { TargetConnection = connection });
+                }
             }
 
             if (account.PartyId != _sentGroup)

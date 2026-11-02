@@ -53,6 +53,19 @@ namespace FriendlyPersonShooter.Core.Bots
         public double ReconnectMinMinutes { get; set; } = 1;
         public double ReconnectMaxMinutes { get; set; } = 5;
 
+        // Behavior profiles (see the design doc's Test bots table). Everyone else plays normally.
+        /// <summary>Share of accounts that are Groupers: they invite strangers and nearly always party.</summary>
+        public double GrouperShare { get; set; } = 0.1;
+        /// <summary>Groupers invite strangers this many times more often than other players.</summary>
+        public double GrouperInviteMultiplier { get; set; } = 20;
+        /// <summary>Share of accounts that are Chaos bots: frequent drops, quick reconnects, teleports.</summary>
+        public double ChaosShare { get; set; } = 0.05;
+        public double ChaosDropPerHour { get; set; } = 3;
+        public double ChaosReconnectMinMinutes { get; set; } = 0.2;
+        public double ChaosReconnectMaxMinutes { get; set; } = 1;
+        /// <summary>Rate at which a solo Chaos bot jumps to a random point in the world.</summary>
+        public double ChaosTeleportPerHour { get; set; } = 4;
+
         // What a solo player or party leader does, by relative weight.
         public double ExploreWeight { get; set; } = 0.45;
         public double HuntWeight { get; set; } = 0.33;

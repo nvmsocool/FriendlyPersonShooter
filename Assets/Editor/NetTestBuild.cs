@@ -18,6 +18,9 @@ namespace FriendlyPersonShooter.EditorTools
                 locationPathName = OutputPath,
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None,
+                // Enables Netcode's network simulator, so a bot process can run with lag:
+                // NetTest.exe ... --loadNetworkSimulatorJsonFile Tools/NetSim/laggy.json
+                extraScriptingDefines = new[] { "NETCODE_DEBUG" },
             };
             BuildReport report = BuildPipeline.BuildPlayer(options);
             string summary = $"{report.summary.result} in {report.summary.totalTime.TotalSeconds:0}s, " +

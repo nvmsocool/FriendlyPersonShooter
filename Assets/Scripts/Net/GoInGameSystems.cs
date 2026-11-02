@@ -132,6 +132,7 @@ namespace FriendlyPersonShooter.Net
         private double _nextStatus;
         private readonly Dictionary<int, Entity> _connectionOf = new Dictionary<int, Entity>();
         private readonly Dictionary<Entity, int> _groupRequests = new Dictionary<Entity, int>();
+        private readonly Dictionary<Entity, float2> _teleports = new Dictionary<Entity, float2>();
 
         protected override void OnUpdate()
         {
@@ -142,6 +143,14 @@ namespace FriendlyPersonShooter.Net
                          .Query<RefRO<ReceiveRpcCommandRequest>, RefRO<SetGroupRequest>>().WithEntityAccess())
             {
                 _groupRequests[request.ValueRO.SourceConnection] = change.ValueRO.GroupId;
+                ecb.DestroyEntity(entity);
+            }
+
+            _teleports.Clear();
+            foreach (var (request, teleport, entity) in SystemAPI
+                         .Query<RefRO<ReceiveRpcCommandRequest>, RefRO<TeleportRequest>>().WithEntityAccess())
+            {
+                _teleports[request.ValueRO.SourceConnection] = new float2(teleport.ValueRO.X, teleport.ValueRO.Z);
                 ecb.DestroyEntity(entity);
             }
 
@@ -156,12 +165,18 @@ namespace FriendlyPersonShooter.Net
             if (sendStatus) _nextStatus = now + StatusInterval;
 
             foreach (var (account, owner, transform) in SystemAPI
-                         .Query<RefRW<PlayerAccount>, RefRO<GhostOwner>, RefRO<LocalTransform>>())
+                         .Query<RefRW<PlayerAccount>, RefRO<GhostOwner>, RefRW<LocalTransform>>())
             {
                 int networkId = owner.ValueRO.NetworkId;
                 if (!_connectionOf.TryGetValue(networkId, out var connection)) continue;
 
                 if (_groupRequests.TryGetValue(connection, out int group)) account.ValueRW.GroupId = group;
+                // Test only, so only bots may teleport.
+                if (account.ValueRO.IsBot && _teleports.TryGetValue(connection, out var to))
+                {
+                    float size = NetTestSettings.WorldSize;
+                    transform.ValueRW.Position = new float3((to.x % size + size) % size, 0.5f, (to.y % size + size) % size);
+                }
                 var pos = transform.ValueRO.Position;
                 if (account.ValueRO.AccountId != 0) ServerAccounts.LastPosition[account.ValueRO.AccountId] = pos;
 

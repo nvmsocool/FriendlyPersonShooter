@@ -55,7 +55,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             },
             new MoodDef
             {
-                Name = "sunset", Grass = new[] { "#E9C44E", "#9BD36A", "#F2A65A", "#C9D15A" },
+                Name = "sunset", Grass = new[] { "#62C99A", "#8FD36A", "#F2A65A", "#F5D25A" },
                 Strata = new[] { "#E8505B", "#F5A65B", "#7B4B94", "#FCD5A6", "#F9844A", "#B5446E" },
                 HexTop = new[] { "#F9C784", "#E8735A", "#C76B98" }, Foliage = new[] { "#43AA8B", "#FF6F59", "#F9C74F", "#2A9D8F", "#F3722C", "#90BE6D" },
                 Flowers = new[] { "#FF2E63", "#FFD23F", "#FFFFFF", "#3BCEAC", "#EE4266", "#9B5DE5" }, Bark = new[] { "#5E2B4F", "#7A3B3B", "#4B3869" },
@@ -82,7 +82,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             },
             new MoodDef
             {
-                Name = "citrus", Grass = new[] { "#A7D129", "#5FD068", "#D6E33F", "#3CC47C" },
+                Name = "citrus", Grass = new[] { "#7CCB4A", "#4FC779", "#D6E33F", "#2EC4B6" },
                 Strata = new[] { "#FF6B35", "#F7C59F", "#EFEFD0", "#2EC4B6", "#FFB627", "#E84855" },
                 HexTop = new[] { "#FFE19C", "#FF9F68", "#9FE2BF" }, Foliage = new[] { "#1AAE9F", "#FF006E", "#FFBE0B", "#3A86FF", "#8338EC", "#06D6A0" },
                 Flowers = new[] { "#FF006E", "#FFBE0B", "#FFFFFF", "#3A86FF", "#FB5607", "#8338EC" }, Bark = new[] { "#5C3D2E", "#3D405B", "#7F4F24" },
@@ -149,7 +149,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
             var p = new PrismPalette { Mood = m.Name + "+" + donor.Name, Dusk = m.Dusk };
             var grass = HA(m.Grass);
-            Shuffle(grass, ref rng);
+            // The first two entries of each mood are ground tones, the last two are accents.
+            if (rng.Chance(0.4f)) (grass[0], grass[1]) = (grass[1], grass[0]);
+            if (rng.Chance(0.5f)) (grass[2], grass[3]) = (grass[3], grass[2]);
             // A dominant ground tone, a close sibling for soft patches, then accents.
             p.Grass = new[] { grass[0], Shift(grass[0], rng.Range(-0.05f, 0.05f), rng.Range(0.95f, 1.1f), rng.Range(1.04f, 1.14f)), grass[1], grass[2] };
             p.Strata = HA(m.Strata);

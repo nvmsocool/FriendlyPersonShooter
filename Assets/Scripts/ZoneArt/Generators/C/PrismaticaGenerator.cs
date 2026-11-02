@@ -153,6 +153,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 for (int i = 0; i < 6; i++) m.SetColor("_S" + i, pal.Strata[i % pal.Strata.Length]);
             }
             farMat.SetFloat("_StrataWarp", 4f);
+            // Distant lands are calmer than the zone so the playable area pops from above.
+            for (int i = 0; i < 6; i++) farMat.SetColor("_S" + i, Color.Lerp(pal.Strata[i % pal.Strata.Length], pal.Fog, 0.3f));
             var water = ZoneLook.Material("ZoneArtC/PrismWater", "Water");
             water.SetColor("_Shallow", new Color(pal.Water.r, pal.Water.g, pal.Water.b, 0.62f));
             water.SetColor("_Deep", new Color(pal.WaterDeep.r, pal.WaterDeep.g, pal.WaterDeep.b, 0.9f));
@@ -189,7 +191,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     float fx = Mathf.Max(0f, Mathf.Max(o.x - w.x, w.x - o.x - 250f)), fz = Mathf.Max(0f, Mathf.Max(o.z - w.z, w.z - o.z - 250f));
                     float fd = Mathf.Sqrt(fx * fx + fz * fz);
-                    c = Color.Lerp(c, pal.Fog, PrismTerrain.Smooth(10f, 600f, fd) * 0.55f);
+                    c = Color.Lerp(c, pal.Fog, 0.12f + PrismTerrain.Smooth(10f, 500f, fd) * 0.5f);
                 }
                 if (inZone)
                 {
@@ -405,9 +407,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var look = ZoneRandom.For(zone.Seed, "look");
             float sunElev = pal.Dusk ? look.Range(16f, 30f) : look.Range(30f, 52f);
             float sunAz = 45f + look.Sign() * look.Range(70f, 115f);
-            ZoneLook.Sun(root.transform, sunElev, sunAz, pal.Sun, pal.Dusk ? 1.15f : 1.35f);
+            ZoneLook.Sun(root.transform, sunElev, sunAz, pal.Dusk ? Color.Lerp(pal.Sun, Color.white, 0.35f) : pal.Sun, pal.Dusk ? 1.15f : 1.35f);
             ZoneLook.Ambient(pal.AmbientSky, pal.AmbientEquator, pal.AmbientGround, 1.05f);
-            ZoneLook.Fog(pal.Fog, look.Range(0.0011f, 0.0015f));
+            ZoneLook.Fog(pal.Fog, look.Range(0.0009f, 0.0012f));
             ZoneLook.PostProcessing(root.transform, 0.75f, 0.95f, 14f, 14f, 0.22f, pal.Dusk ? 0.15f : 0f);
 
             // Hero: look at the tallest set piece from open ground, with the planet behind it.
@@ -617,7 +619,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             if (st.Heroes.Count > 0)
             {
                 var w = new float[st.Heroes.Count];
-                for (int i = 0; i < w.Length; i++) w[i] = Mathf.Sqrt(Mathf.Max(st.Heroes[i].height, 1f)) * (i < st.Towers ? 0.6f : 1.4f);
+                for (int i = 0; i < w.Length; i++) w[i] = Mathf.Sqrt(Mathf.Max(st.Heroes[i].height, 1f)) * (i < st.Towers ? (zone.Tile == TileKind.Tower ? 1.6f : 0.6f) : 1.4f);
                 int pick = rng.Weighted(w);
                 target = st.Heroes[pick].pos;
                 height = st.Heroes[pick].height;
@@ -632,7 +634,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int k = 0; k < 64; k++)
             {
                 float a = k / 64f * Mathf.PI * 2f;
-                float d = Mathf.Max(26f, height * 1.5f + 14f) * rng.Range(0.8f, 1.35f);
+                float d = Mathf.Max(26f, height * 1.5f + 14f) * rng.Range(0.8f, 1.8f);
                 var lp = new Vector2(target.x - o.x + Mathf.Cos(a) * d, target.z - o.z + Mathf.Sin(a) * d);
                 if (lp.x < 3f || lp.y < 3f || lp.x > 247f || lp.y > 247f) continue;
                 int cell = Mathf.Clamp((int)lp.y, 0, 249) * 250 + Mathf.Clamp((int)lp.x, 0, 249);
@@ -671,6 +673,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         float lineY = eye.y + Mathf.Tan(pitch) * dd2;
                         if (t.SurfaceAt(q.x, q.y) > lineY) { score -= 6f; }
                     }
+                }
+                {
+                    var lv = look - eye;
+                    float pitchDeg = Mathf.Atan2(lv.y, new Vector2(lv.x, lv.z).magnitude) * Mathf.Rad2Deg;
+                    score -= Mathf.Max(0f, Mathf.Abs(pitchDeg) - 10f) * 0.6f;
                 }
                 if (RenderSettings.sun != null) score -= Mathf.Abs(Vector3.Dot(dir, RenderSettings.sun.transform.forward)) * 6f;
                 score += rng.Range(0f, 3f);

@@ -4,6 +4,9 @@
     "references": [
         "FriendlyPersonShooter.Core",
         "FriendlyPersonShooter.Net",
+        "FriendlyPersonShooter.ZoneArt",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
         "Unity.NetCode",
         "Unity.Entities",
         "Unity.Scenes",

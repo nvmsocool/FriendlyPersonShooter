@@ -198,6 +198,9 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>The ground at a spawn spot (0 on the flat floor), building its zone first if needed.</summary>
+        private static float SpawnGround(float x, float z) => ExpeditionTerrain.Active ? ExpeditionTerrain.OnGround(new float3(x, 0f, z)).y : 0f;
+
         private void SpawnEvent(SpawnEvent ev, SpawnKey key)
         {
             var random = new Unity.Mathematics.Random((uint)(key.GetHashCode() * 2654435761u) | 1u);
@@ -209,18 +212,18 @@ namespace FriendlyPersonShooter.Arena
                     for (int i = 0; i < ev.Count; i++)
                     {
                         var o = random.NextFloat2Direction() * random.NextFloat(0f, 5f);
-                        SpawnWisp(new Vector3(point.X + o.x, 2.2f, point.Y + o.y));
+                        SpawnWisp(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + 2.2f, point.Y + o.y));
                     }
                     break;
                 case EnemyFamily.Skitter:
                     for (int i = 0; i < ev.Count; i++)
                     {
                         var o = random.NextFloat2Direction() * random.NextFloat(0f, 5f);
-                        SpawnSkitter(new Vector3(point.X + o.x, _skitter.BodyRadius, point.Y + o.y));
+                        SpawnSkitter(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + _skitter.BodyRadius, point.Y + o.y));
                     }
                     break;
                 default:
-                    SpawnSwarm(new Vector3(point.X, 1.5f, point.Y));
+                    SpawnSwarm(new Vector3(point.X, SpawnGround(point.X, point.Y) + 1.5f, point.Y));
                     break;
             }
             foreach (var s in _spawned) s.Spawn = key;
@@ -354,7 +357,7 @@ namespace FriendlyPersonShooter.Arena
                 _intScratch.Add(c.Id);
                 if (_cacheGhosts.ContainsKey(c.Id)) continue;
                 var e = EntityManager.Instantiate(prefab);
-                EntityManager.SetComponentData(e, LocalTransform.FromPosition(ExpeditionWorld.ToFloat3(c.Position, 0.3f)));
+                EntityManager.SetComponentData(e, LocalTransform.FromPosition(ExpeditionWorld.ToFloat3(c.Position, ExpeditionTerrain.GroundY(c.Position.X, c.Position.Y) + 0.3f)));
                 EntityManager.SetComponentData(e, new ArenaCache { OwnerNetworkId = c.OwnerId, Amount = c.Contents.Total });
                 _cacheGhosts[c.Id] = e;
             }

@@ -34,6 +34,7 @@ namespace FriendlyPersonShooter.Arena
 
         private BotAim _aim;
         private BotMover _mover;
+        private readonly BotPath _path = new BotPath();
         private readonly BotMoveSettings _moveSettings = new BotMoveSettings { MinDistance = 6f, MaxDistance = 14f };
         /// <summary>Expedition travel: walk right up to the objective (shrine pad, gate).</summary>
         private readonly BotMoveSettings _travelSettings = new BotMoveSettings { MinDistance = 0.3f, MaxDistance = 1.2f };
@@ -181,10 +182,19 @@ namespace FriendlyPersonShooter.Arena
                 if (!travelling && _hasLeader) anchor = ExpeditionWorld.Near(_leader, pos);
             }
 
+            // On generated ground, far anchors are reached along a path (ramps, bridges, around cliffs).
+            bool climb = false;
+            if (ExpeditionTerrain.Active && (math.distance(pos.xz, anchor.xz) > moveSettings.MaxDistance + 2f || math.abs(anchor.y - pos.y) > 3f))
+            {
+                anchor = _path.Steer(dt, pos, anchor, out climb);
+                if (_target == Entity.Null) input.Yaw = math.degrees(math.atan2(anchor.x - pos.x, anchor.z - pos.z));
+                moveSettings = _travelSettings;
+            }
             var move = _mover.Step(dt, ToVec(pos), input.Yaw, ToVec(anchor), moveSettings);
             input.Horizontal = move.Horizontal;
             input.Vertical = move.Vertical;
-            if (move.Jump) input.Jump.Set();
+            if (climb && EntityManager.GetComponentData<ArenaMotion>(me).Grounded) input.Jump.Set();
+            else if (move.Jump && !ExpeditionTerrain.Active) input.Jump.Set();
             SetInput(me, input);
         }
 

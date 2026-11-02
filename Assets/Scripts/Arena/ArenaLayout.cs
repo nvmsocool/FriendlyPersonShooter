@@ -11,11 +11,14 @@ namespace FriendlyPersonShooter.Arena
             public float2 Center;
             /// <summary>Width (x), height (y) and depth (z) in metres.</summary>
             public float3 Size;
+            /// <summary>Height of the box's bottom (0 on the flat floor).</summary>
+            public float BaseY;
 
-            public Box(float x, float z, float width, float height, float depth)
+            public Box(float x, float z, float width, float height, float depth, float baseY = 0f)
             {
                 Center = new float2(x, z);
                 Size = new float3(width, height, depth);
+                BaseY = baseY;
             }
         }
 
@@ -33,23 +36,23 @@ namespace FriendlyPersonShooter.Arena
             new Box(15f, -8f, 4f, 1.2f, 1f),
         };
 
-        /// <summary>Distance along a ray to the nearest cover block, or float.MaxValue if none is hit.</summary>
+        /// <summary>Distance along a ray to the nearest cover block (or, in the expedition, the ground and zone structures), or float.MaxValue if none is hit.</summary>
         public static float RaycastCover(float3 origin, float3 dir, float maxDistance)
         {
-            float best = float.MaxValue;
+            float best = ExpeditionTerrain.Active ? ExpeditionTerrain.Raycast(origin, dir, maxDistance) : float.MaxValue;
             bool wrap = ExpeditionWorld.Active;
             foreach (var b in Cover)
             {
                 var half = b.Size * 0.5f;
-                var center = new float3(b.Center.x, 0f, b.Center.y);
+                var center = new float3(b.Center.x, b.BaseY, b.Center.y);
                 if (wrap)
                 {
                     // Use the copy of the box nearest the ray, and skip boxes too far to matter.
                     center = ExpeditionWorld.Near(center, origin);
                     if (math.distance(center.xz, origin.xz) > maxDistance + half.x + half.z) continue;
                 }
-                var min = new float3(center.x - half.x, 0f, center.z - half.z);
-                var max = new float3(center.x + half.x, b.Size.y, center.z + half.z);
+                var min = new float3(center.x - half.x, b.BaseY, center.z - half.z);
+                var max = new float3(center.x + half.x, b.BaseY + b.Size.y, center.z + half.z);
                 if (RayBox(origin, dir, min, max, out float t) && t < best && t <= maxDistance) best = t;
             }
             return best;

@@ -65,12 +65,22 @@ namespace FriendlyPersonShooter.Arena
             float zoneSize = map.Grid.ZoneSize;
             var camZone = map.Grid.ZoneAt(_camRef.x, _camRef.z);
 
-            // Floors for the zones around the camera, a little apart so zone edges show.
+            bool terrain = ExpeditionTerrain.Active;
+            var zones = terrain ? ExpeditionTerrain.World : null;
+            if (zones != null && zones.ReadyCount != _groundCacheZones)
+            {
+                _groundCache.Clear();
+                _groundCacheZones = zones.ReadyCount;
+            }
+
+            // Floors for the zones around the camera, a little apart so zone edges show
+            // (on generated ground: only where a zone hasn't been built yet).
             for (int dx = -1; dx <= 1; dx++)
             {
                 for (int dz = -1; dz <= 1; dz++)
                 {
                     var zone = map.Grid.Wrap(camZone.X + dx, camZone.Y + dz);
+                    if (zones != null && zones.IsReady(zone)) continue;
                     var centre = ExpeditionWorld.ToFloat3(map.ZoneCentre(zone), -0.25f);
                     _x.Clear();
                     _x.Add(Matrix4x4.TRS(Near(centre), Quaternion.identity, new Vector3(zoneSize - 1f, 0.5f, zoneSize - 1f)));
@@ -82,6 +92,7 @@ namespace FriendlyPersonShooter.Arena
             _x.Clear();
             foreach (var l in map.Landmarks)
             {
+                if (terrain) break;
                 var p = Near(ExpeditionWorld.ToFloat3(l.Point.World));
                 if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(_camRef.x, _camRef.z)) > range) continue;
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * ExpeditionWorld.LandmarkHeight * 0.5f, Quaternion.identity,
@@ -93,7 +104,7 @@ namespace FriendlyPersonShooter.Arena
             float spin = Time.time * 40f;
             foreach (var s in map.Shrines)
             {
-                var p = Near(ExpeditionWorld.ToFloat3(s.Point.World));
+                var p = Near(ExpeditionWorld.ToFloat3(s.Point.World, GroundAt(s.Point.World)));
                 if (Vector2.Distance(new Vector2(p.x, p.z), new Vector2(_camRef.x, _camRef.z)) > range) continue;
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * 0.1f, Quaternion.identity, new Vector3(5f, 0.2f, 5f)));
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * 1.6f, Quaternion.Euler(45f, spin, 45f), Vector3.one * 0.8f));
@@ -104,7 +115,7 @@ namespace FriendlyPersonShooter.Arena
             _x.Clear();
             foreach (var g in map.Gates)
             {
-                var p = Near(ExpeditionWorld.ToFloat3(g.Point.World));
+                var p = Near(ExpeditionWorld.ToFloat3(g.Point.World, GroundAt(g.Point.World)));
                 float w = ExpeditionWorld.GateWidth, h = ExpeditionWorld.GateHeight;
                 _x.Add(Matrix4x4.TRS(p + new Vector3(-w * 0.5f, h * 0.5f, 0f), Quaternion.identity, new Vector3(1f, h, 1f)));
                 _x.Add(Matrix4x4.TRS(p + new Vector3(w * 0.5f, h * 0.5f, 0f), Quaternion.identity, new Vector3(1f, h, 1f)));
@@ -127,11 +138,25 @@ namespace FriendlyPersonShooter.Arena
             // A tall thin beacon over the current objective.
             if (status.HasTarget && !status.Complete)
             {
-                var p = Near(new float3(status.Target.x, 0f, status.Target.y));
+                var p = Near(new float3(status.Target.x, GroundAt(new System.Numerics.Vector2(status.Target.x, status.Target.y)), status.Target.y));
                 _x.Clear();
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * 30f, Quaternion.identity, new Vector3(0.4f, 60f, 0.4f)));
                 DrawList(_x, _beaconMat);
             }
+        }
+
+        private readonly Dictionary<System.Numerics.Vector2, float> _groundCache = new Dictionary<System.Numerics.Vector2, float>();
+        private int _groundCacheZones = -1;
+
+        /// <summary>The ground under a map point (0 on the flat floor), cached until more zones finish building.</summary>
+        private float GroundAt(System.Numerics.Vector2 point)
+        {
+            if (!ExpeditionTerrain.Active) return 0f;
+            if (_groundCache.TryGetValue(point, out float y)) return y;
+            if (!ExpeditionTerrain.World.IsReady(point.X, point.Y)) return 0f;
+            y = ExpeditionTerrain.GroundY(point.X, point.Y);
+            _groundCache[point] = y;
+            return y;
         }
 
         private void WriteExpeditionHud()

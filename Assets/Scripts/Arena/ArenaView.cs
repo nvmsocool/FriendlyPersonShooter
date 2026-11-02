@@ -159,6 +159,7 @@ namespace FriendlyPersonShooter.Arena
                 eye = feet + Vector3.up * ArenaSettings.EyeHeight;
                 _camRef = feet;
             }
+            if (_wrap && ExpeditionTerrain.Active && eye.HasValue) UpdateZoneView();
             if (_wrap) DrawExpeditionWorld();
 
             DrawPlayers(world, local);
@@ -178,6 +179,33 @@ namespace FriendlyPersonShooter.Arena
             if (_wrap) WriteExpeditionHud();
             WriteCombatHud(world, local);
             _hud.text = _text.ToString();
+        }
+
+        private Light[] _sceneLights;
+
+        /// <summary>Tells the zone world where the camera is (zones stream in and take over the sky and sun around it).</summary>
+        private void UpdateZoneView()
+        {
+            var zones = ExpeditionTerrain.World;
+            zones.ViewPoint = (Vector3)_camRef;
+            if (zones.ReadyCount == 0 || viewCamera == null) return;
+            viewCamera.clearFlags = CameraClearFlags.Skybox;
+            // The zones' look relies on post-processing (tone mapping, bloom, colour grading).
+            var urp = UnityEngine.Rendering.Universal.CameraExtensions.GetUniversalAdditionalCameraData(viewCamera);
+            if (!urp.renderPostProcessing)
+            {
+                urp.renderPostProcessing = true;
+                urp.antialiasing = UnityEngine.Rendering.Universal.AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+            }
+            if (_sceneLights == null)
+            {
+                // The zones bring their own sun.
+                _sceneLights = FindObjectsByType<Light>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                foreach (var l in _sceneLights)
+                {
+                    if (l.gameObject.scene == gameObject.scene) l.enabled = false;
+                }
+            }
         }
 
         private void DrawCover()

@@ -51,7 +51,7 @@ namespace FriendlyPersonShooter.Arena
                 var random = new Unity.Mathematics.Random(0xA7E4A1u);
                 ServerAccounts.SpawnOverride = () =>
                 {
-                    if (ExpeditionWorld.Active) return ExpeditionWorld.StartSpawn(ref random);
+                    if (ExpeditionWorld.Active) return ExpeditionTerrain.OnGround(ExpeditionWorld.StartSpawn(ref random));
                     var p = random.NextFloat2Direction() * random.NextFloat(2f, 8f);
                     return new float3(p.x, 0f, p.y - 10f);
                 };
@@ -106,6 +106,14 @@ namespace FriendlyPersonShooter.Arena
                 {
                     m.VerticalSpeed = ArenaSettings.JumpSpeed * jumpMul;
                     m.Grounded = false;
+                }
+                if (ExpeditionTerrain.Active)
+                {
+                    // The generated zones: collide, climb slopes and steps, fall off ledges.
+                    var p = transform.ValueRO.Position;
+                    ExpeditionTerrain.Move(ref p, ref m, move, ArenaSettings.Gravity, dt);
+                    transform.ValueRW.Position = p;
+                    continue;
                 }
                 m.VerticalSpeed -= ArenaSettings.Gravity * dt;
 

@@ -1,0 +1,73 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: ShaderRef ZoneArtC PrismSky
+  m_Shader: {fileID: 4800000, guid: 9cdb13cce2a5e2840886a6a806bc59b8, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _Aurora: 0
+    - _BankHeight: 0.12
+    - _BankSeed: 0
+    - _CloudCover: 0.55
+    - _CloudScale: 1.2
+    - _Exposure: 1
+    - _MidHeight: 0.25
+    - _Stars: 0.6
+    - _Streak: 0.35
+    - _SunHalo: 0.8
+    - _SunRays: 0.3
+    - _SunSize: 0.004
+    m_Colors:
+    - _AuroraA: {r: 0.29999998, g: 1, b: 0.7, a: 1}
+    - _AuroraB: {r: 0.9, g: 0.29999998, b: 1, a: 1}
+    - _BankBack: {r: 1, g: 0.9, b: 0.95, a: 1}
+    - _BankFront: {r: 0.9, g: 0.7, b: 0.9, a: 1}
+    - _BankMid: {r: 1, g: 0.8, b: 0.9, a: 1}
+    - _Below: {r: 0.9, g: 0.8, b: 0.85, a: 1}
+    - _CloudLit: {r: 1, g: 1, b: 1, a: 1}
+    - _CloudRim: {r: 1, g: 0.95, b: 0.7, a: 1}
+    - _CloudSeed: {r: 0, g: 0, b: 0, a: 0}
+    - _CloudShade: {r: 0.9, g: 0.6, b: 0.8, a: 1}
+    - _Horizon: {r: 1, g: 0.85, b: 0.9, a: 1}
+    - _Mid: {r: 0.5, g: 0.7, b: 1, a: 1}
+    - _Moon1: {r: 0.3, g: 0.5, b: 0.8, a: 0.04}
+    - _Moon1Col: {r: 1, g: 0.95, b: 0.9, a: 1}
+    - _Moon2: {r: -0.6, g: 0.3, b: 0.7, a: 0.02}
+    - _Moon2Col: {r: 0.8, g: 0.9, b: 1, a: 1}
+    - _Moon3: {r: 0, g: 0, b: 0, a: 0}
+    - _Moon3Col: {r: 1, g: 0.8, b: 0.9, a: 1}
+    - _Planet: {r: 0.5, g: 0.25, b: -0.8, a: 0.18}
+    - _PlanetA: {r: 1, g: 0.7, b: 0.5, a: 1}
+    - _PlanetB: {r: 0.9, g: 0.5, b: 0.7, a: 1}
+    - _PlanetC: {r: 1, g: 0.95, b: 0.85, a: 1}
+    - _PlanetParams: {r: 9, g: 0.4, b: 0.28, a: 1}
+    - _RingColor: {r: 1, g: 0.9, b: 0.8, a: 1}
+    - _SkyRing: {r: 0, g: 0, b: 0, a: 0}
+    - _SkyRingCol: {r: 1, g: 0.95, b: 0.85, a: 1}
+    - _StarColor: {r: 1, g: 1, b: 1, a: 1}
+    - _SunColor: {r: 1, g: 0.95, b: 0.8, a: 1}
+    - _Swirl1: {r: 0.5, g: 0.3, b: 0.8, a: 3}
+    - _Swirl2: {r: -0.8, g: -0.4, b: 0.6, a: -2.5}
+    - _Zenith: {r: 0.19999996, g: 0.39999998, b: 0.9, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

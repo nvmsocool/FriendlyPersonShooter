@@ -73,35 +73,55 @@ namespace FriendlyPersonShooter.Arena
 
         public static System.Numerics.Vector2 Ground(float3 p) => new System.Numerics.Vector2(p.x, p.z);
 
-        /// <summary>Landmarks and gate posts block shots and sight, like the arena's cover.</summary>
+        /// <summary>
+        /// Gate posts (and, on the flat floor, landmark blocks) stop shots and sight, like the arena's cover.
+        /// On generated ground the zones' own landmarks and structures do that through their colliders.
+        /// </summary>
         public static ArenaLayout.Box[] Cover
         {
             get
             {
                 var map = Map;
-                if (_cover != null) return _cover;
+                bool terrain = ExpeditionTerrain.Active;
+                if (_cover != null && (!terrain || _coverOnGround)) return _cover;
                 var boxes = new List<ArenaLayout.Box>();
-                foreach (var l in map.Landmarks)
+                if (!terrain)
                 {
-                    boxes.Add(new ArenaLayout.Box(l.Point.World.X, l.Point.World.Y, LandmarkWidth, LandmarkHeight, LandmarkWidth));
+                    foreach (var l in map.Landmarks)
+                    {
+                        boxes.Add(new ArenaLayout.Box(l.Point.World.X, l.Point.World.Y, LandmarkWidth, LandmarkHeight, LandmarkWidth));
+                    }
                 }
+                _coverOnGround = true;
                 foreach (var g in map.Gates)
                 {
                     float x = g.Point.World.X, z = g.Point.World.Y;
-                    boxes.Add(new ArenaLayout.Box(x - GateWidth * 0.5f, z, 1f, GateHeight, 1f));
-                    boxes.Add(new ArenaLayout.Box(x + GateWidth * 0.5f, z, 1f, GateHeight, 1f));
+                    float y = 0f;
+                    if (terrain)
+                    {
+                        // Until the gate's zone is built its posts float at 0; check again next time.
+                        if (ExpeditionTerrain.World.IsReady(x, z)) y = GateBaseY(g);
+                        else _coverOnGround = false;
+                    }
+                    boxes.Add(new ArenaLayout.Box(x - GateWidth * 0.5f, z, 1f, GateHeight, 1f, y));
+                    boxes.Add(new ArenaLayout.Box(x + GateWidth * 0.5f, z, 1f, GateHeight, 1f, y));
                 }
                 _cover = boxes.ToArray();
                 return _cover;
             }
         }
 
+        private static bool _coverOnGround;
+
+        /// <summary>The ground under a gate (0 on the flat floor or before its zone is built).</summary>
+        public static float GateBaseY(GateSite g) => ExpeditionTerrain.GroundY(g.Point.World.X, g.Point.World.Y);
+
         /// <summary>A spot a few metres from the layer's start shrine.</summary>
         public static float3 StartSpawn(ref Random random)
         {
             var start = ToFloat3(Map.StartPoint.World);
             var offset = random.NextFloat2Direction() * random.NextFloat(3f, 7f);
-            return Wrap(start + new float3(offset.x, 0f, offset.y));
+            return ExpeditionTerrain.OnGround(Wrap(start + new float3(offset.x, 0f, offset.y)));
         }
 
         /// <summary>A spot a few metres from the shrine nearest <paramref name="position"/> (where you respawn after bleeding out).</summary>
@@ -109,7 +129,7 @@ namespace FriendlyPersonShooter.Arena
         {
             var shrine = ToFloat3(Map.NearestShrine(Ground(position)).Point.World);
             var offset = random.NextFloat2Direction() * random.NextFloat(2f, 4f);
-            return Wrap(shrine + new float3(offset.x, 0f, offset.y));
+            return ExpeditionTerrain.OnGround(Wrap(shrine + new float3(offset.x, 0f, offset.y)));
         }
     }
 }

@@ -357,6 +357,31 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>A Skitter runs over the generated ground: up and down slopes and steps, turning back at walls and drops.</summary>
+        private void FollowGround(ref SkitterBehavior k, Vector3 before)
+        {
+            float r = _skitter.BodyRadius;
+            var p = k.Position;
+            if (ExpeditionTerrain.SurfaceNear(p.X, p.Z, before.Y - r, 1.2f, 2.5f, out float ground))
+            {
+                k.Position = new Vector3(p.X, ground + r, p.Z);
+            }
+            else
+            {
+                k.Position = before;
+                k.Heading = -k.Heading;
+            }
+        }
+
+        /// <summary>Lifts a hovering enemy out of the ground if a blink put it inside a hill.</summary>
+        private static void KeepAboveGround(ref Vector3 p, float clearance)
+        {
+            if (ExpeditionTerrain.SurfaceNear(p.X, p.Z, p.Y, 6f, 0f, out float ground) && p.Y < ground + clearance)
+            {
+                p = new Vector3(p.X, ground + clearance, p.Z);
+            }
+        }
+
         private void StepEnemies(float dt, int tick, EntityCommandBuffer ecb)
         {
             _candidates.Clear();
@@ -383,11 +408,14 @@ namespace FriendlyPersonShooter.Arena
                 {
                     case EnemyFamily.Wisp:
                         teleported = s.Wisp.Step(moveDt, _wisp);
+                        if (ExpeditionTerrain.Active) KeepAboveGround(ref s.Wisp.Position, 0.8f);
                         position = s.Wisp.Position;
                         hittable = s.Wisp.IsHittable;
                         break;
                     case EnemyFamily.Skitter:
+                        var before = s.Skitter.Position;
                         s.Skitter.Step(moveDt, _skitter);
+                        if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
                         position = s.Skitter.Position;
                         break;
                     default:

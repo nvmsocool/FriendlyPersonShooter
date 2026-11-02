@@ -10,7 +10,11 @@ namespace FriendlyPersonShooter.ZoneArt
         public const string VertexColorLitShader = "ZoneArt/VertexColorLit";
         public const string GradientSkyShader = "ZoneArt/GradientSky";
 
-        /// <summary>A material from a shader name (throws if the shader is missing, so typos fail loudly).</summary>
+        /// <summary>
+        /// A material from a shader name (throws if the shader is missing, so typos fail loudly).
+        /// Player builds only contain shaders something references: give every new zone shader a
+        /// "ShaderRef" material in ZoneArt/Resources so Shader.Find still finds it in a build.
+        /// </summary>
         public static Material Material(string shader, string name = null)
         {
             var s = Shader.Find(shader);

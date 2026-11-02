@@ -165,7 +165,7 @@ namespace FriendlyPersonShooter.Arena
             }
 
             _text.Append("Arena   (click: capture mouse, Esc: release)\n");
-            _text.Append("WASD move, Space jump, LMB fire, Q swap payload\n");
+            _text.Append("WASD move, Space jump, LMB fire, Q cycle payload (Vigor, Might, Haste, Relay)\n");
             WriteCombatHud(world, local);
             _hud.text = _text.ToString();
         }
@@ -191,6 +191,9 @@ namespace FriendlyPersonShooter.Arena
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
+                // Downed players are drawn lying down by the combat view.
+                var em = world.EntityManager;
+                if (em.HasComponent<ArenaVitals>(entities[i]) && em.GetComponentData<ArenaVitals>(entities[i]).Health <= 0f) continue;
                 Vector3 p = transforms[i].Position;
                 var yaw = Quaternion.Euler(0f, looks[i].Yaw, 0f);
                 _batch.Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));

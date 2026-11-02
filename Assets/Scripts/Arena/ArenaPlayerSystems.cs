@@ -75,11 +75,22 @@ namespace FriendlyPersonShooter.Arena
             float dt = SystemAPI.Time.DeltaTime;
             float limit = ArenaSettings.HalfSize - ArenaSettings.BodyRadius;
 
-            foreach (var (input, look, motion, transform) in SystemAPI
-                         .Query<RefRO<ArenaInput>, RefRW<ArenaLook>, RefRW<ArenaMotion>, RefRW<LocalTransform>>()
+            foreach (var (input, look, motion, transform, vitals, buffs) in SystemAPI
+                         .Query<RefRO<ArenaInput>, RefRW<ArenaLook>, RefRW<ArenaMotion>, RefRW<LocalTransform>,
+                             RefRO<ArenaVitals>, RefRO<ArenaBuffs>>()
                          .WithAll<ArenaPlayer, Simulate>())
             {
                 var i = input.ValueRO;
+                // Downed players lie still until revived or respawned.
+                bool down = vitals.ValueRO.Health <= 0f && vitals.ValueRO.MaxHealth > 0f;
+                float speedMul = math.max(buffs.ValueRO.MoveMultiplier, 0.1f);
+                float jumpMul = math.max(buffs.ValueRO.JumpMultiplier, 0.1f);
+                if (down)
+                {
+                    i.Horizontal = 0;
+                    i.Vertical = 0;
+                    i.Jump = default;
+                }
                 look.ValueRW.Yaw = i.Yaw;
                 look.ValueRW.Pitch = math.clamp(i.Pitch, -85f, 85f);
 
@@ -87,12 +98,12 @@ namespace FriendlyPersonShooter.Arena
                 var forward = new float3(math.sin(yaw), 0f, math.cos(yaw));
                 var right = new float3(math.cos(yaw), 0f, -math.sin(yaw));
                 var move = right * i.Horizontal + forward * i.Vertical;
-                if (math.lengthsq(move) > 0f) move = math.normalize(move) * ArenaSettings.MoveSpeed;
+                if (math.lengthsq(move) > 0f) move = math.normalize(move) * ArenaSettings.MoveSpeed * speedMul;
 
                 ref var m = ref motion.ValueRW;
                 if (m.Grounded && i.Jump.IsSet)
                 {
-                    m.VerticalSpeed = ArenaSettings.JumpSpeed;
+                    m.VerticalSpeed = ArenaSettings.JumpSpeed * jumpMul;
                     m.Grounded = false;
                 }
                 m.VerticalSpeed -= ArenaSettings.Gravity * dt;
@@ -112,7 +123,7 @@ namespace FriendlyPersonShooter.Arena
         }
     }
 
-    /// <summary>The human's input: mouse look, WASD, space to jump, left mouse to fire, Q to swap payload.</summary>
+    /// <summary>The human's input: mouse look, WASD, space to jump, left mouse to fire, Q to cycle payload.</summary>
     [UpdateInGroup(typeof(GhostInputSystemGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     public partial class ArenaLocalInputSystem : SystemBase

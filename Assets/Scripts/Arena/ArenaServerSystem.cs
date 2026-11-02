@@ -15,8 +15,10 @@ namespace FriendlyPersonShooter.Arena
     /// Runs the arena on the server, using the engine-free combat rules in Core.Combat:
     /// keeps Wisps, Skitters and a Mite swarm alive, steps their movement and telegraphed attacks,
     /// resolves every shot with lag compensation (targets are rewound to what the shooter saw),
-    /// applies payload buffs and debuffs, and respawns downed players. Replicates the results to
-    /// ghost components so clients can draw them.
+    /// applies payload buffs and debuffs through <see cref="LobbyCombat"/> (chains and combos),
+    /// splashes Tagged hits, spreads Plague, and runs the downed/revive drill: a downed player bursts
+    /// soul fragments that anyone can shoot to revive them before they bleed out. Replicates the
+    /// results to ghost components so clients can draw them.
     /// </summary>
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation)]
     [UpdateInGroup(typeof(SimulationSystemGroup))]
@@ -26,14 +28,24 @@ namespace FriendlyPersonShooter.Arena
         private const int WispCount = 3;
         private const int SkitterCount = 3;
         private const float EnemyRespawnDelay = 4f;
-        private const float PlayerRespawnDelay = 3f;
+        /// <summary>Fragment hit-target ids start here so they never clash with enemy ids.</summary>
+        private const int FragmentIdBase = 1 << 28;
+        private const int FragmentIdsPerPlayer = 1 << 16;
 
         private sealed class PlayerState
         {
             public PlayerVitals Vitals;
             public PositionHistory History = new PositionHistory(64);
-            public float NextFire;
-            public float RespawnIn;
+            public double NextFire;
+            public ReviveState Revive;
+            public Vector3 Position;
+        }
+
+        private sealed class FragmentGhost
+        {
+            public Entity Entity;
+            public PositionHistory History = new PositionHistory(64);
+            public bool Seen;
         }
 
         private sealed class EnemyState
@@ -54,22 +66,31 @@ namespace FriendlyPersonShooter.Arena
         private readonly WispSettings _wisp = new WispSettings();
         private readonly SkitterSettings _skitter = new SkitterSettings();
         private readonly MiteSwarmSettings _mites = new MiteSwarmSettings();
-        private HitResolver _resolver;
+        private LobbyCombat _lobby;
+        private readonly Dictionary<int, FragmentGhost> _fragments = new Dictionary<int, FragmentGhost>();
+        private readonly List<int> _fragmentScratch = new List<int>();
+        private readonly List<ComboEvent> _combos = new List<ComboEvent>();
+        private readonly List<int> _splash = new List<int>();
+        private readonly List<EnemyVitals> _plagueVitals = new List<EnemyVitals>();
+        private readonly List<Vector3> _plaguePositions = new List<Vector3>();
+        private readonly List<(AnnounceKind Kind, int Value, int Player, int Other)> _announce =
+            new List<(AnnounceKind, int, int, int)>();
 
         private readonly Dictionary<Entity, PlayerState> _players = new Dictionary<Entity, PlayerState>();
         private readonly Dictionary<Entity, EnemyState> _enemies = new Dictionary<Entity, EnemyState>();
         private readonly Dictionary<int, Entity> _playerById = new Dictionary<int, Entity>();
         private readonly Dictionary<int, Entity> _enemyById = new Dictionary<int, Entity>();
-        private readonly List<float> _wispRespawns = new List<float>();
-        private readonly List<float> _skitterRespawns = new List<float>();
-        private float _swarmRespawnAt = -1;
+        private readonly List<double> _wispRespawns = new List<double>();
+        private readonly List<double> _skitterRespawns = new List<double>();
+        private double _swarmRespawnAt = -1;
         private bool _seeded;
         private uint _seed = 12345;
         private int _nextEnemyId = 1;
-        private float _time;
-        private float _nextLog = 10f;
+        private double _time;
+        private double _nextLog = 10f;
         private int _shots, _enemyHits, _weakHits, _allyHits, _kills, _downs;
-        private float _damageDealt, _damageTaken, _healing;
+        private int _revives, _bleedOuts, _fragmentHits, _chainsCashed, _chainLinksCashed, _combosFormed, _splashHits, _plagueSpreads;
+        private float _damageDealt, _damageTaken, _healing, _chainDamage, _splashDamage;
 
         private readonly List<HitTarget> _targets = new List<HitTarget>();
         private readonly List<AttackCandidate> _candidates = new List<AttackCandidate>();
@@ -85,7 +106,7 @@ namespace FriendlyPersonShooter.Arena
             }
             RequireForUpdate<ArenaEnemyPrefab>();
             RequireForUpdate<NetworkTime>();
-            _resolver = new HitResolver(_combat);
+            _lobby = new LobbyCombat(_combat);
         }
 
         protected override void OnUpdate()
@@ -106,8 +127,10 @@ namespace FriendlyPersonShooter.Arena
             var ecb = new EntityCommandBuffer(Allocator.Temp);
             SyncPlayers(dt, tickIndex);
             StepEnemies(dt, tickIndex, ecb);
+            SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
             RespawnEnemies();
+            SendAnnouncements(ecb);
             ecb.Playback(EntityManager);
 
             if (_time >= _nextLog)
@@ -117,7 +140,10 @@ namespace FriendlyPersonShooter.Arena
                 foreach (var p in _players.Values) hp.Append($"{p.Vitals.Id}:{p.Vitals.Health:0}/{p.Vitals.Shield:0} ");
                 Debug.Log($"[Arena] t={_time:0} players={_players.Count} enemies={_enemies.Count} shots={_shots} " +
                           $"enemyHits={_enemyHits} weakHits={_weakHits} allyHits={_allyHits} kills={_kills} " +
-                          $"damageDealt={_damageDealt:0} damageTaken={_damageTaken:0} healing={_healing:0} downs={_downs} hp=[{hp}]");
+                          $"damageDealt={_damageDealt:0} damageTaken={_damageTaken:0} healing={_healing:0} downs={_downs} revives={_revives} bleedOuts={_bleedOuts} " +
+                          $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
+                          $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
+                          $"plagueSpreads={_plagueSpreads} hp=[{hp}]");
             }
         }
 
@@ -140,23 +166,28 @@ namespace FriendlyPersonShooter.Arena
                 }
                 _playerById[id] = entity;
 
-                if (input.ValueRO.SwapPayload.IsSet)
-                {
-                    loadout.ValueRW.Payload = loadout.ValueRO.Payload == PayloadKind.Vigor ? PayloadKind.Might : PayloadKind.Vigor;
-                }
+                if (input.ValueRO.SwapPayload.IsSet) loadout.ValueRW.Payload = NextPayload(loadout.ValueRO.Payload);
 
                 state.Vitals.Tick(dt);
-                if (state.Vitals.IsDown)
+                state.Position = ToVec(transform.ValueRO.Position);
+                if (state.Revive != null)
                 {
-                    if (state.RespawnIn <= 0f) state.RespawnIn = PlayerRespawnDelay;
-                    state.RespawnIn -= dt;
-                    if (state.RespawnIn <= 0f)
+                    state.Revive.BodyCenter = state.Position + new Vector3(0f, ArenaWeapon.PlayerHitHeight, 0f);
+                    var status = state.Revive.Step(dt);
+                    if (status == ReviveStatus.Revived)
                     {
-                        state.RespawnIn = 0f;
-                        state.Vitals.SetHealth(state.Vitals.MaxHealth);
-                        state.Vitals.Buffs.Clear();
+                        _revives++;
+                        state.Revive = null;
+                    }
+                    else if (status == ReviveStatus.BledOut)
+                    {
+                        // Back at a shrine (here: the spawn ring). Half the carried essence would drop here.
+                        _bleedOuts++;
+                        _announce.Add((AnnounceKind.BledOut, 0, id, 0));
+                        state.Revive = null;
                         var spawn = ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
                         transform.ValueRW.Position = spawn;
+                        state.Position = ToVec(spawn);
                         state.History.Record(tick, ToVec(spawn), true, teleported: true);
                     }
                 }
@@ -165,12 +196,27 @@ namespace FriendlyPersonShooter.Arena
                 state.History.Record(tick, ToVec(pos));
 
                 var v = state.Vitals;
-                vitals.ValueRW = new ArenaVitals { Health = v.Health, MaxHealth = v.MaxHealth, Shield = v.Shield, RespawnIn = state.RespawnIn };
+                var revive = state.Revive;
+                vitals.ValueRW = new ArenaVitals
+                {
+                    Health = v.Health, MaxHealth = v.MaxHealth, Shield = v.Shield,
+                    RespawnIn = revive != null ? revive.BleedOutLeft : 0f,
+                    ReviveProgress = revive != null ? revive.ProgressFraction : 0f,
+                };
+                bool holding = _lobby.Chains.TryGetHeld(id, _time, out var chain);
                 buffs.ValueRW = new ArenaBuffs
                 {
                     Empower = v.DamageBonus,
                     EmpowerRemaining = v.Buffs.RemainingOf(EffectKind.Empower),
                     ShieldRemaining = v.Buffs.RemainingOf(EffectKind.Shield),
+                    HasteRemaining = v.Buffs.RemainingOf(EffectKind.Hasted),
+                    MoveMultiplier = v.MoveSpeedMultiplier,
+                    JumpMultiplier = v.JumpMultiplier,
+                    RelayHits = v.HasRelay ? v.RelayHitsLeft : 0,
+                    RelayPayload = v.RelayPayload,
+                    ChainLinks = holding ? chain.Links : 0,
+                    ChainTimeLeft = holding ? chain.TimeLeft : 0f,
+                    Blitz = v.IsBlitzed,
                 };
             }
 
@@ -179,8 +225,69 @@ namespace FriendlyPersonShooter.Arena
             foreach (var e in _players.Keys) if (!_seen.Contains(e)) _scratch.Add(e);
             foreach (var e in _scratch)
             {
+                _lobby.PlayerGone(_players[e].Vitals.Id);
                 _playerById.Remove(_players[e].Vitals.Id);
                 _players.Remove(e);
+            }
+        }
+
+        /// <summary>The payload swap key cycles Vigor, Might, Haste, Relay.</summary>
+        public static PayloadKind NextPayload(PayloadKind p)
+        {
+            switch (p)
+            {
+                case PayloadKind.Vigor: return PayloadKind.Might;
+                case PayloadKind.Might: return PayloadKind.Haste;
+                case PayloadKind.Haste: return PayloadKind.Relay;
+                default: return PayloadKind.Vigor;
+            }
+        }
+
+        private void GoDown(PlayerState state)
+        {
+            _downs++;
+            _lobby.PlayerGone(state.Vitals.Id);
+            var body = state.Position + new Vector3(0f, ArenaWeapon.PlayerHitHeight, 0f);
+            state.Revive = new ReviveState(state.Vitals, body, NextSeed(), _combat.Revive);
+        }
+
+        // ---------- Soul fragments ----------
+
+        private static int FragmentKey(int ownerId, int fragmentId) => FragmentIdBase + ownerId * FragmentIdsPerPlayer + fragmentId;
+
+        /// <summary>Mirrors every downed player's fragments as ghosts, and records where they were for lag compensation.</summary>
+        private void SyncFragments(int tick, EntityCommandBuffer ecb)
+        {
+            foreach (var f in _fragments.Values) f.Seen = false;
+            var prefab = SystemAPI.GetSingleton<ArenaFragmentPrefab>().Value;
+            foreach (var p in _players.Values)
+            {
+                if (p.Revive == null) continue;
+                var frags = p.Revive.Fragments;
+                for (int i = 0; i < frags.Count; i++)
+                {
+                    var frag = frags[i];
+                    int key = FragmentKey(p.Vitals.Id, frag.Id);
+                    if (!_fragments.TryGetValue(key, out var ghost))
+                    {
+                        ghost = new FragmentGhost { Entity = EntityManager.Instantiate(prefab) };
+                        _fragments[key] = ghost;
+                    }
+                    ghost.Seen = true;
+                    ghost.History.Record(tick, frag.Position);
+                    EntityManager.SetComponentData(ghost.Entity, LocalTransform.FromPosition(ToFloat3(frag.Position)));
+                    EntityManager.SetComponentData(ghost.Entity, new ArenaFragment
+                    {
+                        OwnerNetworkId = p.Vitals.Id, Opacity = p.Revive.Opacity(frag),
+                    });
+                }
+            }
+            _fragmentScratch.Clear();
+            foreach (var kv in _fragments) if (!kv.Value.Seen) _fragmentScratch.Add(kv.Key);
+            foreach (int key in _fragmentScratch)
+            {
+                ecb.DestroyEntity(_fragments[key].Entity);
+                _fragments.Remove(key);
             }
         }
 
@@ -257,19 +364,21 @@ namespace FriendlyPersonShooter.Arena
                 bool teleported = false;
                 Vector3 position;
                 bool hittable = true;
+                // Slow makes enemies move (and so dodge and chase) slower.
+                float moveDt = dt * s.Vitals.MoveMultiplier;
                 switch (s.Family)
                 {
                     case EnemyFamily.Wisp:
-                        teleported = s.Wisp.Step(dt, _wisp);
+                        teleported = s.Wisp.Step(moveDt, _wisp);
                         position = s.Wisp.Position;
                         hittable = s.Wisp.IsHittable;
                         break;
                     case EnemyFamily.Skitter:
-                        s.Skitter.Step(dt, _skitter);
+                        s.Skitter.Step(moveDt, _skitter);
                         position = s.Skitter.Position;
                         break;
                     default:
-                        if (stepped.Add(s.Swarm)) s.Swarm.Step(dt);
+                        if (stepped.Add(s.Swarm)) s.Swarm.Step(moveDt);
                         position = s.Swarm.Mites[s.MiteIndex].Position;
                         break;
                 }
@@ -281,9 +390,8 @@ namespace FriendlyPersonShooter.Arena
                 if (attack.Kind == AttackEventKind.Hit && _playerById.TryGetValue(attack.TargetId, out var victim) &&
                     _players.TryGetValue(victim, out var victimState))
                 {
-                    bool wasUp = !victimState.Vitals.IsDown;
-                    _damageTaken += victimState.Vitals.TakeEnemyDamage(attack.Damage);
-                    if (wasUp && victimState.Vitals.IsDown) _downs++;
+                    _damageTaken += victimState.Vitals.TakeEnemyDamage(attack.Damage, out bool wentDown);
+                    if (wentDown) GoDown(victimState);
                 }
 
                 s.History.Record(tick, position, hittable, teleported);
@@ -293,16 +401,31 @@ namespace FriendlyPersonShooter.Arena
                     Family = s.Family, Health = s.Vitals.Health, MaxHealth = _combat.EnemyHealth(s.Family),
                     Hittable = hittable, Telegraph = s.Telegraph,
                     Withered = s.Vitals.Debuffs.Has(EffectKind.Wither), Exposed = s.Vitals.Debuffs.Has(EffectKind.Expose),
+                    Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
                 });
                 if (wither > 0f && s.Vitals.IsDead) _scratch.Add(e);
             }
             foreach (var e in _scratch) KillEnemy(e, ecb);
+
+            // Plague: Withered + Tagged enemies spread their Wither to neighbours.
+            _plagueVitals.Clear();
+            _plaguePositions.Clear();
+            foreach (var kv in _enemies)
+            {
+                _plagueVitals.Add(kv.Value.Vitals);
+                _plaguePositions.Add(ToVec(EntityManager.GetComponentData<LocalTransform>(kv.Key).Position));
+            }
+            _plagueSpreads += Plague.Step(dt, _plagueVitals, _plaguePositions, _combat);
+            _combos.Clear();
+            foreach (var v in _plagueVitals) _lobby.Combos.Check(v, _combos);
+            QueueCombos();
         }
 
         private void KillEnemy(Entity e, EntityCommandBuffer ecb)
         {
             if (!_enemies.TryGetValue(e, out var s)) return;
             _enemies.Remove(e);
+            _lobby.Combos.Forget(s.Vitals.Id, false);
             _enemyById.Remove(s.Vitals.Id);
             ecb.DestroyEntity(e);
             switch (s.Family)
@@ -374,39 +497,77 @@ namespace FriendlyPersonShooter.Arena
                 if (HitScan.Cast(ToVec(eye), ToVec(dir), range, _targets, out var hit, shooter.Vitals.Id))
                 {
                     end = ToFloat3(hit.Point);
-                    HitResult result;
+                    _combos.Clear();
+                    var confirm = new HitConfirm { Point = end };
                     if (hit.IsPlayer)
                     {
                         var target = _players[_playerById[hit.TargetId]];
-                        result = _resolver.HitPlayer(shooter.Vitals, target.Vitals, payload);
+                        var result = _lobby.HitPlayer(shooter.Vitals, target.Vitals, payload, _time, _combos);
                         _allyHits++;
                         _healing += result.Healed + result.ShieldGained;
+                        confirm.TargetIsPlayer = 1;
+                        confirm.Refused = (byte)(result.Refused != RefuseReason.None ? 1 : 0);
+                        confirm.Healed = result.Healed + result.ShieldGained;
+                        bool chained = result.ChainEvent == ChainEvent.Started || result.ChainEvent == ChainEvent.Grew;
+                        confirm.ChainLinks = (byte)(chained ? result.ChainLinks : 0);
+                    }
+                    else if (hit.TargetId >= FragmentIdBase)
+                    {
+                        int ownerId = (hit.TargetId - FragmentIdBase) / FragmentIdsPerPlayer;
+                        int fragmentId = (hit.TargetId - FragmentIdBase) % FragmentIdsPerPlayer;
+                        confirm.Fragment = 1;
+                        confirm.TargetIsPlayer = 1;
+                        if (_playerById.TryGetValue(ownerId, out var ownerEntity) && _players.TryGetValue(ownerEntity, out var downed) &&
+                            downed.Revive != null)
+                        {
+                            var revive = downed.Revive;
+                            var r = _lobby.HitFragment(shooter.Vitals, revive, fragmentId, payload);
+                            confirm.Refused = (byte)(r.Accepted ? 0 : 1);
+                            confirm.ReviveProgress = revive.ProgressFraction;
+                            if (r.Accepted) _fragmentHits++;
+                            if (r.Revived)
+                            {
+                                _revives++;
+                                downed.Revive = null;
+                                _announce.Add((AnnounceKind.Revived, 0, ownerId, shooter.Vitals.Id));
+                            }
+                        }
+                        else confirm.Refused = 1;
                     }
                     else
                     {
                         var enemyEntity = _enemyById[hit.TargetId];
                         var enemy = _enemies[enemyEntity];
-                        result = _resolver.HitEnemy(shooter.Vitals, enemy.Vitals, payload, ArenaWeapon.BaseDamage, hit.WeakPoint);
-                        if (result.Killed) KillEnemy(enemyEntity, ecb);
+                        var result = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, payload, ArenaWeapon.BaseDamage, hit.WeakPoint, _time, _combos);
                         _enemyHits++;
                         if (result.WeakPoint) _weakHits++;
-                        if (result.Killed) _kills++;
                         _damageDealt += result.DamageDealt;
+                        if (result.ChainEvent == ChainEvent.Cashed && result.ChainLinks >= 2)
+                        {
+                            _chainsCashed++;
+                            _chainLinksCashed += result.ChainLinks;
+                            _chainDamage += result.DamageDealt * result.ChainBonus / (1f + result.ChainBonus);
+                            confirm.ChainCashed = 1;
+                            confirm.ChainLinks = (byte)result.ChainLinks;
+                            confirm.ChainBonus = result.ChainBonus;
+                            _announce.Add((AnnounceKind.ChainCashed, result.ChainLinks, shooter.Vitals.Id, 0));
+                        }
+                        if (result.SplashDamage > 0f) Splash(enemy, hit.TargetId, result.SplashDamage, ecb);
+                        if (result.Killed)
+                        {
+                            KillEnemy(enemyEntity, ecb);
+                            _kills++;
+                        }
+                        confirm.WeakPoint = (byte)(result.WeakPoint ? 1 : 0);
+                        confirm.Killed = (byte)(result.Killed ? 1 : 0);
+                        confirm.Damage = result.DamageDealt;
                     }
+                    QueueCombos();
 
                     if (connections.TryGetValue(owner.ValueRO.NetworkId, out var shooterConnection))
                     {
                         var rpc = ecb.CreateEntity();
-                        ecb.AddComponent(rpc, new HitConfirm
-                        {
-                            TargetIsPlayer = (byte)(result.TargetIsPlayer ? 1 : 0),
-                            WeakPoint = (byte)(result.WeakPoint ? 1 : 0),
-                            Killed = (byte)(result.Killed ? 1 : 0),
-                            Refused = (byte)(result.Refused != RefuseReason.None ? 1 : 0),
-                            Damage = result.DamageDealt,
-                            Healed = result.Healed + result.ShieldGained,
-                            Point = end,
-                        });
+                        ecb.AddComponent(rpc, confirm);
                         ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = shooterConnection });
                     }
                 }
@@ -419,6 +580,50 @@ namespace FriendlyPersonShooter.Arena
                 });
                 ecb.AddComponent(fx, new SendRpcCommandRequest { TargetConnection = Entity.Null });
             }
+        }
+
+        /// <summary>A hit on a Tagged enemy splashes plain damage to enemies close to it.</summary>
+        private void Splash(EnemyState source, int hitId, float amount, EntityCommandBuffer ecb)
+        {
+            Vector3 center = default;
+            foreach (var t in _targets)
+            {
+                if (!t.IsPlayer && t.Id == hitId) center = t.BodyCenter;
+            }
+            _splash.Clear();
+            _lobby.Hits.SplashTargets(center, hitId, _targets, _splash);
+            foreach (int id in _splash)
+            {
+                if (!_enemyById.TryGetValue(id, out var e) || !_enemies.TryGetValue(e, out var s) || s.Vitals.IsDead) continue;
+                _splashDamage += _lobby.Hits.ApplySplash(s.Vitals, amount);
+                _splashHits++;
+                if (s.Vitals.IsDead)
+                {
+                    KillEnemy(e, ecb);
+                    _kills++;
+                }
+            }
+        }
+
+        private void QueueCombos()
+        {
+            foreach (var c in _combos)
+            {
+                _combosFormed++;
+                if (c.FirstDiscovery) _announce.Add((AnnounceKind.ComboDiscovered, (int)c.Kind, c.TargetIsPlayer ? c.TargetId : 0, 0));
+            }
+            _combos.Clear();
+        }
+
+        private void SendAnnouncements(EntityCommandBuffer ecb)
+        {
+            foreach (var a in _announce)
+            {
+                var rpc = ecb.CreateEntity();
+                ecb.AddComponent(rpc, new ArenaAnnounce { Kind = a.Kind, Value = a.Value, PlayerNetworkId = a.Player, OtherNetworkId = a.Other });
+                ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = Entity.Null });
+            }
+            _announce.Clear();
         }
 
         private void BuildTargets(int tick, int shooterId)
@@ -451,6 +656,14 @@ namespace FriendlyPersonShooter.Arena
                 }
                 target.Hittable = past.Hittable;
                 _targets.Add(target);
+            }
+            // Soul fragments, rewound like everything else. A downed player can't shoot their own.
+            foreach (var kv in _fragments)
+            {
+                int ownerId = (kv.Key - FragmentIdBase) / FragmentIdsPerPlayer;
+                if (ownerId == shooterId) continue;
+                var p = kv.Value.History.Sample(tick, 0f);
+                _targets.Add(HitTarget.Body(kv.Key, p, _combat.Revive.FragmentRadius));
             }
         }
 

@@ -43,10 +43,11 @@ namespace FriendlyPersonShooter.Net
         public static int ArenaBots = 3;
 
         /// <summary>
-        /// How many arena bots carry Vigor and heal. 0 by default, so the human tester is the healer,
-        /// which is what step 2 tests.
+        /// How many arena bots play the Medic profile (Vigor: revive, heal, keep buffs up). 1 by default
+        /// for step 3's four-player co-op; pass -fps-arena-healers 0 to make the human the only healer
+        /// (the step 2 test). The other bots alternate Haste support and Might damage.
         /// </summary>
-        public static int ArenaHealers = 0;
+        public static int ArenaHealers = 1;
         /// <summary>Bot accounts. Not all are online at once: the daily curve decides how many are.</summary>
         public static int BotCount = 30;
 

@@ -13,14 +13,14 @@ namespace FriendlyPersonShooter.Arena
         {
             var settings = new CombatSettings();
             em.AddComponentData(prefab, new ArenaVitals { Health = settings.PlayerMaxHealth, MaxHealth = settings.PlayerMaxHealth });
-            em.AddComponent<ArenaBuffs>(prefab);
+            em.AddComponentData(prefab, new ArenaBuffs { MoveMultiplier = 1f, JumpMultiplier = 1f });
             em.AddComponentData(prefab, new ArenaLoadout { Payload = PayloadKind.Vigor });
             // Lets the server rewind other ghosts to what this player saw when they fired.
             em.AddComponent<CommandDataInterpolationDelay>(prefab);
         }
     }
 
-    /// <summary>Builds the enemy ghost prefab in code, identically in every arena world.</summary>
+    /// <summary>Builds the enemy and soul fragment ghost prefabs in code, identically in every arena world.</summary>
     [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation)]
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     public partial class ArenaEnemyPrefabSystem : SystemBase
@@ -44,6 +44,20 @@ namespace FriendlyPersonShooter.Arena
             });
             var holder = EntityManager.CreateEntity();
             EntityManager.AddComponentData(holder, new ArenaEnemyPrefab { Value = prefab });
+
+            var fragment = EntityManager.CreateEntity();
+            EntityManager.AddComponentData(fragment, LocalTransform.Identity);
+            EntityManager.AddComponent<ArenaFragment>(fragment);
+            GhostPrefabCreation.ConvertToGhostPrefab(EntityManager, fragment, new GhostPrefabCreation.Config
+            {
+                Name = "ArenaFragment",
+                Importance = 8,
+                SupportedGhostModes = GhostModeMask.Interpolated,
+                DefaultGhostMode = GhostMode.Interpolated,
+                OptimizationMode = GhostOptimizationMode.Dynamic,
+                UsePreSerialization = false,
+            });
+            EntityManager.AddComponentData(holder, new ArenaFragmentPrefab { Value = fragment });
         }
     }
 }

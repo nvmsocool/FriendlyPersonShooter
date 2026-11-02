@@ -11,9 +11,11 @@ namespace FriendlyPersonShooter.Arena
     {
         public static readonly List<(HitConfirm Hit, float Time)> Hits = new List<(HitConfirm, float)>();
         public static readonly List<(ShotFx Shot, float Time)> Shots = new List<(ShotFx, float)>();
+        public static readonly List<(ArenaAnnounce Message, float Time)> Announcements = new List<(ArenaAnnounce, float)>();
         /// <summary>Running totals for the HUD: damage dealt and healing given by the human.</summary>
         public static float DamageDealt, HealingGiven;
-        public static int Kills, AllyHits, AllyHitsRefused;
+        public static int Kills, AllyHits, AllyHitsRefused, ChainsCashed, FragmentHits;
+        public static int BestChain;
     }
 
     /// <summary>
@@ -37,6 +39,12 @@ namespace FriendlyPersonShooter.Arena
                 ArenaFx.DamageDealt += h.Damage;
                 ArenaFx.HealingGiven += h.Healed;
                 if (h.Killed != 0) ArenaFx.Kills++;
+                if (h.ChainCashed != 0)
+                {
+                    ArenaFx.ChainsCashed++;
+                    if (h.ChainLinks > ArenaFx.BestChain) ArenaFx.BestChain = h.ChainLinks;
+                }
+                if (h.Fragment != 0 && h.Refused == 0) ArenaFx.FragmentHits++;
                 if (h.TargetIsPlayer != 0)
                 {
                     ArenaFx.AllyHits++;
@@ -47,6 +55,11 @@ namespace FriendlyPersonShooter.Arena
             {
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.Shots.Add((shot.ValueRO, now));
+            }
+            foreach (var (msg, entity) in SystemAPI.Query<RefRO<ArenaAnnounce>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (keep) ArenaFx.Announcements.Add((msg.ValueRO, now));
             }
             ecb.Playback(EntityManager);
         }

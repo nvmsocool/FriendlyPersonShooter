@@ -17,7 +17,10 @@ namespace FriendlyPersonShooter.Arena
 
         private Material _wispMat, _wispDimMat, _skitterMat, _coreMat, _miteMat, _telegraphMat;
         private Material _vigorMat, _mightMat, _barBackMat, _barHealthMat, _barShieldMat, _witherMat, _exposeMat;
-        private EntityQuery _enemies, _vitals;
+        private Material _hasteMat, _relayMat, _slowMat, _tagMat, _fragmentMat, _fragmentFadeMat, _downedMat, _chainMat;
+        private EntityQuery _enemies, _vitals, _fragmentQuery;
+        private readonly List<Matrix4x4> _g = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _h = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _a = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _b = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _c = new List<Matrix4x4>();
@@ -43,13 +46,45 @@ namespace FriendlyPersonShooter.Arena
             _barShieldMat = MakeMat(new Color(0.4f, 0.85f, 1f));
             _witherMat = MakeMat(new Color(0.6f, 0.2f, 0.8f));
             _exposeMat = MakeMat(new Color(1f, 0.6f, 0f));
+            _hasteMat = MakeMat(new Color(0.3f, 0.85f, 1f));
+            _relayMat = MakeMat(new Color(0.95f, 0.4f, 1f));
+            _slowMat = MakeMat(new Color(0.3f, 0.5f, 1f));
+            _tagMat = MakeMat(new Color(1f, 0.3f, 0.75f));
+            _fragmentMat = MakeMat(new Color(0.75f, 1f, 1f));
+            _fragmentFadeMat = MakeMat(new Color(0.35f, 0.5f, 0.55f));
+            _downedMat = MakeMat(new Color(0.5f, 0.5f, 0.6f));
+            _chainMat = MakeMat(new Color(1f, 0.85f, 0.2f));
+        }
+
+        private Material PayloadMat(PayloadKind p)
+        {
+            switch (p)
+            {
+                case PayloadKind.Vigor: return _vigorMat;
+                case PayloadKind.Haste: return _hasteMat;
+                case PayloadKind.Relay: return _relayMat;
+                default: return _mightMat;
+            }
+        }
+
+        private static string PayloadHelp(PayloadKind p)
+        {
+            switch (p)
+            {
+                case PayloadKind.Vigor: return "VIGOR  (allies: heal + shield, enemies: wither)";
+                case PayloadKind.Haste: return "HASTE  (allies: +30% speed, +20% jump, enemies: slow)";
+                case PayloadKind.Relay: return "RELAY  (allies: their next 5 hits also carry Might and add a chain link, enemies: tag = splash)";
+                default: return "MIGHT  (allies: +damage, enemies: expose)";
+            }
         }
 
         private void CreateCombatQueries(EntityManager em)
         {
             _enemies = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaEnemy>(), ComponentType.ReadOnly<LocalTransform>());
             _vitals = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaPlayer>(), ComponentType.ReadOnly<LocalTransform>(),
-                ComponentType.ReadOnly<ArenaVitals>(), ComponentType.ReadOnly<GhostOwner>(), ComponentType.ReadOnly<ArenaLoadout>());
+                ComponentType.ReadOnly<ArenaVitals>(), ComponentType.ReadOnly<GhostOwner>(), ComponentType.ReadOnly<ArenaLoadout>(),
+                ComponentType.ReadOnly<ArenaBuffs>());
+            _fragmentQuery = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaFragment>(), ComponentType.ReadOnly<LocalTransform>());
         }
 
         private void DrawCombat(World world, Entity local)
@@ -58,7 +93,27 @@ namespace FriendlyPersonShooter.Arena
             var barRot = Quaternion.Euler(0f, camRot.eulerAngles.y, 0f);
             DrawEnemies(barRot);
             DrawAllyBars(world, local, barRot);
+            DrawFragments(world, local);
             DrawTracers(world, local);
+        }
+
+        /// <summary>Soul fragments: small glowing cubes, dim as they fade. Your own are drawn dim (you can't shoot them).</summary>
+        private void DrawFragments(World world, Entity local)
+        {
+            int myId = local != Entity.Null ? world.EntityManager.GetComponentData<GhostOwner>(local).NetworkId : -1;
+            using var frags = _fragmentQuery.ToComponentDataArray<ArenaFragment>(Allocator.Temp);
+            using var transforms = _fragmentQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp);
+            _g.Clear(); _h.Clear();
+            float spin = Time.time * 360f;
+            for (int i = 0; i < frags.Length; i++)
+            {
+                var f = frags[i];
+                bool dim = f.Opacity < 0.6f || f.OwnerNetworkId == myId;
+                float size = 0.4f * math.lerp(0.5f, 1f, math.saturate(f.Opacity));
+                (dim ? _h : _g).Add(Matrix4x4.TRS(transforms[i].Position, Quaternion.Euler(spin, spin * 0.7f, 0f), Vector3.one * size));
+            }
+            DrawList(_g, _fragmentMat);
+            DrawList(_h, _fragmentFadeMat);
         }
 
         private void DrawEnemies(Quaternion barRot)
@@ -70,6 +125,8 @@ namespace FriendlyPersonShooter.Arena
             var mites = new List<Matrix4x4>();
             var withered = new List<Matrix4x4>();
             var exposed = new List<Matrix4x4>();
+            var slowed = new List<Matrix4x4>();
+            var tagged = new List<Matrix4x4>();
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
@@ -100,6 +157,8 @@ namespace FriendlyPersonShooter.Arena
                 Vector3 top = p + Vector3.up * (size * 0.5f + 0.75f);
                 if (en.Withered) withered.Add(Matrix4x4.TRS(top + barRot * Vector3.left * 0.2f, barRot, Vector3.one * 0.15f));
                 if (en.Exposed) exposed.Add(Matrix4x4.TRS(top + barRot * Vector3.right * 0.2f, barRot, Vector3.one * 0.15f));
+                if (en.Slowed) slowed.Add(Matrix4x4.TRS(top + barRot * Vector3.left * 0.6f, barRot, Vector3.one * 0.15f));
+                if (en.Tagged) tagged.Add(Matrix4x4.TRS(top + barRot * Vector3.right * 0.6f, barRot, Vector3.one * 0.15f));
             }
             DrawList(_a, _wispMat);
             DrawList(_b, _wispDimMat);
@@ -111,6 +170,8 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_e, _barHealthMat);
             DrawList(withered, _witherMat);
             DrawList(exposed, _exposeMat);
+            DrawList(slowed, _slowMat);
+            DrawList(tagged, _tagMat);
         }
 
         /// <summary>A flat bar facing the camera: background, health fill and an optional shield fill on top.</summary>
@@ -137,17 +198,36 @@ namespace FriendlyPersonShooter.Arena
             using var entities = _vitals.ToEntityArray(Allocator.Temp);
             using var transforms = _vitals.ToComponentDataArray<LocalTransform>(Allocator.Temp);
             using var vitals = _vitals.ToComponentDataArray<ArenaVitals>(Allocator.Temp);
-            _d.Clear(); _e.Clear(); _f.Clear();
+            using var buffs = _vitals.ToComponentDataArray<ArenaBuffs>(Allocator.Temp);
+            _d.Clear(); _e.Clear(); _f.Clear(); _g.Clear(); _h.Clear();
+            var revive = new List<Matrix4x4>();
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
                 var v = vitals[i];
-                Vector3 top = (Vector3)transforms[i].Position + Vector3.up * 2.2f;
+                Vector3 feet = transforms[i].Position;
+                if (v.Health <= 0f)
+                {
+                    // Downed: a slab on the floor and a revive bar that fills as fragments are shot.
+                    _g.Add(Matrix4x4.TRS(feet + Vector3.up * 0.2f, barRot, new Vector3(0.9f, 0.4f, 1.7f)));
+                    AddBar(feet + Vector3.up * 1.2f, barRot, 1.4f, v.ReviveProgress, 0f, _d, revive, null);
+                    continue;
+                }
+                Vector3 top = feet + Vector3.up * 2.2f;
                 AddBar(top, barRot, 1.2f, v.Health / math.max(v.MaxHealth, 1f), v.Shield / 25f, _d, _e, _f);
+                // A spinning gold cube over anyone holding a chain: buff them or let them cash it.
+                if (buffs[i].ChainLinks > 0)
+                {
+                    _h.Add(Matrix4x4.TRS(top + Vector3.up * 0.35f, Quaternion.Euler(0f, Time.time * 180f, 45f),
+                        Vector3.one * (0.12f + 0.06f * buffs[i].ChainLinks)));
+                }
             }
+            DrawList(_g, _downedMat);
             DrawList(_d, _barBackMat);
             DrawList(_e, _barHealthMat);
             DrawList(_f, _barShieldMat);
+            DrawList(revive, _fragmentMat);
+            DrawList(_h, _chainMat);
         }
 
         private void DrawTracers(World world, Entity local)
@@ -179,22 +259,35 @@ namespace FriendlyPersonShooter.Arena
                 _localTracers.Add((gun, eye + (Vector3)dir * range, myPayload, now));
             }
 
-            _a.Clear(); _b.Clear();
+            _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear();
             for (int i = _localTracers.Count - 1; i >= 0; i--)
             {
                 var t = _localTracers[i];
                 if (now - t.Time > TracerSeconds) { _localTracers.RemoveAt(i); continue; }
-                AddLine(t.From, t.To, t.Payload == PayloadKind.Vigor ? _a : _b);
+                AddLine(t.From, t.To, TracerList(t.Payload));
             }
             for (int i = ArenaFx.Shots.Count - 1; i >= 0; i--)
             {
                 var s = ArenaFx.Shots[i];
                 if (now - s.Time > TracerSeconds) { ArenaFx.Shots.RemoveAt(i); continue; }
                 if (s.Shot.ShooterNetworkId == myId) continue;
-                AddLine(s.Shot.From, s.Shot.To, s.Shot.Payload == PayloadKind.Vigor ? _a : _b);
+                AddLine(s.Shot.From, s.Shot.To, TracerList(s.Shot.Payload));
             }
             DrawList(_a, _vigorMat);
             DrawList(_b, _mightMat);
+            DrawList(_g, _hasteMat);
+            DrawList(_h, _relayMat);
+        }
+
+        private List<Matrix4x4> TracerList(PayloadKind p)
+        {
+            switch (p)
+            {
+                case PayloadKind.Vigor: return _a;
+                case PayloadKind.Haste: return _g;
+                case PayloadKind.Relay: return _h;
+                default: return _b;
+            }
         }
 
         private static void AddLine(Vector3 from, Vector3 to, List<Matrix4x4> list)
@@ -214,28 +307,41 @@ namespace FriendlyPersonShooter.Arena
                 var b = em.GetComponentData<ArenaBuffs>(local);
                 var payload = em.GetComponentData<ArenaLoadout>(local).Payload;
                 _text.Append($"\nHealth {v.Health:0}/{v.MaxHealth:0}   Shield {v.Shield:0}\n");
-                _text.Append(payload == PayloadKind.Vigor
-                    ? "Payload: VIGOR  (allies: heal + shield, enemies: wither)\n"
-                    : "Payload: MIGHT  (allies: +damage, enemies: expose)\n");
-                if (b.EmpowerRemaining > 0f) _text.Append($"Buff: Might +{b.Empower * 100f:0}% ({b.EmpowerRemaining:0.0}s)\n");
+                _text.Append($"Payload: {PayloadHelp(payload)}\n");
+                if (b.EmpowerRemaining > 0f) _text.Append($"Buff: Might +{b.Empower * 100f:0}% ({b.EmpowerRemaining:0.0}s){(b.Blitz ? "  BLITZ (Haste + Might: double damage bonus)" : "")}\n");
                 if (b.ShieldRemaining > 0f) _text.Append($"Buff: Shield ({b.ShieldRemaining:0.0}s)\n");
-                _center.text = v.RespawnIn > 0f ? $"Down! Respawning in {v.RespawnIn:0.0}s" : "";
+                if (b.HasteRemaining > 0f) _text.Append($"Buff: Haste x{b.MoveMultiplier:0.00} speed ({b.HasteRemaining:0.0}s)\n");
+                if (b.RelayHits > 0) _text.Append($"Buff: Relay - next {b.RelayHits} hits also carry {b.RelayPayload}\n");
+                if (b.ChainLinks > 0)
+                {
+                    _text.Append(b.ChainLinks >= 2
+                        ? $"CHAIN x{b.ChainLinks} held ({b.ChainTimeLeft:0.0}s): hit an enemy to cash it, or buff someone new to grow it\n"
+                        : $"Chain started ({b.ChainTimeLeft:0.0}s): buff someone new to grow it\n");
+                }
+                _center.text = v.Health <= 0f
+                    ? $"DOWN!  Allies: shoot your soul fragments to revive you   {v.ReviveProgress * 100f:0}%   bleed-out {v.RespawnIn:0.0}s"
+                    : "";
             }
+            WriteAnnouncements(now);
 
             _text.Append($"\nDamage {ArenaFx.DamageDealt:0}   Healing {ArenaFx.HealingGiven:0}   Kills {ArenaFx.Kills}\n");
             _text.Append($"Ally hits {ArenaFx.AllyHits}" + (ArenaFx.AllyHitsRefused > 0 ? $" ({ArenaFx.AllyHitsRefused} had no effect)" : "") + "\n");
+            _text.Append($"Chains cashed {ArenaFx.ChainsCashed} (best x{ArenaFx.BestChain})   Fragments shot {ArenaFx.FragmentHits}\n");
 
             using var entities = _vitals.ToEntityArray(Allocator.Temp);
             using var vitals = _vitals.ToComponentDataArray<ArenaVitals>(Allocator.Temp);
             using var owners = _vitals.ToComponentDataArray<GhostOwner>(Allocator.Temp);
             using var loadouts = _vitals.ToComponentDataArray<ArenaLoadout>(Allocator.Temp);
+            using var allyBuffs = _vitals.ToComponentDataArray<ArenaBuffs>(Allocator.Temp);
             _text.Append("\nAllies:\n");
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
                 var v = vitals[i];
                 _text.Append($"  player {owners[i].NetworkId} ({loadouts[i].Payload}): " +
-                             (v.RespawnIn > 0f ? "down" : $"{v.Health:0} hp{(v.Shield > 0f ? $" +{v.Shield:0} shield" : "")}") + "\n");
+                             (v.Health <= 0f ? $"DOWN - revive {v.ReviveProgress * 100f:0}%, {v.RespawnIn:0}s left"
+                                 : $"{v.Health:0} hp{(v.Shield > 0f ? $" +{v.Shield:0} shield" : "")}") +
+                             (allyBuffs[i].ChainLinks > 0 ? $"  [chain x{allyBuffs[i].ChainLinks}]" : "") + "\n");
             }
 
             // Hit marker on the crosshair.
@@ -249,10 +355,20 @@ namespace FriendlyPersonShooter.Arena
                     ArenaFx.Hits.RemoveAt(i);
                     continue;
                 }
-                if (hit.TargetIsPlayer != 0)
+                if (hit.Fragment != 0)
+                {
+                    _crosshair.color = hit.Refused != 0 ? Color.gray : new Color(0.75f, 1f, 1f);
+                    _crosshair.text = hit.Refused != 0 ? "o" : $"* {hit.ReviveProgress * 100f:0}%";
+                }
+                else if (hit.ChainCashed != 0)
+                {
+                    _crosshair.color = new Color(1f, 0.85f, 0.2f);
+                    _crosshair.text = $"x CHAIN x{hit.ChainLinks} +{hit.ChainBonus * 100f:0}%";
+                }
+                else if (hit.TargetIsPlayer != 0)
                 {
                     _crosshair.color = hit.Refused != 0 ? Color.gray : new Color(0.5f, 1f, 0.6f);
-                    _crosshair.text = hit.Refused != 0 ? "o" : $"+ {hit.Healed:0}";
+                    _crosshair.text = hit.Refused != 0 ? "o" : hit.ChainLinks > 0 ? $"+ {hit.Healed:0}  chain x{hit.ChainLinks}" : $"+ {hit.Healed:0}";
                 }
                 else
                 {
@@ -262,5 +378,41 @@ namespace FriendlyPersonShooter.Arena
                 break;
             }
         }
-    }
+    
+        private const float AnnounceSeconds = 3.5f;
+
+        /// <summary>Recent server announcements, newest first, under the crosshair.</summary>
+        private void WriteAnnouncements(float now)
+        {
+            var lines = new System.Text.StringBuilder();
+            for (int i = ArenaFx.Announcements.Count - 1; i >= 0; i--)
+            {
+                var (m, time) = ArenaFx.Announcements[i];
+                if (now - time > AnnounceSeconds)
+                {
+                    ArenaFx.Announcements.RemoveAt(i);
+                    continue;
+                }
+                switch (m.Kind)
+                {
+                    case AnnounceKind.ComboDiscovered:
+                        var kind = (ComboKind)m.Value;
+                        lines.Append(kind == ComboKind.Plague
+                            ? "COMBO DISCOVERED: PLAGUE  (Wither + Tag: damage over time spreads between enemies)\n"
+                            : "COMBO DISCOVERED: BLITZ  (Haste + Might on one ally: damage bonus doubled)\n");
+                        break;
+                    case AnnounceKind.Revived:
+                        lines.Append($"player {m.PlayerNetworkId} revived by player {m.OtherNetworkId}\n");
+                        break;
+                    case AnnounceKind.BledOut:
+                        lines.Append($"player {m.PlayerNetworkId} bled out\n");
+                        break;
+                    case AnnounceKind.ChainCashed:
+                        if (m.Value >= 3) lines.Append($"player {m.PlayerNetworkId} cashed a x{m.Value} chain!\n");
+                        break;
+                }
+            }
+            if (lines.Length > 0) _center.text = (_center.text.Length > 0 ? _center.text + "\n" : "") + lines;
+        }
+}
 }

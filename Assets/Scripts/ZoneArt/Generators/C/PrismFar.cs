@@ -19,7 +19,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 float dx = Mathf.Max(0f, Mathf.Max(-lx, lx - zone.Size));
                 float dz = Mathf.Max(0f, Mathf.Max(-lz, lz - zone.Size));
                 float d = Mathf.Sqrt(dx * dx + dz * dz);
-                float border = ZoneEdges.BorderHeight(zone.LayerSeed, wx, wz);
+                float border = ZoneEdges.BorderHeight(zone, wx, wz);
                 float rise = PrismTerrain.Smooth(0f, 70f, d);
                 float e = terrain.Elevation(lx, lz) * (1f + PrismTerrain.Smooth(200f, 900f, d) * 1.5f);
                 float mesa = ZoneNoise.Ridged(wx + o2.x, wz + o2.y, 1f / 420f, 3);

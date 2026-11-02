@@ -36,6 +36,26 @@ namespace FriendlyPersonShooter.ZoneArt
             return sum / norm;
         }
 
+        /// <summary>
+        /// Fractal noise in about [-1, 1] that repeats every <paramref name="period"/> metres on x and z, for things
+        /// that must line up across the wrapping world's edge. The frequency is rounded so a whole number of cycles fits the period.
+        /// </summary>
+        public static float PeriodicFbm(float x, float z, float frequency, float period, int octaves = 3)
+        {
+            float cycles = math.max(1f, math.round(period * frequency));
+            float sum = 0f, amp = 1f, norm = 0f;
+            var p = new float2(x, z) * (cycles / period);
+            for (int i = 0; i < octaves; i++)
+            {
+                sum += amp * math.clamp(noise.pnoise(p, new float2(cycles)) * 1.4f, -1f, 1f);
+                norm += amp;
+                amp *= 0.5f;
+                p *= 2f;
+                cycles *= 2f;
+            }
+            return sum / norm;
+        }
+
         /// <summary>Ridged fractal in about [0, 1]: sharp crests, good for ridges and cliffs.</summary>
         public static float Ridged(float x, float z, float frequency, int octaves = 5, float lacunarity = 2f, float gain = 0.5f)
         {

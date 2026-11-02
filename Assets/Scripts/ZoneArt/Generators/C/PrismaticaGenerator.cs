@@ -435,7 +435,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             Mark("flora");
 
             // ---------------------------------------------------------------- far lands
-            PrismFar.Build(zone, t, pal, root.transform, farMat, foliage, water, crystal, (w, n) => ColorAt(w, n, false), t.HasWater ? t.WaterLevel : -999f, st, species);
+            // In the game world the real neighbouring zones surround this one, so no backdrop.
+            if (!zone.InWorld) PrismFar.Build(zone, t, pal, root.transform, farMat, foliage, water, crystal, (w, n) => ColorAt(w, n, false), t.HasWater ? t.WaterLevel : -999f, st, species);
             var cloudMat = Lit("Cloud", pal, 0.95f, 0.45f, 0.03f, 0.6f);
             cloudMat.SetColor("_ShadowColor", Color.Lerp(pal.CloudShade, pal.SkyMid, 0.3f) * 0.85f);
             cloudMat.SetFloat("_Glow", 1.2f);

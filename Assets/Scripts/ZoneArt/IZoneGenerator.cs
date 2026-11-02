@@ -74,6 +74,22 @@ namespace FriendlyPersonShooter.ZoneArt
         public EssenceColor Lean { get; }
         public IReadOnlyList<ZoneAnchor> Anchors { get; }
 
+        /// <summary>Side of the square wrapping world in metres (0 when unknown). Anything that must match across the world's edge repeats at this period.</summary>
+        public float WorldSize { get; set; }
+
+        /// <summary>
+        /// True when the zone is built inside the game world with its real neighbours around it: skip anything
+        /// drawn outside the zone (backdrops, distant lands). Sky, sun, ambient, fog and post-processing are still
+        /// set up as usual; the game captures them per zone.
+        /// </summary>
+        public bool InWorld { get; set; }
+
+        /// <summary>
+        /// True on a server without graphics: only colliders matter. A generator may skip purely visual work, but every
+        /// collider must come out exactly as in a full build (clients and the server must agree on the ground).
+        /// </summary>
+        public bool Headless { get; set; }
+
         public Vector3 Center => Origin + new Vector3(Size * 0.5f, 0f, Size * 0.5f);
 
         public ZoneRequest(uint seed, uint layerSeed, ZoneCoord coord, float size, TileKind tile, EssenceColor lean, IReadOnlyList<ZoneAnchor> anchors)
@@ -99,7 +115,7 @@ namespace FriendlyPersonShooter.ZoneArt
             if (zone.HasGate) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Gate, "Gate", ToWorld(zone.Gate.Point.World)));
             foreach (var p in zone.SpawnPoints) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Spawn, $"{p.Family} spawn {p.Id}", ToWorld(p.Point.World)));
             uint seed = ZoneRandom.Hash(map.Seed, 0x2A7E, coord.X, coord.Y);
-            return new ZoneRequest(seed, map.Seed, coord, size, zone.Tile, zone.Bias.Primary, anchors);
+            return new ZoneRequest(seed, map.Seed, coord, size, zone.Tile, zone.Bias.Primary, anchors) { WorldSize = map.Grid.Width * size };
         }
 
         private static Vector3 ToWorld(System.Numerics.Vector2 p) => new Vector3(p.X, 0f, p.Y);

@@ -133,10 +133,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 for (int i = 0; i <= 50; i++)
                 {
                     float t = i * 5f;
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z.LayerSeed, z.Origin.x + t, z.Origin.z));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z.LayerSeed, z.Origin.x + t, z.Origin.z + 250f));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z.LayerSeed, z.Origin.x, z.Origin.z + t));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z.LayerSeed, z.Origin.x + 250f, z.Origin.z + t));
+                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + t, z.Origin.z));
+                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + t, z.Origin.z + 250f));
+                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x, z.Origin.z + t));
+                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + 250f, z.Origin.z + t));
                 }
                 WaterLevel = minB - 0.4f;
                 HasWater = true;
@@ -149,7 +149,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float wx = z.Origin.x + lx, wz = z.Origin.z + lz;
                     float e = Mathf.Min(Mathf.Min(lx, 250f - lx), Mathf.Min(lz, 250f - lz));
                     float inner = Smooth(14f, 14f + s.Fall, e);
-                    float border = ZoneEdges.BorderHeight(z.LayerSeed, wx, wz);
+                    float border = ZoneEdges.BorderHeight(z, wx, wz);
                     float h = border + Elevation(lx, lz) * inner;
                     h = ZoneEdges.Apply(z, wx, wz, h);
                     if (HasWater) h = Mathf.Max(h, WaterLevel - 1.1f);

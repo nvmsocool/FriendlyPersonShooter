@@ -65,7 +65,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             new MoodDef
             {
                 Name = "lagoon", Grass = new[] { "#3DDC97", "#7EF29D", "#22C1A3", "#A6F07A" },
-                Strata = new[] { "#2EC4B6", "#CBF3F0", "#FF9F1C", "#FFBF69", "#3A86FF", "#F7EDE2" },
+                Strata = new[] { "#2EC4B6", "#7FD6C8", "#FF9F1C", "#FFBF69", "#3A86FF", "#F7EDE2" },
                 HexTop = new[] { "#CBF3F0", "#FFBF69", "#8EE3EF" }, Foliage = new[] { "#00A68C", "#FF5D8F", "#FFD60A", "#7CDF64", "#0FB5D6", "#F15BB5" },
                 Flowers = new[] { "#FF4D6D", "#FFE66D", "#FFFFFF", "#9B5DE5", "#FF9F1C", "#00F5D4" }, Bark = new[] { "#355070", "#6D597A", "#2B6777" },
                 Crystal = new[] { "#9BFFF7", "#FF9DE2" }, Stone = new[] { "#F7EDE2", "#D8F3DC", "#BDE0FE" }, Path = "#FFF1C9", Water = "#1EC8D8",
@@ -83,7 +83,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             new MoodDef
             {
                 Name = "citrus", Grass = new[] { "#7CCB4A", "#4FC779", "#D6E33F", "#2EC4B6" },
-                Strata = new[] { "#FF6B35", "#F7C59F", "#EFEFD0", "#2EC4B6", "#FFB627", "#E84855" },
+                Strata = new[] { "#FF6B35", "#F7C59F", "#F4D35E", "#2EC4B6", "#FFB627", "#E84855" },
                 HexTop = new[] { "#FFE19C", "#FF9F68", "#9FE2BF" }, Foliage = new[] { "#1AAE9F", "#FF006E", "#FFBE0B", "#3A86FF", "#8338EC", "#06D6A0" },
                 Flowers = new[] { "#FF006E", "#FFBE0B", "#FFFFFF", "#3A86FF", "#FB5607", "#8338EC" }, Bark = new[] { "#5C3D2E", "#3D405B", "#7F4F24" },
                 Crystal = new[] { "#FFF07C", "#7CF5FF" }, Stone = new[] { "#FFF8E7", "#FFE0B5", "#D4F1F4" }, Path = "#FFE8B0", Water = "#2EC8F0",

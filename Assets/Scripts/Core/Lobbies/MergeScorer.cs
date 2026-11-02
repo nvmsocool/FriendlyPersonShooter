@@ -59,7 +59,8 @@ namespace FriendlyPersonShooter.Core.Lobbies
             // Share of each lobby's occupied zones that the other lobby hasn't visited, averaged.
             double discovery = (Novelty(b, a) + Novelty(a, b)) / 2.0;
 
-            double score = rules.ProximityWeight * proximity + rules.DiscoveryWeight * discovery;
+            double score = rules.ProximityWeight * proximity + rules.DiscoveryWeight * discovery +
+                           rules.ApproachWeight * Approach(a, b, grid, rules);
             if (a.Players.Count <= rules.SmallLobbySize || b.Players.Count <= rules.SmallLobbySize)
             {
                 score += rules.SmallLobbyBonus;
@@ -83,6 +84,46 @@ namespace FriendlyPersonShooter.Core.Lobbies
                 if (!visited.Contains(zone)) fresh++;
             }
             return (double)fresh / occupied.Count;
+        }
+
+        /// <summary>
+        /// How fast the closest pair of players is closing in, from -1 (moving apart at full speed)
+        /// to 1 (heading straight at each other), measured the short way around the wrap.
+        /// </summary>
+        internal static double Approach(Lobby a, Lobby b, WorldGrid grid, LobbyRules rules)
+        {
+            double width = grid.Width * grid.ZoneSize;
+            double height = grid.Height * grid.ZoneSize;
+            LobbyPlayer bestA = null, bestB = null;
+            double best = double.MaxValue;
+            foreach (var pa in a.Players)
+            {
+                foreach (var pb in b.Players)
+                {
+                    double dx = Wrap(pb.X - pa.X, width), dz = Wrap(pb.Z - pa.Z, height);
+                    double d = dx * dx + dz * dz;
+                    if (d < best)
+                    {
+                        best = d;
+                        bestA = pa;
+                        bestB = pb;
+                    }
+                }
+            }
+            if (bestA == null || best <= 1e-6 || rules.ApproachFullSpeed <= 0) return 0;
+            double ox = Wrap(bestB.X - bestA.X, width), oz = Wrap(bestB.Z - bestA.Z, height);
+            double len = Math.Sqrt(ox * ox + oz * oz);
+            double rvx = bestB.VelocityX - bestA.VelocityX, rvz = bestB.VelocityZ - bestA.VelocityZ;
+            double closing = -(ox * rvx + oz * rvz) / len;
+            return Math.Max(-1.0, Math.Min(1.0, closing / rules.ApproachFullSpeed));
+        }
+
+        private static double Wrap(double d, double size)
+        {
+            d %= size;
+            if (d > size / 2) d -= size;
+            else if (d < -size / 2) d += size;
+            return d;
         }
 
         private static int MinDistance(Lobby a, Lobby b, WorldGrid grid)

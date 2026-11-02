@@ -42,6 +42,8 @@ namespace FriendlyPersonShooter.Core.Lobbies
         public double EncounterWindow { get; set; } = 30;
 
         public int MergePopIns { get; private set; }
+        /// <summary>Distance (metres) of the closest merge pop-in so far; tells real pop-ins from edge-of-view ones.</summary>
+        public double ClosestMergePopIn { get; private set; } = double.MaxValue;
         public int PartyPopIns { get; private set; }
         public int LoginPopIns { get; private set; }
         public int MergesTracked { get; private set; }
@@ -134,7 +136,11 @@ namespace FriendlyPersonShooter.Core.Lobbies
                         else if (targetBefore.LobbyId != viewerBefore.LobbyId)
                         {
                             if (_partyMoved.Contains(target.Id) || _partyMoved.Contains(viewer.Id)) PartyPopIns++;
-                            else MergePopIns++;
+                            else
+                            {
+                                MergePopIns++;
+                                ClosestMergePopIn = Math.Min(ClosestMergePopIn, Distance(viewer, target));
+                            }
                         }
                     }
                 }

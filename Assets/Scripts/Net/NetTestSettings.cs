@@ -41,6 +41,12 @@ namespace FriendlyPersonShooter.Net
 
         /// <summary>Bot allies in the arena. Each is a full client, so it receives the game state and can aim.</summary>
         public static int ArenaBots = 3;
+
+        /// <summary>
+        /// How many arena bots carry Vigor and heal. 0 by default, so the human tester is the healer,
+        /// which is what step 2 tests.
+        /// </summary>
+        public static int ArenaHealers = 0;
         /// <summary>Bot accounts. Not all are online at once: the daily curve decides how many are.</summary>
         public static int BotCount = 30;
 
@@ -123,6 +129,9 @@ namespace FriendlyPersonShooter.Net
                         break;
                     case "-fps-arena-bots":
                         if (int.TryParse(value, out int arenaBots)) ArenaBots = Math.Max(0, arenaBots);
+                        break;
+                    case "-fps-arena-healers":
+                        if (int.TryParse(value, out int healers)) ArenaHealers = Math.Max(0, healers);
                         break;
                     case "-fps-account-base":
                         if (int.TryParse(value, out int accountBase)) AccountBase = Math.Max(1, accountBase);

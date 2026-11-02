@@ -11,8 +11,8 @@ namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
     /// A bot ally in the arena. It plays through a full client, so it sees the same interpolated
-    /// enemies and players a human would. The first bot carries Vigor and heals hurt allies; the others
-    /// carry Might and shoot enemies (and buff allies now and then). All of them dodge with ADAD
+    /// enemies and players a human would. Healer bots (see NetTestSettings.ArenaHealers) carry Vigor and
+    /// heal hurt allies; the others carry Might and shoot enemies (and buff allies now and then). All of them dodge with ADAD
     /// strafing and jumps, so healing them is a tracking drill. Aim uses the Core.Combat aim model,
     /// with strong and weak aimers mixed.
     /// </summary>
@@ -56,7 +56,7 @@ namespace FriendlyPersonShooter.Arena
                 uint seed = (uint)(_seat * 7919 + 101);
                 _aim = new BotAim(_seat % 2 == 0 ? BotAimSettings.Strong() : BotAimSettings.Weak(), seed);
                 _mover = BotMover.Create(seed + 1);
-                _wanted = _seat == 0 ? PayloadKind.Vigor : PayloadKind.Might;
+                _wanted = _seat < NetTestSettings.ArenaHealers ? PayloadKind.Vigor : PayloadKind.Might;
                 _random = new Unity.Mathematics.Random(seed + 2);
             }
             if (_local.CalculateEntityCount() != 1) return;

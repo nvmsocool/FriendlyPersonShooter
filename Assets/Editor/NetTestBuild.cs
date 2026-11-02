@@ -14,7 +14,8 @@ namespace FriendlyPersonShooter.EditorTools
         {
             var options = new BuildPlayerOptions
             {
-                scenes = new[] { "Assets/Scenes/NetTest.unity" },
+                // -fps-game arena switches to the Arena scene at startup.
+                scenes = new[] { "Assets/Scenes/NetTest.unity", "Assets/Scenes/Arena.unity" },
                 locationPathName = OutputPath,
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None,

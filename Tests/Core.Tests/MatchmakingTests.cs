@@ -129,5 +129,36 @@ namespace FriendlyPersonShooter.Core.Tests
             var merges = LobbyMatchmaker.ChooseMerges(new[] { a, b, c, d }, _grid, _rules);
             Assert.That(merges.Count, Is.EqualTo(2));
         }
+
+        private static Lobby Walker(int id, int zoneX, double x, double vx)
+        {
+            var lobby = LobbyAt(id, new ZoneCoord(zoneX, 2));
+            var p = lobby.Players[0];
+            p.X = x;
+            p.Z = 250;
+            p.VelocityX = vx;
+            return lobby;
+        }
+
+        [Test]
+        public void LobbiesHeadingTowardEachOther_ScoreHigherThanOnesMovingApart()
+        {
+            // Zones 2 and 4 on a grid of 100 m zones: players at x=250 and x=450.
+            var closing = MergeScorer.Evaluate(Walker(1, 2, 250, 6), Walker(2, 4, 450, -6), _grid, _rules);
+            var standing = MergeScorer.Evaluate(Walker(3, 2, 250, 0), Walker(4, 4, 450, 0), _grid, _rules);
+            var parting = MergeScorer.Evaluate(Walker(5, 2, 250, -6), Walker(6, 4, 450, 6), _grid, _rules);
+            Assert.That(closing.Score, Is.GreaterThan(standing.Score));
+            Assert.That(standing.Score, Is.GreaterThan(parting.Score));
+            Assert.That(closing.Score - standing.Score, Is.EqualTo(_rules.ApproachWeight).Within(1e-9));
+        }
+
+        [Test]
+        public void Approach_IsMeasuredTheShortWayAroundTheWrap()
+        {
+            // World is 1600 m wide: x=1550 heading +x is closing on x=50, 100 m away across the edge.
+            var a = Walker(1, 15, 1550, 6);
+            var b = Walker(2, 0, 50, 0);
+            Assert.That(MergeScorer.Approach(a, b, _grid, _rules), Is.EqualTo(1.0).Within(1e-9));
+        }
     }
 }

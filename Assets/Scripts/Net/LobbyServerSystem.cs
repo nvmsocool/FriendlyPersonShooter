@@ -79,6 +79,8 @@ namespace FriendlyPersonShooter.Net
         private readonly Dictionary<int, Unity.Mathematics.float3> _posOf = new Dictionary<int, Unity.Mathematics.float3>();
         private readonly List<PlayerSample> _samples = new List<PlayerSample>();
         private LobbyMetrics _metrics;
+        private readonly Dictionary<int, Unity.Mathematics.float3> _lastPassPos = new Dictionary<int, Unity.Mathematics.float3>();
+        private double _lastPassTime;
         private readonly HashSet<int> _seen = new HashSet<int>();
         /// <summary>Lobbies that just split can't merge until this time, so a pair at the edge can't flicker.</summary>
         private readonly Dictionary<int, double> _noMergeUntil = new Dictionary<int, double>();
@@ -114,6 +116,7 @@ namespace FriendlyPersonShooter.Net
             if (now >= _nextLobbyPass)
             {
                 _nextLobbyPass = now + NetTestSettings.LobbyInterval;
+                UpdateVelocities(now);
                 GatherGroups(now);
                 SplitLobbies(now);
                 MergeLobbies(now);
@@ -133,7 +136,8 @@ namespace FriendlyPersonShooter.Net
                 var m = _metrics;
                 Debug.Log($"[Metrics] mergePopIns={m.MergePopIns} partyPopIns={m.PartyPopIns} loginPopIns={m.LoginPopIns} " +
                           $"mergesTracked={m.MergesTracked} met={m.MergesMet} missed={m.MergesMissed} " +
-                          $"avgTimeToMeet={(m.MergesMet > 0 ? m.TotalTimeToMeet / m.MergesMet : 0):0.0} partySplits={m.PartySplits}");
+                          $"avgTimeToMeet={(m.MergesMet > 0 ? m.TotalTimeToMeet / m.MergesMet : 0):0.0} partySplits={m.PartySplits} " +
+                          $"closestMergePopIn={(m.MergePopIns > 0 ? m.ClosestMergePopIn : 0):0.0}");
             }
 
             UpdateRelevancy();
@@ -191,6 +195,7 @@ namespace FriendlyPersonShooter.Net
                 _lobbyOf.Remove(id);
                 _ghostIdOf.Remove(id);
                 _posOf.Remove(id);
+                _lastPassPos.Remove(id);
             }
         }
 
@@ -363,6 +368,36 @@ namespace FriendlyPersonShooter.Net
                     }
                 }
             }
+        }
+
+        /// <summary>Smoothed walking velocity per player, so the matchmaker can tell who is heading toward whom.</summary>
+        private void UpdateVelocities(double now)
+        {
+            double dt = now - _lastPassTime;
+            _lastPassTime = now;
+            float size = NetTestSettings.WorldSize;
+            foreach (var p in _players.Values)
+            {
+                if (!_posOf.TryGetValue(p.Id, out var pos)) continue;
+                p.X = pos.x;
+                p.Z = pos.z;
+                if (dt > 0 && _lastPassPos.TryGetValue(p.Id, out var last))
+                {
+                    double vx = WrapDelta(pos.x - last.x, size) / dt;
+                    double vz = WrapDelta(pos.z - last.z, size) / dt;
+                    p.VelocityX = 0.5 * p.VelocityX + 0.5 * vx;
+                    p.VelocityZ = 0.5 * p.VelocityZ + 0.5 * vz;
+                }
+                _lastPassPos[p.Id] = pos;
+            }
+        }
+
+        private static double WrapDelta(double d, double size)
+        {
+            d %= size;
+            if (d > size / 2) d -= size;
+            else if (d < -size / 2) d += size;
+            return d;
         }
 
         private static List<int> Ids(Lobby lobby)

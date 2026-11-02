@@ -11,6 +11,14 @@ namespace FriendlyPersonShooter.Core.Lobbies
         /// <summary>Zone the player is in right now.</summary>
         public ZoneCoord Zone { get; set; }
 
+        /// <summary>World position (metres), when the game knows it. Used to tell who is heading toward whom.</summary>
+        public double X { get; set; }
+        public double Z { get; set; }
+
+        /// <summary>Recent average velocity (metres per second) on the ground plane; zero when unknown or standing.</summary>
+        public double VelocityX { get; set; }
+        public double VelocityZ { get; set; }
+
         /// <summary>Group the player chose to join, or 0 for none. Group members always share a lobby.</summary>
         public int GroupId { get; set; }
 

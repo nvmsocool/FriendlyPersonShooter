@@ -26,13 +26,15 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public string Name;
     }
 
-    /// <summary>Builds the zone's solid geometry: hex fields, towers with spiral stairs, bridges, landmarks and props.</summary>
+    /// <summary>
+    /// Builds the zone's solid geometry as data (any thread): hex fields, towers with spiral stairs, bridges, landmarks
+    /// and props. The generator turns the builders into colliders and render meshes.
+    /// </summary>
     public sealed class PrismStructures
     {
         private readonly ZoneRequest _zone;
         private readonly PrismTerrain _t;
         private readonly PrismPalette _p;
-        private readonly Transform _root;
         public readonly MeshBuilder Solid = new MeshBuilder();
         public readonly MeshBuilder Crystal = new MeshBuilder();
         public readonly MeshBuilder Decor = new MeshBuilder();     // no collider (floating, out of reach)
@@ -42,12 +44,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public float BandH, BandOffset;
         public int Towers, Bridges, Slabs, Crystals;
 
-        public PrismStructures(ZoneRequest zone, PrismTerrain terrain, PrismPalette palette, Transform root)
+        public PrismStructures(ZoneRequest zone, PrismTerrain terrain, PrismPalette palette)
         {
             _zone = zone;
             _t = terrain;
             _p = palette;
-            _root = root;
             var r = ZoneRandom.For(zone.Seed, "bands");
             BandH = r.Range(1.6f, 3.2f);
             BandOffset = r.Range(0f, 10f);
@@ -114,12 +115,15 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         // ------------------------------------------------------------------ hex fields
 
-        public GameObject HexField(Material mat, List<Collider> plantable)
+        public const int HexChunks = 4;
+
+        /// <summary>The hex column field as 4 x 4 chunk builders (some may be empty).</summary>
+        public MeshBuilder[] HexField()
         {
             var g = _t.Hex;
             var rng = ZoneRandom.For(_zone.Seed, "hexcolor");
             var oC = ZoneNoise.Offset(_zone.Seed, 41);
-            const int chunks = 4;
+            const int chunks = HexChunks;
             var builders = new MeshBuilder[chunks * chunks];
             for (int i = 0; i < builders.Length; i++) builders[i] = new MeshBuilder();
             for (int i = 0; i < g.Count; i++)
@@ -145,15 +149,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 int ci = Mathf.Clamp((int)(c2.y / 62.5f), 0, 3) * chunks + Mathf.Clamp((int)(c2.x / 62.5f), 0, 3);
                 HexColumn(builders[ci], c, g.R, top, bottom, topCol, 63, Mathf.Min(0.14f, g.R * 0.1f), sideBottom);
             }
-            var root = new GameObject("Hex columns");
-            root.transform.SetParent(_root, false);
-            for (int i = 0; i < builders.Length; i++)
-            {
-                if (builders[i].VertexCount == 0) continue;
-                var go = builders[i].ToGameObject($"Hex {i}", root.transform, mat, collider: true);
-                plantable.Add(go.GetComponent<Collider>());
-            }
-            return root;
+            return builders;
         }
 
         // ------------------------------------------------------------------ towers
@@ -530,17 +526,6 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     break;
                 }
             }
-        }
-
-        public void Finish(Material solid, Material hex, Material crystal, Material decor, List<Collider> plantable)
-        {
-            var root = new GameObject("Structures");
-            root.transform.SetParent(_root, false);
-            if (Solid.VertexCount > 0) Solid.ToGameObject("Solid", root.transform, solid, collider: true);
-            if (Plantable.VertexCount > 0) plantable.Add(Plantable.ToGameObject("Tops", root.transform, hex, collider: true).GetComponent<Collider>());
-            if (Crystal.VertexCount > 0) Crystal.ToGameObject("Crystals", root.transform, crystal, collider: true);
-            if (Decor.VertexCount > 0) Decor.ToGameObject("Floating", root.transform, decor, collider: false);
-            if (DecorRock.VertexCount > 0) DecorRock.ToGameObject("Floating rock", root.transform, hex, collider: false);
         }
     }
 

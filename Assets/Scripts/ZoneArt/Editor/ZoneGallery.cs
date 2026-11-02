@@ -26,6 +26,11 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
     /// Batch mode (from a project not open in an Editor):
     ///   unity run &lt;project&gt; -- -executeMethod FriendlyPersonShooter.ZoneArt.EditorTools.ZoneGallery.RunFromCommandLine
     ///     -zoneGenerator &lt;name&gt; -zoneOut &lt;dir&gt; [-zoneCount 9] [-zoneSeed 1] [-zoneOnly 3] [-zoneWidth 1600] [-zoneHeight 900]
+    ///     [-zoneSeeds 2026,3,7] (several gallery seeds in one run, a sub-folder each) [-zoneInWorld] (build with InWorld = true)
+    ///     [-zoneNoRender] (walkability and timing only) [-zoneHeadlessCheck] (also build each zone headless, time it and
+    ///     compare its colliders with the full build)
+    /// Zones are built through <see cref="ZoneBuild.Steps"/>; the report gives the wall time, the main-thread time
+    /// (sum of all MoveNext calls) and the longest single MoveNext.
     /// In a live Editor: ZoneGallery.Run("name", "dir", 9, 1, -1).
     /// </summary>
     public static class ZoneGallery
@@ -56,6 +61,17 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             return list;
         }
 
+        /// <summary>Gallery options beyond generator, folder and seed.</summary>
+        public sealed class Options
+        {
+            public int Count = 9;
+            public int Only = -1;
+            public int Width = 1600, Height = 900;
+            public bool InWorld;
+            public bool NoRender;
+            public bool HeadlessCheck;
+        }
+
         public static void RunFromCommandLine()
         {
             int exit = 0;
@@ -67,14 +83,34 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
                     int i = Array.IndexOf(args, name);
                     return i >= 0 && i + 1 < args.Length ? args[i + 1] : fallback;
                 }
+                bool Flag(string name) => Array.IndexOf(args, name) >= 0;
                 string generator = Arg("-zoneGenerator", "sample");
                 string outDir = Arg("-zoneOut", Path.Combine("Temp", "ZoneGallery", generator));
-                int count = int.Parse(Arg("-zoneCount", "9"));
-                uint seed = uint.Parse(Arg("-zoneSeed", "1"));
-                int only = int.Parse(Arg("-zoneOnly", "-1"));
-                int width = int.Parse(Arg("-zoneWidth", "1600"));
-                int height = int.Parse(Arg("-zoneHeight", "900"));
-                Run(generator, outDir, count, seed, only, width, height);
+                var options = new Options
+                {
+                    Count = int.Parse(Arg("-zoneCount", "9")),
+                    Only = int.Parse(Arg("-zoneOnly", "-1")),
+                    Width = int.Parse(Arg("-zoneWidth", "1600")),
+                    Height = int.Parse(Arg("-zoneHeight", "900")),
+                    InWorld = Flag("-zoneInWorld"),
+                    NoRender = Flag("-zoneNoRender"),
+                    HeadlessCheck = Flag("-zoneHeadlessCheck"),
+                };
+                string seeds = Arg("-zoneSeeds", null);
+                if (string.IsNullOrEmpty(seeds))
+                {
+                    Run(generator, outDir, uint.Parse(Arg("-zoneSeed", "1")), options);
+                }
+                else
+                {
+                    var all = new StringBuilder();
+                    foreach (var part in seeds.Split(','))
+                    {
+                        uint seed = uint.Parse(part.Trim());
+                        all.AppendLine(Run(generator, Path.Combine(outDir, $"seed{seed}"), seed, options));
+                    }
+                    File.WriteAllText(Path.Combine(Path.GetFullPath(outDir), "report.md"), all.ToString());
+                }
             }
             catch (Exception e)
             {
@@ -84,16 +120,65 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             if (Application.isBatchMode) EditorApplication.Exit(exit);
         }
 
-        public static string Run(string generatorName, string outDir, int count = 9, uint seed = 1, int only = -1, int width = 1600, int height = 900)
+        public static string Run(string generatorName, string outDir, int count = 9, uint seed = 1, int only = -1, int width = 1600, int height = 900) =>
+            Run(generatorName, outDir, seed, new Options { Count = count, Only = only, Width = width, Height = height });
+
+        /// <summary>Wall time, main-thread time (sum of MoveNext calls), longest MoveNext and step count of one zone build.</summary>
+        public struct BuildTiming
+        {
+            public double Wall, MainMs, LongestMs;
+            public int Steps;
+            public override string ToString() => $"wall {Wall:0.00}s, main {MainMs:0}ms, longest step {LongestMs:0.0}ms, {Steps} steps";
+        }
+
+        /// <summary>Builds a zone through <see cref="ZoneBuild.Steps"/> right away (like <see cref="ZoneBuild.RunToEnd"/>), timing every step.</summary>
+        public static ZoneResult BuildTimed(IZoneGenerator generator, ZoneRequest zone, Transform parent, out BuildTiming timing)
+        {
+            var result = new ZoneResult();
+            var wall = Stopwatch.StartNew();
+            var step = new Stopwatch();
+            timing = default;
+            var stack = new Stack<System.Collections.IEnumerator>();
+            stack.Push(ZoneBuild.Steps(generator, zone, parent, result));
+            while (stack.Count > 0)
+            {
+                var top = stack.Peek();
+                step.Restart();
+                bool more = top.MoveNext();
+                step.Stop();
+                double ms = step.Elapsed.TotalMilliseconds;
+                timing.MainMs += ms;
+                timing.Steps++;
+                if (ms > timing.LongestMs) timing.LongestMs = ms;
+                if (!more)
+                {
+                    stack.Pop();
+                    continue;
+                }
+                if (top.Current is System.Collections.IEnumerator nested) stack.Push(nested);
+                else
+                {
+                    // A yield means "continue next frame": leave a short gap (not counted as main-thread time) so a
+                    // generator waiting on worker threads is polled like a game would poll it, not millions of times.
+                    var gap = Stopwatch.StartNew();
+                    while (gap.Elapsed.TotalMilliseconds < 0.25) { }
+                }
+            }
+            timing.Wall = wall.Elapsed.TotalSeconds;
+            return result;
+        }
+
+        public static string Run(string generatorName, string outDir, uint seed, Options options)
         {
             var generator = ZoneGenerators.Find(generatorName);
             outDir = Path.GetFullPath(outDir);
             Directory.CreateDirectory(outDir);
-            var zones = Zones(count, seed);
+            var zones = Zones(options.Count, seed);
             var report = new StringBuilder();
-            report.AppendLine($"# Zone gallery: {generator.Name} (seed {seed})\n");
-            report.AppendLine("| # | Zone | Build s | Triangles | Two-way walkable | Edges N/E/S/W | Height p10..p90 (span) | Multi-level | Anchors | Notes |");
-            report.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
+            string mode = (options.InWorld ? "in world" : "standalone") + (options.HeadlessCheck ? ", headless check" : "");
+            report.AppendLine($"# Zone gallery: {generator.Name} (seed {seed}, {mode})\n");
+            report.AppendLine("| # | Zone | Build s | Main ms | Longest step ms | Triangles | Two-way walkable | Edges N/E/S/W | Height p10..p90 (span) | Multi-level | Anchors | Headless s / main ms / longest ms | Notes |");
+            report.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
 
             var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
             float oldShadowDistance = urp != null ? urp.shadowDistance : 0f;
@@ -101,41 +186,72 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
 
             bool batch = Application.isBatchMode;
             var previousActive = SceneManager.GetActiveScene();
-            var shots = new List<(int index, string kind, Texture2D tex)>();
+            var shots = new List<(int index, string kind, Color32[] thumb)>();
             try
             {
                 for (int i = 0; i < zones.Count; i++)
                 {
-                    if (only >= 0 && i != only) continue;
+                    if (options.Only >= 0 && i != options.Only) continue;
                     var zone = zones[i];
+                    zone.InWorld = options.InWorld;
+                    zone.Headless = false;
                     var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, batch ? NewSceneMode.Single : NewSceneMode.Additive);
                     SceneManager.SetActiveScene(scene);
                     try
                     {
                         ZoneLook.Reset();
                         var holder = new GameObject("ZoneGallery");
-                        var sw = Stopwatch.StartNew();
-                        var result = generator.Build(zone, holder.transform);
-                        double buildSeconds = sw.Elapsed.TotalSeconds;
+                        var result = BuildTimed(generator, zone, holder.transform, out var timing);
                         if (RenderSettings.sun == null && UnityEngine.Object.FindAnyObjectByType<Light>() == null) ZoneLook.Sun(holder.transform, 45f, 30f, Color.white);
                         Physics.SyncTransforms();
 
                         var walk = Walkability.Analyze(zone);
                         long tris = CountTriangles(holder);
 
-                        var aerial = new ZoneView(zone.Origin + new Vector3(-45f, 150f, -45f), zone.Center + Vector3.up * 8f, 55f);
-                        var hero = result.HeroViews.Count > 0 ? result.HeroViews[0] : new ZoneView(zone.Center + new Vector3(-70f, 35f, -70f), zone.Center, 60f);
-                        var ground = GroundView(zone, walk, i, seed);
+                        if (!options.NoRender)
+                        {
+                            var aerial = new ZoneView(zone.Origin + new Vector3(-45f, 150f, -45f), zone.Center + Vector3.up * 8f, 55f);
+                            var hero = result.HeroViews.Count > 0 ? result.HeroViews[0] : new ZoneView(zone.Center + new Vector3(-70f, 35f, -70f), zone.Center, 60f);
+                            var ground = GroundView(zone, walk, i, seed);
 
-                        Save(shots, outDir, i, "aerial", Render(aerial, width, height));
-                        Save(shots, outDir, i, "hero", Render(hero, width, height));
-                        Save(shots, outDir, i, "ground", Render(ground, width, height));
+                            Save(shots, outDir, i, "aerial", Render(aerial, options.Width, options.Height));
+                            Save(shots, outDir, i, "hero", Render(hero, options.Width, options.Height));
+                            Save(shots, outDir, i, "ground", Render(ground, options.Width, options.Height));
+                        }
                         File.WriteAllBytes(Path.Combine(outDir, $"zone{i}_walk.png"), WalkMap(walk).EncodeToPNG());
+
+                        string headless = "";
+                        if (options.HeadlessCheck)
+                        {
+                            string full = ColliderFingerprint(holder, out int fullColliders);
+                            var hscene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, batch ? NewSceneMode.Single : NewSceneMode.Additive);
+                            SceneManager.SetActiveScene(hscene);
+                            try
+                            {
+                                ZoneLook.Reset();
+                                zone.Headless = true;
+                                var hholder = new GameObject("ZoneGallery headless");
+                                BuildTimed(generator, zone, hholder.transform, out var htiming);
+                                string hf = ColliderFingerprint(hholder, out int headlessColliders);
+                                bool same = hf == full;
+                                headless = $"{htiming.Wall:0.00} / {htiming.MainMs:0} / {htiming.LongestMs:0.0}, colliders {(same ? "match" : $"MISMATCH ({fullColliders} vs {headlessColliders})")}";
+                                Debug.Log($"[ZoneGallery] {generator.Name} zone {i} headless: {htiming}; colliders {(same ? "match" : "MISMATCH")} ({fullColliders} full, {headlessColliders} headless)");
+                            }
+                            finally
+                            {
+                                zone.Headless = false;
+                                if (!batch)
+                                {
+                                    if (previousActive.IsValid()) SceneManager.SetActiveScene(previousActive);
+                                    EditorSceneManager.CloseScene(hscene, true);
+                                }
+                            }
+                        }
 
                         string edges = $"{walk.EdgeReach[0] * 100f:0}/{walk.EdgeReach[1] * 100f:0}/{walk.EdgeReach[2] * 100f:0}/{walk.EdgeReach[3] * 100f:0}%";
                         string notes = (result.Notes ?? "").Replace("|", "/").Replace("\n", " ");
-                        report.AppendLine($"| {i} | {zone.Coord} {zone.Tile} | {buildSeconds:0.0} | {tris:N0} | {walk.TwoWayShare * 100f:0}% of {walk.Walkable:N0} m² | {edges} | {walk.P10:0}..{walk.P90:0} m ({walk.Verticality:0}) | {walk.MultiLevelShare * 100f:0}% | {walk.AnchorsReachable}/{walk.AnchorsTotal} | {notes} |");
-                        Debug.Log($"[ZoneGallery] {generator.Name} zone {i} {zone}: built in {buildSeconds:0.0}s, {tris:N0} tris; {walk}");
+                        report.AppendLine($"| {i} | {zone.Coord} {zone.Tile} | {timing.Wall:0.00} | {timing.MainMs:0} | {timing.LongestMs:0.0} | {tris:N0} | {walk.TwoWayShare * 100f:0}% of {walk.Walkable:N0} m² | {edges} | {walk.P10:0}..{walk.P90:0} m ({walk.Verticality:0}) | {walk.MultiLevelShare * 100f:0}% | {walk.AnchorsReachable}/{walk.AnchorsTotal}{(walk.UnreachableAnchors.Count > 0 ? " (missing " + string.Join(", ", walk.UnreachableAnchors) + ")" : "")} | {headless} | {notes} |");
+                        Debug.Log($"[ZoneGallery] {generator.Name} zone {i} {zone}: built {timing}, {tris:N0} tris; {walk}");
                     }
                     finally
                     {
@@ -156,6 +272,78 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             File.WriteAllText(Path.Combine(outDir, "report.md"), report.ToString());
             Debug.Log($"[ZoneGallery] wrote {outDir}\n{report}");
             return report.ToString();
+        }
+
+        /// <summary>
+        /// A digest of every collider under <paramref name="root"/> in world space (type, state, shape data), independent
+        /// of hierarchy order and object names, so a headless build can be compared with a full one.
+        /// </summary>
+        public static string ColliderFingerprint(GameObject root, out int count)
+        {
+            var parts = new List<string>();
+            foreach (var c in root.GetComponentsInChildren<Collider>(true))
+            {
+                var sb = new StringBuilder();
+                var tr = c.transform;
+                sb.Append(c.GetType().Name).Append(c.enabled && c.gameObject.activeInHierarchy ? "+" : "-").Append(c.isTrigger ? "T" : "").Append(c.gameObject.layer).Append(':');
+                ulong h = 1469598103934665603UL;
+                void Mix(float f)
+                {
+                    unchecked
+                    {
+                        h ^= (uint)BitConverter.SingleToInt32Bits(f);
+                        h *= 1099511628211UL;
+                    }
+                }
+                void MixV(Vector3 v)
+                {
+                    Mix(v.x);
+                    Mix(v.y);
+                    Mix(v.z);
+                }
+                var m = tr.localToWorldMatrix;
+                switch (c)
+                {
+                    case MeshCollider mc:
+                    {
+                        var mesh = mc.sharedMesh;
+                        sb.Append(mc.convex ? "convex " : "").Append((int)mc.cookingOptions).Append(' ');
+                        if (mesh == null) break;
+                        var verts = mesh.vertices;
+                        var tris = mesh.triangles;
+                        sb.Append(verts.Length).Append('/').Append(tris.Length / 3).Append(' ');
+                        foreach (var v in verts) MixV(m.MultiplyPoint3x4(v));
+                        foreach (int t in tris) Mix(t);
+                        break;
+                    }
+                    case BoxCollider bc:
+                        MixV(m.MultiplyPoint3x4(bc.center));
+                        MixV(Vector3.Scale(bc.size, tr.lossyScale));
+                        MixV(tr.rotation.eulerAngles);
+                        break;
+                    case SphereCollider scol:
+                        MixV(m.MultiplyPoint3x4(scol.center));
+                        Mix(scol.radius * tr.lossyScale.x);
+                        break;
+                    case CapsuleCollider cc:
+                        MixV(m.MultiplyPoint3x4(cc.center));
+                        Mix(cc.radius);
+                        Mix(cc.height);
+                        Mix(cc.direction);
+                        MixV(tr.lossyScale);
+                        MixV(tr.rotation.eulerAngles);
+                        break;
+                    default:
+                        MixV(c.bounds.min);
+                        MixV(c.bounds.max);
+                        break;
+                }
+                sb.Append(h.ToString("x16"));
+                parts.Add(sb.ToString());
+            }
+            parts.Sort(StringComparer.Ordinal);
+            count = parts.Count;
+            return string.Join("\n", parts);
         }
 
         /// <summary>Builds one gallery zone into a new scene in the open Editor so you can fly around it.</summary>
@@ -249,10 +437,15 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             }
         }
 
-        private static void Save(List<(int, string, Texture2D)> shots, string dir, int index, string kind, Texture2D tex)
+        // Contact-sheet tiles are kept as CPU thumbnails: in batch mode every NewScene(Single) unloads unused assets,
+        // which destroyed the earlier zones' textures before the sheets were made (tiles came out repeated or scrambled).
+        private const int ThumbW = 640, ThumbH = 360;
+
+        private static void Save(List<(int, string, Color32[])> shots, string dir, int index, string kind, Texture2D tex)
         {
             File.WriteAllBytes(Path.Combine(dir, $"zone{index}_{kind}.png"), tex.EncodeToPNG());
-            shots.Add((index, kind, tex));
+            shots.Add((index, kind, Downscale(tex, ThumbW, ThumbH)));
+            UnityEngine.Object.DestroyImmediate(tex);
         }
 
         private static Texture2D WalkMap(Walkability.Report walk)
@@ -275,39 +468,56 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
         }
 
         /// <summary>A 3-wide contact sheet of one kind of shot.</summary>
-        private static void Sheet(List<(int index, string kind, Texture2D tex)> shots, string kind, string dir)
+        private static void Sheet(List<(int index, string kind, Color32[] thumb)> shots, string kind, string dir)
         {
             var list = shots.FindAll(s => s.kind == kind);
             if (list.Count == 0) return;
-            const int tw = 640, th = 360, cols = 3;
+            const int tw = ThumbW, th = ThumbH, cols = 3;
             int rows = (list.Count + cols - 1) / cols;
             var sheet = new Texture2D(tw * cols, th * rows, TextureFormat.RGB24, false);
             var fill = new Color32[sheet.width * sheet.height];
             for (int i = 0; i < fill.Length; i++) fill[i] = new Color32(16, 16, 20, 255);
-            sheet.SetPixels32(fill);
             for (int k = 0; k < list.Count; k++)
             {
-                var small = Scale(list[k].tex, tw, th);
+                var small = list[k].thumb;
                 int cx = k % cols, cy = rows - 1 - k / cols;
-                sheet.SetPixels(cx * tw, cy * th, tw, th, small.GetPixels());
-                UnityEngine.Object.DestroyImmediate(small);
+                for (int y = 0; y < th; y++) Array.Copy(small, y * tw, fill, (cy * th + y) * sheet.width + cx * tw, tw);
             }
+            sheet.SetPixels32(fill);
             sheet.Apply();
             File.WriteAllBytes(Path.Combine(dir, $"sheet_{kind}.png"), sheet.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(sheet);
         }
 
-        private static Texture2D Scale(Texture2D src, int w, int h)
+        /// <summary>Box-filtered downscale (rows bottom-up, like Texture2D pixels).</summary>
+        private static Color32[] Downscale(Texture2D src, int w, int h)
         {
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            Graphics.Blit(src, rt);
-            var prev = RenderTexture.active;
-            RenderTexture.active = rt;
-            var t = new Texture2D(w, h, TextureFormat.RGB24, false);
-            t.ReadPixels(new Rect(0, 0, w, h), 0, 0);
-            t.Apply();
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            return t;
+            var px = src.GetPixels32();
+            int sw = src.width, sh = src.height;
+            var dst = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+            {
+                int y0 = y * sh / h, y1 = Mathf.Max(y0 + 1, (y + 1) * sh / h);
+                for (int x = 0; x < w; x++)
+                {
+                    int x0 = x * sw / w, x1 = Mathf.Max(x0 + 1, (x + 1) * sw / w);
+                    int r = 0, g = 0, b = 0, n = 0;
+                    for (int yy = y0; yy < y1; yy++)
+                    {
+                        int row = yy * sw;
+                        for (int xx = x0; xx < x1; xx++)
+                        {
+                            var c = px[row + xx];
+                            r += c.r;
+                            g += c.g;
+                            b += c.b;
+                            n++;
+                        }
+                    }
+                    dst[y * w + x] = new Color32((byte)(r / n), (byte)(g / n), (byte)(b / n), 255);
+                }
+            }
+            return dst;
         }
     }
 }

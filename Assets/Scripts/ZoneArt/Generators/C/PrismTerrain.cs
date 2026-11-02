@@ -485,7 +485,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             StrandedShare = stranded / (float)total;
         }
 
-        private bool FindRamp(List<int> boundary, int comp, int main, HashSet<int> merged, out int from, out int to)
+        private bool FindRamp(List<int> boundary, int comp, int main, HashSet<int> merged, out int from, out int to, bool fromPad = false)
         {
             from = to = -1;
             if (boundary.Count == 0) return false;
@@ -500,6 +500,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 int s = boundary[si * stride];
                 int sx = s % C, sz = s / C;
+                int home = fromPad ? ProtectorOf(sx + 0.5f, sz + 0.5f) : -1;
                 float hs = S[s];
                 int best = int.MaxValue, bq = -1;
                 for (int d = 0; d < 32; d++)
@@ -511,12 +512,12 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         if (t >= best) break;
                         int qx = Mathf.RoundToInt(sx + dx * t), qz = Mathf.RoundToInt(sz + dz * t);
                         if (qx < 1 || qz < 1 || qx >= C - 1 || qz >= C - 1) break;
-                        if (t > 3 && Protected(qx + 0.5f, qz + 0.5f)) break;
+                        if (t > 3 && (home < 0 ? Protected(qx + 0.5f, qz + 0.5f) : ProtectedOther(qx + 0.5f, qz + 0.5f, home))) break;
                         int q = qz * C + qx;
                         int cq = Comp[q];
                         if (cq == main || merged.Contains(cq))
                         {
-                            if (Mathf.Abs(S[q] - hs) <= g * t && !CutsTrench(sx, sz, dx, dz, t, hs, S[q]))
+                            if (Mathf.Abs(S[q] - hs) <= g * t && (fromPad || !CutsTrench(sx, sz, dx, dz, t, hs, S[q])))
                             {
                                 best = t;
                                 bq = q;
@@ -545,6 +546,24 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 int qx = Mathf.RoundToInt(sx + dx * i), qz = Mathf.RoundToInt(sz + dz * i);
                 float line = Mathf.Lerp(h0, h1, i / (float)t);
                 if (S[qz * C + qx] > line + 1.6f) return true;
+            }
+            return false;
+        }
+
+        private int ProtectorOf(float x, float z)
+        {
+            for (int i = 0; i < _protect.Count; i++)
+            {
+                if ((new Vector2(x, z) - _protect[i].c).sqrMagnitude < _protect[i].r * _protect[i].r) return i;
+            }
+            return -1;
+        }
+
+        private bool ProtectedOther(float x, float z, int home)
+        {
+            for (int i = 0; i < _protect.Count; i++)
+            {
+                if (i != home && (new Vector2(x, z) - _protect[i].c).sqrMagnitude < _protect[i].r * _protect[i].r) return true;
             }
             return false;
         }
@@ -597,9 +616,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         /// <summary>
         /// Second opinion from the real walk analysis: cells that are standable but not two-way get ramps
-        /// carved to two-way ground, exactly like the model-based pass. Returns the number of ramps carved.
+        /// carved to two-way ground, exactly like the model-based pass. Ground around <paramref name="anchors"/>
+        /// (local positions of anchors players can't reach) is repaired first whatever its size, and may ramp out of its
+        /// own pad. Returns the number of ramps carved.
         /// </summary>
-        public int RepairFromWalk(byte[] map, Shape s, float hexThreshold, int minSize = 6)
+        public int RepairFromWalk(byte[] map, Shape s, float hexThreshold, int minSize = 6, List<Vector2> anchors = null)
         {
             int main = MainComp;
             const int baseId = 1000000;
@@ -630,9 +651,31 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 }
                 sizes.Add(size);
             }
+            var forced = new HashSet<int>();
+            if (anchors != null)
+            {
+                foreach (var a in anchors)
+                {
+                    int ax = Mathf.Clamp(Mathf.FloorToInt(a.x), 0, C - 1), az = Mathf.Clamp(Mathf.FloorToInt(a.y), 0, C - 1);
+                    for (int dz = -3; dz <= 3; dz++)
+                    {
+                        for (int dx = -3; dx <= 3; dx++)
+                        {
+                            int x = ax + dx, z = az + dz;
+                            if (x >= 0 && z >= 0 && x < C && z < C && Comp[z * C + x] >= baseId) forced.Add(Comp[z * C + x]);
+                        }
+                    }
+                }
+            }
             var order = new List<int>();
-            for (int i = 0; i < sizes.Count; i++) if (sizes[i] >= minSize) order.Add(baseId + i);
-            order.Sort((a, b) => sizes[b - baseId].CompareTo(sizes[a - baseId]));
+            for (int i = 0; i < sizes.Count; i++) if (sizes[i] >= minSize || forced.Contains(baseId + i)) order.Add(baseId + i);
+            order.Sort((a, b) =>
+            {
+                bool fa = forced.Contains(a), fb = forced.Contains(b);
+                if (fa != fb) return fa ? -1 : 1;
+                int bySize = sizes[b - baseId].CompareTo(sizes[a - baseId]);
+                return bySize != 0 ? bySize : a.CompareTo(b);
+            });
             var bounds = new Dictionary<int, List<int>>();
             foreach (int c in order) bounds[c] = new List<int>();
             for (int k = 0; k < C * C; k++)
@@ -651,7 +694,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             foreach (int c in order)
             {
                 if (carved > 60) break;
-                if (FindRamp(bounds[c], c, main, merged, out int from, out int to))
+                if (FindRamp(bounds[c], c, main, merged, out int from, out int to, forced.Contains(c)))
                 {
                     Carve(from, to);
                     carved++;

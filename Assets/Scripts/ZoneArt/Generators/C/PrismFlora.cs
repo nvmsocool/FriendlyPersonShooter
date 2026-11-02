@@ -667,6 +667,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             public System.Func<Vector3, Color> GroundColor;
             public float LowY, HighY;
             public bool[] Occupied; // 1 m grid, trunks
+            public bool[] NoTrees;  // 1 m grid where no trunk may stand (optional)
             public Vector2 HeroEye, HeroTarget; // keep the hero sight line clear of trees
             public float[] Budget = { 480000f, 330000f, 300000f, 600000f, 60000f };
             /// <summary>False on a headless build: placements and trunk colliders only, no plant meshes.</summary>
@@ -827,6 +828,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 int ox = Mathf.Clamp((int)lx, 0, 249), oz = Mathf.Clamp((int)lz, 0, 249);
                 if (sp.Layer == Layer.Tree)
                 {
+                    if (ctx.NoTrees != null && ctx.NoTrees[oz * 250 + ox]) continue;
                     if (NearOccupied(ctx, ox, oz, 2)) continue;
                     ctx.Occupied[oz * 250 + ox] = true;
                 }

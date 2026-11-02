@@ -194,7 +194,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             _result.HeroViews.Add(_hero);
             Mark("look");
-            _result.Notes = $"{_pal.Mood}; links {_linksBuilt}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
+            _result.Notes = $"{_pal.Mood}; ground repairs {_groundRepairs} (ground walk {_groundWalk}); props removed {_propsRemoved}; links {_linksBuilt}; final walk {_finalWalk}; tree retries {_treeRetries}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
         }
 
         private Dictionary<string, Material> CreateMaterials()
@@ -376,13 +376,57 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private void Ground()
         {
             _st = new PrismStructures(_zone, _t, _pal);
+            // Check the built ground (terrain and hex columns, exactly as they will collide) the way players walk it,
+            // and carve extra ramps wherever it disagrees with the ramp model. Cheap on the CPU copy, so a few passes fit.
+            for (int pass = 0; pass < GroundRepairPasses; pass++)
+            {
+                var cols = GroundColliders();
+                var world = new PrismCollision(_o);
+                foreach (var c in cols) c.AddTo(world);
+                world.Build();
+                var walk = PrismWalk.Analyze(_zone, world);
+                _groundWalk = walk;
+                if (walk.TwoWayShare > 0.985f && walk.UnreachableAnchors.Count == 0) break;
+                int carved = _t.RepairFromWalk(walk.Map, _shape, _thr, RepairMinCells, walk.UnreachableAnchors.ConvertAll(ai => L(_zone.Anchors[ai].World)));
+                _groundRepairs += carved;
+                if (carved == 0) break;
+            }
+            _colliders.AddRange(GroundColliders());
+        }
+
+        private const int GroundRepairPasses = 3;
+        private const int RepairMinCells = 25;
+        private int _groundRepairs;
+        private int _propsRemoved, _treeRetries;
+        private PrismWalk _finalWalk;
+
+        /// <summary>A removable prop: where it stands and which Solid/Crystal triangles are its own.</summary>
+        private struct Prop
+        {
+            public Vector2 Local;
+            public float Radius;
+            public int Solid0, Solid1, Crystal0, Crystal1;
+        }
+        private readonly List<Prop> _props = new List<Prop>();
+        private int _structStart = -1, _structCount;
+
+        private void AddProp(Vector2 local, float radius, int solid0, int crystal0)
+        {
+            _props.Add(new Prop { Local = local, Radius = radius, Solid0 = solid0, Solid1 = _st.Solid.Triangles.Count, Crystal0 = crystal0, Crystal1 = _st.Crystal.Triangles.Count });
+        }
+        private PrismWalk _groundWalk;
+
+        private List<PrismCollider> GroundColliders()
+        {
+            var list = new List<PrismCollider>();
             var terrain = new PrismCollider[25];
             Parallel.For(0, 25, i => terrain[i] = _t.ChunkCollider(i % 5 * PrismTerrain.Chunk, i / 5 * PrismTerrain.Chunk));
-            _colliders.AddRange(terrain);
+            list.AddRange(terrain);
             _hexChunks = _st.HexField();
             var hex = new PrismCollider[_hexChunks.Length];
             Parallel.For(0, hex.Length, i => hex[i] = _hexChunks[i].VertexCount > 0 ? PrismCollider.FromBuilder($"Hex {i}", _hexChunks[i], PrismCollision.TagGround) : null);
-            foreach (var h in hex) if (h != null) _colliders.Add(h);
+            foreach (var h in hex) if (h != null) list.Add(h);
+            return list;
         }
 
         /// <summary>Towers, bridges, landmarks and props (one random stream, in a fixed order).</summary>
@@ -454,7 +498,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     if (Mathf.Abs(t.SurfaceAt(q.x, q.y) - h) > 1.2f || t.RampAt(q.x, q.y) > 0.05f) flat = false;
                 }
                 if (!flat) continue;
+                int s0 = st.Solid.Triangles.Count, c0 = st.Crystal.Triangles.Count;
                 st.Slab(p, h, ref srng);
+                AddProp(p, 7f, s0, c0);
                 i++;
             }
             int clusters = zone.Tile switch { TileKind.Crater => srng.Range(14, 20), TileKind.Canyon => srng.Range(6, 10), _ => srng.Range(4, 9) };
@@ -471,7 +517,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (near) continue;
                 float y = t.SurfaceAt(p.x, p.y);
                 float size = zone.Tile == TileKind.Crater ? srng.Range(1.2f, 3.6f) : srng.Range(0.8f, 2.4f);
+                int k0 = st.Crystal.Triangles.Count;
                 st.CrystalCluster(new Vector3(o.x + p.x, y, o.z + p.y), size, srng.Range(3, 8), ref srng);
+                AddProp(p, size * 1.2f, st.Solid.Triangles.Count, k0);
                 i++;
             }
             int boulders = srng.Range(15, 35);
@@ -479,7 +527,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 var p = new Vector2(srng.Range(20f, 230f), srng.Range(20f, 230f));
                 if (!OpenGround(p, 6f)) continue;
-                st.Boulder(new Vector3(o.x + p.x, t.HeightAt(p.x, p.y), o.z + p.y), srng.Range(0.7f, 2.4f), ref srng);
+                int b0 = st.Solid.Triangles.Count;
+                float bs = srng.Range(0.7f, 2.4f);
+                st.Boulder(new Vector3(o.x + p.x, t.HeightAt(p.x, p.y), o.z + p.y), bs, ref srng);
+                AddProp(p, bs * 1.3f, b0, st.Crystal.Triangles.Count);
                 i++;
             }
             int isles = zone.Tile == TileKind.Tower || zone.Tile == TileKind.Crater ? srng.Range(4, 7) : srng.Range(2, 5);
@@ -506,6 +557,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 });
             }
 
+            StructureColliders();
+        }
+
+        /// <summary>(Re)makes the Solid, Tops and Crystals colliders, always in the same place in the collider list.</summary>
+        private void StructureColliders()
+        {
+            var st = _st;
             var parts = new (MeshBuilder mb, string name, int tag)[]
             {
                 (st.Solid, "Solid", PrismCollision.TagSolid),
@@ -513,8 +571,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 (st.Crystal, "Crystals", PrismCollision.TagCrystal),
             };
             var cols = new PrismCollider[parts.Length];
-            Parallel.For(0, parts.Length, i => cols[i] = parts[i].mb.VertexCount > 0 ? PrismCollider.FromBuilder(parts[i].name, parts[i].mb, parts[i].tag) : null);
-            foreach (var c in cols) if (c != null) _colliders.Add(c);
+            Parallel.For(0, parts.Length, i => cols[i] = parts[i].mb.Triangles.Count > 0 ? PrismCollider.FromBuilder(parts[i].name, parts[i].mb, parts[i].tag) : null);
+            var list = new List<PrismCollider>();
+            foreach (var c in cols) if (c != null) list.Add(c);
+            if (_structStart < 0) _structStart = _colliders.Count;
+            else _colliders.RemoveRange(_structStart, _structCount);
+            _colliders.InsertRange(_structStart, list);
+            _structCount = list.Count;
         }
 
         private void BuildWorld()
@@ -528,6 +591,14 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private void Repair()
         {
             _walk = PrismWalk.Analyze(_zone, _world);
+            // Props must never cut off ground the bare terrain connects: take out the ones standing where it got worse.
+            for (int pass = 0; pass < 2 && Regressed(_groundWalk, _walk); pass++)
+            {
+                if (!PruneProps(_groundWalk, _walk)) break;
+                StructureColliders();
+                BuildWorld();
+                _walk = PrismWalk.Analyze(_zone, _world);
+            }
             if (_walk.UnreachableAnchors.Count > 0)
             {
                 var lrng = ZoneRandom.For(_zone.Seed, "links");
@@ -545,6 +616,134 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     _walk = PrismWalk.Analyze(_zone, _world);
                 }
             }
+        }
+
+        /// <summary>True when <paramref name="after"/> lost ground or anchors that <paramref name="before"/> could reach.</summary>
+        private static bool Regressed(PrismWalk before, PrismWalk after)
+        {
+            if (after.TwoWayShare < before.TwoWayShare - 0.01f) return true;
+            foreach (int ai in after.UnreachableAnchors) if (!before.UnreachableAnchors.Contains(ai)) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Where something new cut the way off: cells two-way in <paramref name="before"/> but only one-way in
+        /// <paramref name="after"/>, in patches big enough to matter, next to ground that is still two-way (plus newly
+        /// lost anchors). Returns the 1 m grid within <paramref name="pad"/> cells of those places.
+        /// </summary>
+        private bool[] LostFrontier(PrismWalk before, PrismWalk after, int pad)
+        {
+            const int N = 250, MinPatch = 30;
+            var lost = new sbyte[N * N];
+            for (int k = 0; k < N * N; k++) lost[k] = (sbyte)(before.Map[k] == 2 && after.Map[k] == 1 ? -1 : 0);
+            var front = new bool[N * N];
+            void Mark(int x, int z)
+            {
+                for (int dz = -pad; dz <= pad; dz++)
+                {
+                    for (int dx = -pad; dx <= pad; dx++)
+                    {
+                        int xx = x + dx, zz = z + dz;
+                        if (xx >= 0 && zz >= 0 && xx < N && zz < N && dx * dx + dz * dz <= pad * pad) front[zz * N + xx] = true;
+                    }
+                }
+            }
+            bool NearTwoWay(int x, int z)
+            {
+                for (int dz = -2; dz <= 2; dz++)
+                {
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        int xx = x + dx, zz = z + dz;
+                        if (xx >= 0 && zz >= 0 && xx < N && zz < N && after.Map[zz * N + xx] == 2) return true;
+                    }
+                }
+                return false;
+            }
+            var stack = new Stack<int>();
+            var cells = new List<int>();
+            for (int k = 0; k < N * N; k++)
+            {
+                if (lost[k] != -1) continue;
+                cells.Clear();
+                lost[k] = 1;
+                stack.Push(k);
+                while (stack.Count > 0)
+                {
+                    int cur = stack.Pop();
+                    cells.Add(cur);
+                    int x = cur % N, z = cur / N;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), nz = z + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                        if (nx < 0 || nz < 0 || nx >= N || nz >= N || lost[nz * N + nx] != -1) continue;
+                        lost[nz * N + nx] = 1;
+                        stack.Push(nz * N + nx);
+                    }
+                }
+                if (cells.Count < MinPatch) continue;
+                foreach (int c in cells) if (NearTwoWay(c % N, c / N)) Mark(c % N, c / N);
+            }
+            foreach (int ai in after.UnreachableAnchors)
+            {
+                if (before.UnreachableAnchors.Contains(ai)) continue;
+                var p = L(_zone.Anchors[ai].World);
+                int ax = Mathf.Clamp((int)p.x, 0, N - 1), az = Mathf.Clamp((int)p.y, 0, N - 1);
+                for (int dz = -3; dz <= 3; dz++)
+                {
+                    for (int dx = -3; dx <= 3; dx++) Mark(Mathf.Clamp(ax + dx, 0, N - 1), Mathf.Clamp(az + dz, 0, N - 1));
+                }
+            }
+            return front;
+        }
+
+        /// <summary>Takes out the props standing where the walk regressed. Returns false when there were none.</summary>
+        private bool PruneProps(PrismWalk before, PrismWalk after)
+        {
+            var front = LostFrontier(before, after, 3);
+            var doomed = new List<int>();
+            for (int i = 0; i < _props.Count; i++)
+            {
+                var pr = _props[i];
+                int r = Mathf.CeilToInt(pr.Radius);
+                bool hit = false;
+                for (int dz = -r; dz <= r && !hit; dz++)
+                {
+                    for (int dx = -r; dx <= r && !hit; dx++)
+                    {
+                        int x = (int)pr.Local.x + dx, z = (int)pr.Local.y + dz;
+                        if (x >= 0 && z >= 0 && x < 250 && z < 250 && dx * dx + dz * dz <= r * r) hit = front[z * 250 + x];
+                    }
+                }
+                if (hit) doomed.Add(i);
+            }
+            if (doomed.Count == 0) return false;
+            // Props were added in order, so their triangle ranges ascend: cut from the back and shift the rest.
+            var keep = new List<Prop>();
+            int ds = 0, dc = 0;
+            for (int i = 0, d = 0; i < _props.Count; i++)
+            {
+                var pr = _props[i];
+                if (d < doomed.Count && doomed[d] == i)
+                {
+                    d++;
+                    ds += pr.Solid1 - pr.Solid0;
+                    dc += pr.Crystal1 - pr.Crystal0;
+                    continue;
+                }
+                pr.Solid0 -= ds; pr.Solid1 -= ds; pr.Crystal0 -= dc; pr.Crystal1 -= dc;
+                keep.Add(pr);
+            }
+            for (int d = doomed.Count - 1; d >= 0; d--)
+            {
+                var pr = _props[doomed[d]];
+                _st.Solid.Triangles.RemoveRange(pr.Solid0, pr.Solid1 - pr.Solid0);
+                _st.Crystal.Triangles.RemoveRange(pr.Crystal0, pr.Crystal1 - pr.Crystal0);
+            }
+            _props.Clear();
+            _props.AddRange(keep);
+            _propsRemoved += doomed.Count;
+            return true;
         }
 
         private bool BuildLink(Vector2 anchor, float startR, byte[] map, MeshBuilder mb, ref ZoneRandom lr)
@@ -711,17 +910,44 @@ namespace FriendlyPersonShooter.ZoneArt.C
             _oPatch = ZoneNoise.Offset(_zone.Seed, 51);
             _oPatch2 = ZoneNoise.Offset(_zone.Seed, 52);
             _oPatch3 = ZoneNoise.Offset(_zone.Seed, 53);
-            var ctx = new PrismFlora.Context
+            var bare = _world;
+            bool[] noTrees = null;
+            _finalWalk = _walk;
+            for (int attempt = 0; ; attempt++)
             {
-                Zone = _zone, Terrain = _t, Palette = _pal, World = _world,
-                GroundColor = GrassAt, LowY = heights[heights.Count / 20], HighY = heights[heights.Count * 19 / 20] + 0.01f,
-                Occupied = new bool[250 * 250],
-                HeroEye = new Vector2(_hero.Position.x, _hero.Position.z), HeroTarget = new Vector2(_hero.LookAt.x, _hero.LookAt.z),
-                Render = !_headless,
-            };
-            _flora = PrismFlora.Plant(ctx, _species);
-            if (_flora.Trunks.VertexCount > 0) _colliders.Add(PrismCollider.FromBuilder("Trunks", _flora.Trunks, PrismCollision.TagTrunk));
+                var ctx = new PrismFlora.Context
+                {
+                    Zone = _zone, Terrain = _t, Palette = _pal, World = bare,
+                    GroundColor = GrassAt, LowY = heights[heights.Count / 20], HighY = heights[heights.Count * 19 / 20] + 0.01f,
+                    Occupied = new bool[250 * 250], NoTrees = noTrees,
+                    HeroEye = new Vector2(_hero.Position.x, _hero.Position.z), HeroTarget = new Vector2(_hero.LookAt.x, _hero.LookAt.z),
+                    Render = !_headless,
+                };
+                _flora = PrismFlora.Plant(ctx, _species);
+                if (_flora.Trunks.VertexCount == 0) break;
+                var trunks = PrismCollider.FromBuilder("Trunks", _flora.Trunks, PrismCollision.TagTrunk);
+                var world = new PrismCollision(_o);
+                foreach (var c in _colliders) c.AddTo(world);
+                trunks.AddTo(world);
+                world.Build();
+                var walk = PrismWalk.Analyze(_zone, world);
+                // Trunks must not close a path the ground and structures leave open: plant again around the places they did.
+                if (attempt < TreeRetries && Regressed(_walk, walk))
+                {
+                    var front = LostFrontier(_walk, walk, 4);
+                    if (noTrees == null) noTrees = front;
+                    else for (int k = 0; k < front.Length; k++) noTrees[k] |= front[k];
+                    _treeRetries++;
+                    continue;
+                }
+                _colliders.Add(trunks);
+                _world = world;
+                _finalWalk = walk;
+                break;
+            }
         }
+
+        private const int TreeRetries = 2;
 
         // ------------------------------------------------------------------ render data (full builds only)
 

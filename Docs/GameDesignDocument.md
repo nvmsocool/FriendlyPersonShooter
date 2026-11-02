@@ -397,4 +397,21 @@ Tackle the riskiest part first: networking and lobby matchmaking, proven with te
 6. **First raid.** One raid door for 4–8 players with a multi-color key.
     - Pass if: groups of strangers can clear it with quick-chat only.
 
+### Prototype status (November 2026)
+
+Steps 1–4 are built and pass their bot-only checks. Each step still needs its human playtest.
+
+| Step | Built | Measured with bots |
+| --- | --- | --- |
+| 1. Networking and matchmaking | Netcode for Entities (chosen), many lobbies per server process, lobby map, realistic bot population (daily curve, sessions, parties, drops, Grouper and Chaos profiles), pop-in and encounter metrics, approach-aware matchmaker | 150 bots + 20 on a laggy link over one game day: 0 merge pop-ins, 0 party splits, 21% of merges meet within 30 s (average 13 s), about 4.5 zone copies per player, 60 fps server |
+| 2. Shooting feel | Arena with Wisps, Skitters and a Mite swarm; Vigor and Might; lag-compensated hitscan; bot allies that strafe and jump | Healing matters: with no healer bots go down 4 times in 90 s |
+| 3. Chains and revives | Haste and Relay, chains with the bonus, Plague and Blitz combos, soul-fragment revive, Medic bot | Bots cash 2-link chains, form combos and revive downed allies (8 fragment hits in about 20 s), also on a 150 ms link |
+| 4. First layer and gate | Expedition mode: generated wrapping 4x4 layer of 250 m zones, landmarks, shrines, seeded spawns and blooms, essence, caches, one 40-Yellow gate, objective HUD with a light beam | A Might bot hunted 40 Yellow, banked it and passed the gate in 14:21; a Haste bot that mostly buffed earned only 9 |
+
+**Open questions from the prototype**
+
+- Support players earn little essence, because drops go only to players who hit the enemy. Should buffing the killer count as a hit for drops?
+- Under 150 ms of latency, bots land about half as many hits on moving targets. Lag compensation lines up, so this comes from jittery interpolation. Humans should test whether it feels fair.
+- Zones are 250 m in the MVP (about 1 minute to cross), not the doc's 3–5 minutes, so a 20-minute run can reach the gate.
+
 **Out of MVP:** weekly reseeds and grid resizing, layers 2 and 3, all six families, the full mod pool, mastery badges, voice chat.

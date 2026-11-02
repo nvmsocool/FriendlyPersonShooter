@@ -32,18 +32,25 @@ namespace FriendlyPersonShooter.Net
             {
                 CreateServerWorld("ServerWorld");
             }
-            if (mode == NetMode.All || mode == NetMode.Client)
-            {
-                CreateClientWorld("ClientWorld");
-            }
             if (mode == NetMode.All || mode == NetMode.Bots)
             {
+                // Bots connect when their simulated player logs on, not when their world is created.
+                // They're created before the human client, or they would copy its connection.
+                ushort port = AutoConnectPort;
+                AutoConnectPort = 0;
+                BotDirector.Create(NetTestSettings.BotCount);
                 for (int i = 0; i < NetTestSettings.BotCount; i++)
                 {
                     var bot = CreateThinClientWorld();
                     // Bots never load scenes; drop the idle background loading worlds each one gets.
                     bot.GetExistingSystemManaged<SceneSectionStreamingSystem>().ConcurrentSectionStreamCount = 0;
+                    bot.EntityManager.CreateSingleton(new BotSeat { Index = i });
                 }
+                AutoConnectPort = port;
+            }
+            if (mode == NetMode.All || mode == NetMode.Client)
+            {
+                CreateClientWorld("ClientWorld");
             }
 
             // A plain world for anything that isn't networked.

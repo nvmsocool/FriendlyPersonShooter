@@ -31,6 +31,16 @@ namespace FriendlyPersonShooter.Net
             if (Application.isBatchMode) Application.targetFrameRate = 60;
         }
 
+        /// <summary>A bot whose simulated player is logged off isn't stuck.</summary>
+        private static bool IsOfflineByChoice(World world)
+        {
+            var pop = BotDirector.Population;
+            if (pop == null) return false;
+            using var seat = world.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<BotSeat>());
+            if (seat.CalculateEntityCount() != 1) return false;
+            return !pop.Accounts[seat.GetSingleton<BotSeat>().Index].WantsOnline;
+        }
+
         private void Update()
         {
             _frames++;
@@ -50,6 +60,7 @@ namespace FriendlyPersonShooter.Net
                     botsInGame++;
                     continue;
                 }
+                if (IsOfflineByChoice(world)) continue;
                 // Record where bots that aren't in the game yet are stuck.
                 using var conn = world.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<NetworkStreamConnection>());
                 string state = "no-connection";
@@ -65,7 +76,7 @@ namespace FriendlyPersonShooter.Net
 
             long memoryMb = Profiler.GetTotalReservedMemoryLong() / (1024 * 1024);
             Debug.Log($"[Perf] mode={NetTestSettings.Mode} fps={_frames / elapsed:0.0} worstFrame={_worstFrame * 1000f:0}ms " +
-                      $"memory={memoryMb}MB bots={botsInGame}/{botWorlds}" +
+                      $"memory={memoryMb}MB botsInGame={botsInGame}/{botWorlds}" +
                       (stuck.Length > 0 ? $" waiting:{stuck}" : ""));
 
             _frames = 0;

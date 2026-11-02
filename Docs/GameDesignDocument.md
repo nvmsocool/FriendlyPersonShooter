@@ -357,6 +357,14 @@ Bot players let one developer test the network and gameplay without organizing p
 | Grouper | Invites others and moves as a group; tests the rule that groups never split |
 | Chaos | Reconnects, lags, teleports between zones; tests edge cases |
 
+**Population model.** On top of the profiles, every bot is a simulated player account:
+- **Daily curve.** The number online follows a daily curve, from about 20% of accounts overnight to 70% at the evening peak.
+- **Sessions.** Each session runs about 50 minutes on average, with a long tail of longer ones.
+- **Parties.** Accounts have friends. Some logins bring friends along or join a friend who is already online. Strangers in the same zone sometimes team up. Members follow their leader, and the leader waits for stragglers.
+- **Activities.** Solo players and leaders explore unvisited zones, hunt in one zone, gather at gates and raid doors, or go idle.
+- **Drops.** Connections sometimes drop and come back within minutes. Returning players resume where they left off, and party members spawn next to their party.
+- **Compressed clock.** The test clock is compressed by the same factor as the small test zones, so a game day passes in 30 real minutes.
+
 **Running them**
 
 - One command spins up N bots with a chosen mix of profiles, a world seed and a random seed, locally or on cloud machines. The same seeds replay the same run.

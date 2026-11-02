@@ -17,6 +17,11 @@ namespace FriendlyPersonShooter.Net
         public static int LargestLobby;
         public static int TotalSplits;
         public static int TotalMerges;
+        /// <summary>Times players moved lobby to join their party.</summary>
+        public static int TotalGroupJoins;
+        /// <summary>Parties with two or more members online, and the players in them.</summary>
+        public static int Parties;
+        public static int PlayersInParties;
         /// <summary>Zone simulation cost of the current lobbies; see <see cref="LobbyCost"/>.</summary>
         public static LobbyCostReport Cost = new LobbyCostReport();
         /// <summary>Lobby id for each network id, so a client view can show its own lobby.</summary>
@@ -34,9 +39,12 @@ namespace FriendlyPersonShooter.Net
         }
     }
 
-    public enum LobbyEventKind { Split, Merge }
+    public enum LobbyEventKind { Split, Merge, Group }
 
-    /// <summary>One split or merge. For a split, B is the new lobby; for a merge, B joined A.</summary>
+    /// <summary>
+    /// One split, merge or party move. For a split, B is the new lobby; for a merge, B joined A;
+    /// for a party move, players left B to join their party in A.
+    /// </summary>
     public struct LobbyEvent
     {
         public LobbyEventKind Kind;
@@ -89,6 +97,7 @@ namespace FriendlyPersonShooter.Net
             if (now >= _nextLobbyPass)
             {
                 _nextLobbyPass = now + NetTestSettings.LobbyInterval;
+                GatherGroups(now);
                 SplitLobbies(now);
                 MergeLobbies(now);
                 PublishStats();
@@ -99,7 +108,8 @@ namespace FriendlyPersonShooter.Net
                 _nextLog = now + 5.0;
                 Debug.Log($"[Lobbies] players={LobbyStats.Players} lobbies={LobbyStats.Lobbies} " +
                           $"avg={LobbyStats.AverageSize:0.0} max={LobbyStats.LargestLobby} " +
-                          $"splits={LobbyStats.TotalSplits} merges={LobbyStats.TotalMerges} " +
+                          $"splits={LobbyStats.TotalSplits} merges={LobbyStats.TotalMerges} groupJoins={LobbyStats.TotalGroupJoins} " +
+                          $"parties={LobbyStats.Parties} inParties={LobbyStats.PlayersInParties} " +
                           $"zoneCopies={LobbyStats.Cost.LoadedInstances} zones={LobbyStats.Cost.DistinctLoadedZones} " +
                           $"duplication={LobbyStats.Cost.Duplication:0.00} zonesPerPlayer={LobbyStats.Cost.LoadedZonesPerPlayer:0.0}");
             }
@@ -111,8 +121,8 @@ namespace FriendlyPersonShooter.Net
         private void SyncPlayers()
         {
             _seen.Clear();
-            foreach (var (owner, transform, ghost) in SystemAPI
-                         .Query<RefRO<GhostOwner>, RefRO<LocalTransform>, RefRO<GhostInstance>>()
+            foreach (var (owner, transform, ghost, account) in SystemAPI
+                         .Query<RefRO<GhostOwner>, RefRO<LocalTransform>, RefRO<GhostInstance>, RefRO<PlayerAccount>>()
                          .WithAll<NetPlayer>())
             {
                 int id = owner.ValueRO.NetworkId;
@@ -121,15 +131,18 @@ namespace FriendlyPersonShooter.Net
                 _seen.Add(id);
                 _ghostIdOf[id] = ghost.ValueRO.ghostId;
 
+                int group = account.ValueRO.GroupId;
                 if (_players.TryGetValue(id, out var player))
                 {
                     player.MoveTo(zone);
+                    player.GroupId = group;
                 }
                 else
                 {
-                    player = new LobbyPlayer(id, zone);
+                    player = new LobbyPlayer(id, zone, group);
                     _players[id] = player;
-                    var lobby = NewLobby();
+                    // A party member logs in next to their party, so they join its lobby straight away.
+                    var lobby = GroupLobbyWithRoom(group) ?? NewLobby();
                     lobby.Players.Add(player);
                     _lobbyOf[id] = lobby.Id;
                 }
@@ -155,6 +168,98 @@ namespace FriendlyPersonShooter.Net
                 _lobbyOf.Remove(id);
                 _ghostIdOf.Remove(id);
             }
+        }
+
+        private Lobby GroupLobbyWithRoom(int group)
+        {
+            if (group == 0) return null;
+            foreach (var p in _players.Values)
+            {
+                if (p.GroupId != group || !_lobbyOf.TryGetValue(p.Id, out int lobbyId)) continue;
+                var lobby = _lobbies[lobbyId];
+                if (lobby.Players.Count < _rules.MaxPlayers) return lobby;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Party members always share a lobby. When a party spans lobbies (players teamed up across
+        /// lobbies, or a lobby was full when they logged in), the members move to the lobby holding most
+        /// of them; if it has no room, the whole party moves to a lobby of its own.
+        /// </summary>
+        private void GatherGroups(double now)
+        {
+            var groups = new Dictionary<int, List<LobbyPlayer>>();
+            int parties = 0, inParties = 0;
+            foreach (var p in _players.Values)
+            {
+                if (p.GroupId == 0) continue;
+                if (!groups.TryGetValue(p.GroupId, out var members))
+                {
+                    members = new List<LobbyPlayer>();
+                    groups[p.GroupId] = members;
+                }
+                members.Add(p);
+            }
+
+            var count = new Dictionary<int, int>();
+            foreach (var members in groups.Values)
+            {
+                if (members.Count >= 2)
+                {
+                    parties++;
+                    inParties += members.Count;
+                }
+                count.Clear();
+                foreach (var p in members)
+                {
+                    int l = _lobbyOf[p.Id];
+                    count[l] = count.TryGetValue(l, out int n) ? n + 1 : 1;
+                }
+                if (count.Count <= 1) continue;
+
+                int best = -1, bestCount = -1;
+                foreach (var kv in count)
+                {
+                    if (kv.Value > bestCount || (kv.Value == bestCount && kv.Key < best))
+                    {
+                        best = kv.Key;
+                        bestCount = kv.Value;
+                    }
+                }
+                var target = _lobbies[best];
+                int moving = members.Count - bestCount;
+                if (target.Players.Count + moving > _rules.MaxPlayers)
+                {
+                    target = NewLobby();
+                    _noMergeUntil[target.Id] = now + MergeCooldown;
+                }
+
+                int from = 0;
+                foreach (var p in members)
+                {
+                    int old = _lobbyOf[p.Id];
+                    if (old == target.Id) continue;
+                    from = old;
+                    var oldLobby = _lobbies[old];
+                    oldLobby.Players.Remove(p);
+                    if (oldLobby.Players.Count == 0)
+                    {
+                        _lobbies.Remove(old);
+                        _noMergeUntil.Remove(old);
+                    }
+                    target.Players.Add(p);
+                    _lobbyOf[p.Id] = target.Id;
+                    LobbyStats.TotalGroupJoins++;
+                }
+                LobbyStats.Record(new LobbyEvent
+                {
+                    Kind = LobbyEventKind.Group, LobbyA = target.Id, LobbyB = from,
+                    Zone = members[0].Zone, PlayersA = target.Players.Count,
+                });
+            }
+            LobbyStats.Parties = parties;
+            LobbyStats.PlayersInParties = inParties;
         }
 
         private void SplitLobbies(double now)

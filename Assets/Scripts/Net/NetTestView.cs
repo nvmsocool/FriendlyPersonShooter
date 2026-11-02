@@ -43,7 +43,9 @@ namespace FriendlyPersonShooter.Net
         private readonly Stack<List<Vector3>> _spareLists = new Stack<List<Vector3>>();
         private readonly StringBuilder _text = new StringBuilder();
         private Text _stats;
-        private EntityQuery _clientQuery, _serverQuery;
+        private EntityQuery _clientQuery, _serverQuery, _partyQuery;
+        private readonly Dictionary<int, List<Vector3>> _parties = new Dictionary<int, List<Vector3>>();
+        private readonly List<Matrix4x4> _partyMarks = new List<Matrix4x4>();
         private World _clientQueryWorld, _serverQueryWorld;
         private bool _mapMode;
         private float _fps;
@@ -198,6 +200,9 @@ namespace FriendlyPersonShooter.Net
             {
                 _serverQueryWorld = server;
                 _serverQuery = PlayerQuery(server);
+                _partyQuery = server.EntityManager.CreateEntityQuery(
+                    ComponentType.ReadOnly<NetPlayer>(), ComponentType.ReadOnly<LocalTransform>(),
+                    ComponentType.ReadOnly<PlayerAccount>());
             }
 
             // Group every player's position by lobby.
@@ -259,6 +264,7 @@ namespace FriendlyPersonShooter.Net
                 }
             }
             for (int c = 0; c < PaletteSize; c++) DrawList(_byColor[c], _lobbyMats[c], Matrix4x4.identity);
+            DrawParties(size);
 
             if (myPos.HasValue)
             {
@@ -283,9 +289,51 @@ namespace FriendlyPersonShooter.Net
                 float height = Mathf.Lerp(3f, 0.3f, t);
                 var center = new Vector3((e.Zone.X + 0.5f) * zone, height * 0.5f, (e.Zone.Y + 0.5f) * zone);
                 var m = Matrix4x4.TRS(center, Quaternion.identity, new Vector3(side, height, side));
-                Graphics.RenderMesh(new RenderParams(e.Kind == LobbyEventKind.Merge ? _mergeMat : _splitMat),
+                Graphics.RenderMesh(new RenderParams(e.Kind == LobbyEventKind.Split ? _splitMat : _mergeMat),
                     _cube, 0, m);
             }
+        }
+
+        /// <summary>Party members get a white cap and a white line to their party's first member.</summary>
+        private void DrawParties(float size)
+        {
+            foreach (var list in _parties.Values)
+            {
+                list.Clear();
+                _spareLists.Push(list);
+            }
+            _parties.Clear();
+            using (var transforms = _partyQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp))
+            using (var accounts = _partyQuery.ToComponentDataArray<PlayerAccount>(Allocator.Temp))
+            {
+                for (int i = 0; i < transforms.Length; i++)
+                {
+                    int group = accounts[i].GroupId;
+                    if (group == 0) continue;
+                    if (!_parties.TryGetValue(group, out var list))
+                    {
+                        list = _spareLists.Count > 0 ? _spareLists.Pop() : new List<Vector3>();
+                        _parties[group] = list;
+                    }
+                    list.Add(transforms[i].Position);
+                }
+            }
+
+            _partyMarks.Clear();
+            foreach (var members in _parties.Values)
+            {
+                if (members.Count < 2) continue;
+                for (int i = 0; i < members.Count; i++)
+                {
+                    _partyMarks.Add(Matrix4x4.TRS(members[i] + Vector3.up * 7f, Quaternion.identity, new Vector3(4f, 1f, 4f)));
+                    if (i == 0) continue;
+                    Vector3 d = WrappedDelta(members[i], members[0], size);
+                    if (d.sqrMagnitude < 0.01f) continue;
+                    Vector3 mid = members[i] + d * 0.5f + Vector3.up * 7f;
+                    _partyMarks.Add(Matrix4x4.TRS(mid, Quaternion.LookRotation(d), new Vector3(0.8f, 0.5f, d.magnitude)));
+                }
+            }
+            DrawList(_partyMarks, _mergeMat, Matrix4x4.identity);
         }
 
         private void PlaceMapCamera(float size)
@@ -306,13 +354,27 @@ namespace FriendlyPersonShooter.Net
             _text.Append($"Lobby map   {_fps:0} fps   (M: player view)\n");
             _text.Append($"{LobbyStats.Players} players, {LobbyStats.Lobbies} lobbies, " +
                          $"avg {LobbyStats.AverageSize:0.0}, largest {LobbyStats.LargestLobby}\n");
-            _text.Append($"Splits {LobbyStats.TotalSplits}, merges {LobbyStats.TotalMerges}\n");
+            _text.Append($"Splits {LobbyStats.TotalSplits}, merges {LobbyStats.TotalMerges}, " +
+                         $"party moves {LobbyStats.TotalGroupJoins}\n");
+            _text.Append($"Parties {LobbyStats.Parties} ({LobbyStats.PlayersInParties} players)\n");
+            var pop = BotDirector.Population;
+            if (pop != null)
+            {
+                double now = BotDirector.Now;
+                double hour = pop.HourAt(now);
+                _text.Append($"Bot clock {(int)hour:00}:{(int)(hour % 1 * 60):00}, online {pop.OnlineCount} of {pop.Accounts.Count} " +
+                             $"(target {pop.TargetShare(now) * pop.Accounts.Count:0})\n");
+                var st = pop.Stats;
+                _text.Append($"Logins {st.Logins}, logoffs {st.Logouts}, drops {st.Drops}\n");
+            }
             var cost = LobbyStats.Cost;
             _text.Append($"Zone copies {cost.LoadedInstances} for {cost.DistinctLoadedZones} zones in use " +
                          $"(duplication {cost.Duplication:0.00}x), {cost.LoadedZonesPerPlayer:0.0} per player\n\n");
             _text.Append("Each color is one lobby. Lines join each player\nto the nearest player in the same lobby.\n");
             _text.Append("Orange zones are loaded by 2+ lobbies (simulated twice).\n");
-            _text.Append($"White flash = merge, red flash = split.\nYellow frame = you (lobby {myLobby}).\n\n");
+            _text.Append("White flash = merge or party move, red flash = split.\n");
+            _text.Append("White caps and lines join party members.\n");
+            _text.Append($"Yellow frame = you (lobby {myLobby}).\n\n");
             _text.Append("Latest:\n");
             var events = LobbyStats.RecentEvents;
             for (int i = events.Count - 1; i >= 0 && i >= events.Count - 12; i--)
@@ -321,6 +383,10 @@ namespace FriendlyPersonShooter.Net
                 if (e.Kind == LobbyEventKind.Merge)
                 {
                     _text.Append($"  merge  lobby {e.LobbyB} joined lobby {e.LobbyA}, now {e.PlayersA} players\n");
+                }
+                else if (e.Kind == LobbyEventKind.Group)
+                {
+                    _text.Append($"  party  players left lobby {e.LobbyB} to join their party in lobby {e.LobbyA}\n");
                 }
                 else
                 {

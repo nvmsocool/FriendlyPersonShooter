@@ -64,6 +64,12 @@ namespace FriendlyPersonShooter.Net
         public bool IsBot;
     }
 
+    /// <summary>Arena bot client worlds only: marks the world as a bot ally rather than the human player.</summary>
+    public struct ArenaBotSeat : IComponentData
+    {
+        public int Index;
+    }
+
     /// <summary>Bot worlds only: which simulated account this bot client plays.</summary>
     public struct BotSeat : IComponentData
     {

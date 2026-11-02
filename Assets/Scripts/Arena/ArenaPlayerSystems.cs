@@ -1,0 +1,171 @@
+using FriendlyPersonShooter.Net;
+using Unity.Entities;
+using Unity.Mathematics;
+using Unity.NetCode;
+using Unity.Transforms;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+namespace FriendlyPersonShooter.Arena
+{
+    /// <summary>
+    /// Builds the arena player ghost prefab in code, identically in every world, and tells the
+    /// server to spawn players near the middle of the arena.
+    /// </summary>
+    [WorldSystemFilter(WorldSystemFilterFlags.ServerSimulation | WorldSystemFilterFlags.ClientSimulation)]
+    [UpdateInGroup(typeof(InitializationSystemGroup))]
+    public partial class ArenaPrefabSystem : SystemBase
+    {
+        protected override void OnUpdate()
+        {
+            Enabled = false;
+            if (NetTestSettings.Game != GameMode.Arena || SystemAPI.HasSingleton<PlayerPrefab>()) return;
+
+            var prefab = EntityManager.CreateEntity();
+            EntityManager.AddComponentData(prefab, LocalTransform.Identity);
+            EntityManager.AddComponent<ArenaPlayer>(prefab);
+            EntityManager.AddComponent<ArenaInput>(prefab);
+            EntityManager.AddBuffer<InputBufferData<ArenaInput>>(prefab);
+            EntityManager.AddComponent<ArenaLook>(prefab);
+            EntityManager.AddComponentData(prefab, new ArenaMotion { Grounded = true });
+            EntityManager.AddComponent<GhostOwner>(prefab);
+            EntityManager.AddComponent<GhostOwnerIsLocal>(prefab);
+            EntityManager.AddComponentData(prefab, new AutoCommandTarget { Enabled = true });
+            ArenaCombatPrefab.AddPlayerCombat(EntityManager, prefab);
+
+            GhostPrefabCreation.ConvertToGhostPrefab(EntityManager, prefab, new GhostPrefabCreation.Config
+            {
+                Name = "ArenaPlayer",
+                Importance = 10,
+                SupportedGhostModes = GhostModeMask.All,
+                DefaultGhostMode = GhostMode.OwnerPredicted,
+                OptimizationMode = GhostOptimizationMode.Dynamic,
+                UsePreSerialization = false,
+            });
+
+            var holder = EntityManager.CreateEntity();
+            EntityManager.AddComponentData(holder, new PlayerPrefab { Value = prefab });
+
+            if (World.IsServer())
+            {
+                var random = new Unity.Mathematics.Random(0xA7E4A1u);
+                ServerAccounts.SpawnOverride = () =>
+                {
+                    var p = random.NextFloat2Direction() * random.NextFloat(2f, 8f);
+                    return new float3(p.x, 0f, p.y - 10f);
+                };
+            }
+        }
+
+        protected override void OnDestroy()
+        {
+            if (World.IsServer()) ServerAccounts.SpawnOverride = null;
+        }
+    }
+
+    /// <summary>
+    /// Moves arena players from their input: walk relative to the look direction, jump, fall, and
+    /// stay inside the arena. Runs on the server and, predicted, on the owning client.
+    /// </summary>
+    [UpdateInGroup(typeof(PredictedSimulationSystemGroup))]
+    public partial class ArenaMovementSystem : SystemBase
+    {
+        protected override void OnUpdate()
+        {
+            float dt = SystemAPI.Time.DeltaTime;
+            float limit = ArenaSettings.HalfSize - ArenaSettings.BodyRadius;
+
+            foreach (var (input, look, motion, transform) in SystemAPI
+                         .Query<RefRO<ArenaInput>, RefRW<ArenaLook>, RefRW<ArenaMotion>, RefRW<LocalTransform>>()
+                         .WithAll<ArenaPlayer, Simulate>())
+            {
+                var i = input.ValueRO;
+                look.ValueRW.Yaw = i.Yaw;
+                look.ValueRW.Pitch = math.clamp(i.Pitch, -85f, 85f);
+
+                float yaw = math.radians(i.Yaw);
+                var forward = new float3(math.sin(yaw), 0f, math.cos(yaw));
+                var right = new float3(math.cos(yaw), 0f, -math.sin(yaw));
+                var move = right * i.Horizontal + forward * i.Vertical;
+                if (math.lengthsq(move) > 0f) move = math.normalize(move) * ArenaSettings.MoveSpeed;
+
+                ref var m = ref motion.ValueRW;
+                if (m.Grounded && i.Jump.IsSet)
+                {
+                    m.VerticalSpeed = ArenaSettings.JumpSpeed;
+                    m.Grounded = false;
+                }
+                m.VerticalSpeed -= ArenaSettings.Gravity * dt;
+
+                var pos = transform.ValueRO.Position + move * dt;
+                pos.y += m.VerticalSpeed * dt;
+                if (pos.y <= 0f)
+                {
+                    pos.y = 0f;
+                    m.VerticalSpeed = 0f;
+                    m.Grounded = true;
+                }
+                pos.x = math.clamp(pos.x, -limit, limit);
+                pos.z = math.clamp(pos.z, -limit, limit);
+                transform.ValueRW.Position = pos;
+            }
+        }
+    }
+
+    /// <summary>The human's input: mouse look, WASD, space to jump, left mouse to fire, Q to swap payload.</summary>
+    [UpdateInGroup(typeof(GhostInputSystemGroup))]
+    [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
+    public partial class ArenaLocalInputSystem : SystemBase
+    {
+        /// <summary>Degrees of turn per pixel of mouse movement.</summary>
+        public static float Sensitivity = 0.08f;
+
+        private float _yaw;
+        private float _pitch;
+
+        protected override void OnCreate()
+        {
+            RequireForUpdate<ArenaPlayer>();
+        }
+
+        protected override void OnUpdate()
+        {
+            // Bot ally worlds drive themselves.
+            if (SystemAPI.HasSingleton<ArenaBotSeat>()) return;
+
+            var keyboard = Keyboard.current;
+            var mouse = Mouse.current;
+            bool locked = Cursor.lockState == CursorLockMode.Locked;
+            int h = 0, v = 0;
+            bool jump = false, swap = false, fire = false;
+            if (keyboard != null)
+            {
+                if (keyboard.aKey.isPressed) h -= 1;
+                if (keyboard.dKey.isPressed) h += 1;
+                if (keyboard.sKey.isPressed) v -= 1;
+                if (keyboard.wKey.isPressed) v += 1;
+                jump = keyboard.spaceKey.wasPressedThisFrame;
+                swap = keyboard.qKey.wasPressedThisFrame;
+            }
+            if (mouse != null && locked)
+            {
+                var delta = mouse.delta.ReadValue();
+                _yaw = (_yaw + delta.x * Sensitivity) % 360f;
+                _pitch = math.clamp(_pitch + delta.y * Sensitivity, -85f, 85f);
+                fire = mouse.leftButton.isPressed;
+            }
+            LocalLook = new float2(_yaw, _pitch);
+
+            foreach (var input in SystemAPI.Query<RefRW<ArenaInput>>().WithAll<GhostOwnerIsLocal, ArenaPlayer>())
+            {
+                var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0 };
+                if (jump) i.Jump.Set();
+                if (swap) i.SwapPayload.Set();
+                input.ValueRW = i;
+            }
+        }
+
+        /// <summary>The human's latest look angles (yaw, pitch), for a camera that doesn't wait for a tick.</summary>
+        public static float2 LocalLook;
+    }
+}

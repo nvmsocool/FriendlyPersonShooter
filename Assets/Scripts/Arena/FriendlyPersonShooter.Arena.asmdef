@@ -1,0 +1,27 @@
+{
+    "name": "FriendlyPersonShooter.Arena",
+    "rootNamespace": "FriendlyPersonShooter.Arena",
+    "references": [
+        "FriendlyPersonShooter.Core",
+        "FriendlyPersonShooter.Net",
+        "Unity.NetCode",
+        "Unity.Entities",
+        "Unity.Scenes",
+        "Unity.Transforms",
+        "Unity.Mathematics",
+        "Unity.Collections",
+        "Unity.Burst",
+        "Unity.Networking.Transport",
+        "Unity.InputSystem",
+        "UnityEngine.UI"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

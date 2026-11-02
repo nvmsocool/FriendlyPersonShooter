@@ -16,6 +16,8 @@ namespace FriendlyPersonShooter.Net
         protected override void OnUpdate()
         {
             Enabled = false;
+            // The arena builds its own player prefab.
+            if (NetTestSettings.Game != GameMode.Lobbies) return;
             if (SystemAPI.HasSingleton<PlayerPrefab>()) return;
 
             var prefab = EntityManager.CreateEntity();

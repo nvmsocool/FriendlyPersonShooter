@@ -39,6 +39,9 @@ namespace FriendlyPersonShooter.Net
     {
         /// <summary>Where each account's player was when last seen, so a returning player resumes there.</summary>
         public static readonly Dictionary<int, float3> LastPosition = new Dictionary<int, float3>();
+
+        /// <summary>When set, picks every new player's spawn point instead (the arena uses this).</summary>
+        public static System.Func<float3> SpawnOverride;
     }
 
     /// <summary>
@@ -93,6 +96,7 @@ namespace FriendlyPersonShooter.Net
 
         private float3 ChooseSpawn(GoInGameRequest login)
         {
+            if (ServerAccounts.SpawnOverride != null) return ServerAccounts.SpawnOverride();
             if (login.GroupId != 0)
             {
                 foreach (var (account, transform) in SystemAPI.Query<RefRO<PlayerAccount>, RefRO<LocalTransform>>())

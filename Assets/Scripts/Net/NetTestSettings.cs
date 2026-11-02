@@ -18,6 +18,15 @@ namespace FriendlyPersonShooter.Net
         Bots,
     }
 
+    /// <summary>Which test runs.</summary>
+    public enum GameMode
+    {
+        /// <summary>MVP step 1: cube players and bots on the wrapping grid, lobbies splitting and merging.</summary>
+        Lobbies,
+        /// <summary>MVP step 2: one first-person arena with enemies, payloads and bot allies.</summary>
+        Arena,
+    }
+
     /// <summary>
     /// Settings for the networking test, read from the command line:
     /// <c>-fps-mode all|server|client|bots -fps-bots 50 -fps-port 7979 -fps-connect 127.0.0.1 -fps-grid 8 -fps-zone 40
@@ -26,6 +35,12 @@ namespace FriendlyPersonShooter.Net
     public static class NetTestSettings
     {
         public static NetMode Mode = NetMode.All;
+
+        /// <summary>Set by <c>-fps-game arena</c>, or by playing a scene named "Arena" in the Editor.</summary>
+        public static GameMode Game = GameMode.Lobbies;
+
+        /// <summary>Bot allies in the arena. Each is a full client, so it receives the game state and can aim.</summary>
+        public static int ArenaBots = 3;
         /// <summary>Bot accounts. Not all are online at once: the daily curve decides how many are.</summary>
         public static int BotCount = 30;
 
@@ -41,6 +56,10 @@ namespace FriendlyPersonShooter.Net
         /// <summary>Game hour of day the bot run starts at.</summary>
         public static double StartHour = 12;
         public static ushort Port = 7979;
+        /// <summary>True when the port came from the command line.</summary>
+        public static bool PortGiven;
+        /// <summary>The arena's default port, so it can run next to a lobby test.</summary>
+        public const ushort ArenaPort = 7980;
         public static string ConnectAddress = "127.0.0.1";
 
         /// <summary>World is GridSize x GridSize zones. Small and fast for testing; the real game is far larger.</summary>
@@ -87,13 +106,23 @@ namespace FriendlyPersonShooter.Net
                         if (int.TryParse(value, out int bots)) BotCount = Math.Max(0, bots);
                         break;
                     case "-fps-port":
-                        if (ushort.TryParse(value, out ushort port)) Port = port;
+                        if (ushort.TryParse(value, out ushort port))
+                        {
+                            Port = port;
+                            PortGiven = true;
+                        }
                         break;
                     case "-fps-connect":
                         ConnectAddress = value;
                         break;
                     case "-fps-grid":
                         if (int.TryParse(value, out int grid)) GridSize = Math.Max(1, grid);
+                        break;
+                    case "-fps-game":
+                        if (Enum.TryParse(value, true, out GameMode game)) Game = game;
+                        break;
+                    case "-fps-arena-bots":
+                        if (int.TryParse(value, out int arenaBots)) ArenaBots = Math.Max(0, arenaBots);
                         break;
                     case "-fps-account-base":
                         if (int.TryParse(value, out int accountBase)) AccountBase = Math.Max(1, accountBase);

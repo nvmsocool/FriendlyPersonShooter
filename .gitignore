@@ -145,3 +145,6 @@ crashlytics-build.properties
 # dotnet test projects
 Tests/**/bin/
 Tests/**/obj/
+
+# Agent worktrees
+.claude/worktrees/

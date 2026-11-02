@@ -89,6 +89,11 @@ namespace FriendlyPersonShooter.Net
 
         protected override void OnCreate()
         {
+            if (NetTestSettings.Game != GameMode.Lobbies)
+            {
+                Enabled = false;
+                return;
+            }
             RequireForUpdate<GhostRelevancy>();
             _grid = NetTestSettings.CreateGrid();
             _rules = NetTestSettings.CreateRules();

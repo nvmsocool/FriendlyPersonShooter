@@ -16,6 +16,10 @@ namespace FriendlyPersonShooter.Net
         public override bool Initialize(string defaultWorldName)
         {
             NetTestSettings.ParseCommandLine();
+#if UNITY_EDITOR
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Arena") NetTestSettings.Game = GameMode.Arena;
+#endif
+            if (NetTestSettings.Game == GameMode.Arena && !NetTestSettings.PortGiven) NetTestSettings.Port = NetTestSettings.ArenaPort;
             AutoConnectPort = NetTestSettings.Port;
 
             if (NetworkEndpoint.TryParse(NetTestSettings.ConnectAddress, NetTestSettings.Port, out var endpoint))
@@ -26,6 +30,8 @@ namespace FriendlyPersonShooter.Net
             {
                 Debug.LogError($"[NetTest] Couldn't parse connect address '{NetTestSettings.ConnectAddress}'.");
             }
+
+            if (NetTestSettings.Game == GameMode.Arena) return InitializeArena(defaultWorldName);
 
             var mode = NetTestSettings.Mode;
             if (mode == NetMode.All || mode == NetMode.Server)
@@ -56,8 +62,31 @@ namespace FriendlyPersonShooter.Net
             // A plain world for anything that isn't networked.
             CreateLocalWorld(defaultWorldName);
 
-            Debug.Log($"[NetTest] Mode={mode} bots={NetTestSettings.BotCount} port={NetTestSettings.Port} " +
+            Debug.Log($"[NetTest] Game={NetTestSettings.Game} Mode={mode} bots={NetTestSettings.BotCount} port={NetTestSettings.Port} " +
                       $"grid={NetTestSettings.GridSize}x{NetTestSettings.GridSize} zone={NetTestSettings.ZoneSize}m");
+            return true;
+        }
+
+        /// <summary>
+        /// The arena: a server, the human's client and a few bot allies. Bot allies are full clients
+        /// (not thin clients) because they need to see enemies and players to aim.
+        /// </summary>
+        private bool InitializeArena(string defaultWorldName)
+        {
+            var mode = NetTestSettings.Mode;
+            if (mode == NetMode.All || mode == NetMode.Server) CreateServerWorld("ServerWorld");
+            if (mode == NetMode.All || mode == NetMode.Client) CreateClientWorld("ClientWorld");
+            if (mode == NetMode.All || mode == NetMode.Bots)
+            {
+                for (int i = 0; i < NetTestSettings.ArenaBots; i++)
+                {
+                    var bot = CreateClientWorld($"ArenaBot{i}");
+                    bot.GetExistingSystemManaged<SceneSectionStreamingSystem>().ConcurrentSectionStreamCount = 0;
+                    bot.EntityManager.CreateSingleton(new ArenaBotSeat { Index = i });
+                }
+            }
+            CreateLocalWorld(defaultWorldName);
+            Debug.Log($"[NetTest] Game=Arena Mode={mode} arenaBots={NetTestSettings.ArenaBots} port={NetTestSettings.Port}");
             return true;
         }
     }

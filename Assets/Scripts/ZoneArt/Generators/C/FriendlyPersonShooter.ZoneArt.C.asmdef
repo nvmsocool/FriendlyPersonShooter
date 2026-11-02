@@ -1,0 +1,20 @@
+{
+    "name": "FriendlyPersonShooter.ZoneArt.C",
+    "rootNamespace": "FriendlyPersonShooter.ZoneArt.C",
+    "references": [
+        "FriendlyPersonShooter.ZoneArt",
+        "FriendlyPersonShooter.Core",
+        "Unity.Mathematics",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

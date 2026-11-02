@@ -165,6 +165,8 @@ namespace FriendlyPersonShooter.Arena
 
             foreach (var zone in zones)
             {
+                // On generated ground, wait until the zone is built (it streams in around players) so enemies land on it.
+                if (ExpeditionTerrain.Active && !ExpeditionTerrain.World.IsReady(zone)) continue;
                 foreach (var ev in _schedule.ActiveAt(zone, _time))
                 {
                     var key = new SpawnKey(ev.SpawnPointId, ev.Wave, ev.IsBloom);

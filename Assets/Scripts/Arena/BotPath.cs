@@ -17,6 +17,7 @@ namespace FriendlyPersonShooter.Arena
         private int _next;
         private float3 _goal;
         private float _replanIn, _stuckFor;
+        private int _stuckCount;
         private float3 _lastPos;
         private bool _complete;
 
@@ -33,10 +34,18 @@ namespace FriendlyPersonShooter.Arena
             _lastPos = pos;
             if (_stuckFor > StuckTime)
             {
+                // Hop; the second time in a row, skip this waypoint; the third, plan again.
                 jump = true;
                 _stuckFor = 0f;
-                _replanIn = 0f;
+                _stuckCount++;
+                if (_stuckCount == 2 && _points != null && _next < _points.Count - 1) _next++;
+                if (_stuckCount >= 3)
+                {
+                    _stuckCount = 0;
+                    _replanIn = 0f;
+                }
             }
+            else if (_stuckFor == 0f) _stuckCount = 0;
 
             if (_points == null || _replanIn <= 0f || math.distance(_goal.xz, goal.xz) > 8f || _next >= _points.Count)
             {

@@ -27,34 +27,68 @@ namespace FriendlyPersonShooter.ZoneArt
             Heights = heights;
         }
 
+        /// <summary>Builds the grid all at once (about 0.1 s for a 250 m zone).</summary>
         public static ZoneNavGrid Build(Vector3 origin, float size)
         {
-            Physics.SyncTransforms();
-            int n = Mathf.RoundToInt(size / Cell);
-            var heights = new List<float>(n * n + n * 8);
-            var first = new int[n * n + 1];
-            float minNormalY = Mathf.Cos(Walkability.MaxSlope * Mathf.Deg2Rad);
-            float r = Walkability.PlayerRadius;
-            for (int z = 0; z < n; z++)
+            var b = new Builder(origin, size);
+            while (!b.Step(float.MaxValue)) { }
+            return b.Result;
+        }
+
+        /// <summary>Builds a grid a few rows at a time.</summary>
+        public sealed class Builder
+        {
+            private readonly Vector3 _origin;
+            private readonly int _n;
+            private readonly List<float> _heights;
+            private readonly int[] _first;
+            private int _row;
+            private readonly System.Diagnostics.Stopwatch _clock = new System.Diagnostics.Stopwatch();
+
+            public ZoneNavGrid Result { get; private set; }
+
+            public Builder(Vector3 origin, float size)
             {
-                for (int x = 0; x < n; x++)
-                {
-                    first[z * n + x] = heights.Count;
-                    var from = new Vector3(origin.x + (x + 0.5f) * Cell, 800f, origin.z + (z + 0.5f) * Cell);
-                    for (int level = 0; level < 6; level++)
-                    {
-                        if (!Physics.Raycast(from, Vector3.down, out var hit, 2000f, ZoneWorld.CollisionMask, QueryTriggerInteraction.Ignore)) break;
-                        from = hit.point + Vector3.down * 0.05f;
-                        if (hit.normal.y < minNormalY) continue;
-                        var p = hit.point;
-                        if (Physics.CheckCapsule(p + Vector3.up * (r + 0.35f), p + Vector3.up * (Walkability.PlayerHeight - r), r,
-                                ZoneWorld.CollisionMask, QueryTriggerInteraction.Ignore)) continue;
-                        heights.Add(p.y);
-                    }
-                }
+                _origin = origin;
+                _n = Mathf.RoundToInt(size / Cell);
+                _heights = new List<float>(_n * _n + _n * 8);
+                _first = new int[_n * _n + 1];
             }
-            first[n * n] = heights.Count;
-            return new ZoneNavGrid(n, origin, first, heights.ToArray());
+
+            /// <summary>Does rows until <paramref name="budgetMs"/> is spent; true once the grid is done.</summary>
+            public bool Step(float budgetMs)
+            {
+                if (Result != null) return true;
+                if (_row == 0) Physics.SyncTransforms();
+                _clock.Restart();
+                float minNormalY = Mathf.Cos(Walkability.MaxSlope * Mathf.Deg2Rad);
+                float r = Walkability.PlayerRadius;
+                int n = _n;
+                while (_row < n)
+                {
+                    int z = _row++;
+                    for (int x = 0; x < n; x++)
+                    {
+                        _first[z * n + x] = _heights.Count;
+                        var from = new Vector3(_origin.x + (x + 0.5f) * Cell, 800f, _origin.z + (z + 0.5f) * Cell);
+                        for (int level = 0; level < 6; level++)
+                        {
+                            if (!Physics.Raycast(from, Vector3.down, out var hit, 2000f, ZoneWorld.CollisionMask, QueryTriggerInteraction.Ignore)) break;
+                            from = hit.point + Vector3.down * 0.05f;
+                            if (hit.normal.y < minNormalY) continue;
+                            var p = hit.point;
+                            if (Physics.CheckCapsule(p + Vector3.up * (r + 0.35f), p + Vector3.up * (Walkability.PlayerHeight - r), r,
+                                    ZoneWorld.CollisionMask, QueryTriggerInteraction.Ignore)) continue;
+                            _heights.Add(p.y);
+                        }
+                    }
+                    if (_clock.Elapsed.TotalMilliseconds >= budgetMs) break;
+                }
+                if (_row < n) return false;
+                _first[n * n] = _heights.Count;
+                Result = new ZoneNavGrid(n, _origin, _first, _heights.ToArray());
+                return true;
+            }
         }
 
         /// <summary>The node in column (x, z) closest in height to y (or -1 if the column has none).</summary>
@@ -85,8 +119,8 @@ namespace FriendlyPersonShooter.ZoneArt
     {
         public const float MaxClimb = 1.0f;
         public const float MaxDrop = 6f;
-        public int MaxExpansions = 60000;
-        public float HeuristicWeight = 1.6f;
+        public int MaxExpansions = 25000;
+        public float HeuristicWeight = 2f;
 
         private readonly ZoneWorld _world;
         private readonly Dictionary<long, float> _g = new Dictionary<long, float>();

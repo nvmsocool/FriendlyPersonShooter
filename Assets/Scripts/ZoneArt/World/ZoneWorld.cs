@@ -32,6 +32,8 @@ namespace FriendlyPersonShooter.ZoneArt
         public static float PrefetchDistance = 150f;
         /// <summary>Zones nobody has been near for this long unload (seconds).</summary>
         public static float UnloadAfter = 60f;
+        /// <summary>Main-thread milliseconds per frame spent on bot nav grids.</summary>
+        public static float NavBudgetMs = 3f;
         /// <summary>Seconds the look takes to blend from one zone to the next.</summary>
         public static float LookBlendTime = 2.5f;
 
@@ -97,6 +99,7 @@ namespace FriendlyPersonShooter.ZoneArt
             public Look Look;
             public RenderState Pending;
             public ZoneNavGrid Nav;
+            public ZoneNavGrid.Builder NavBuilder;
             public float LastWanted = float.NegativeInfinity;
             public float Priority;
             public double Seconds;
@@ -175,11 +178,10 @@ namespace FriendlyPersonShooter.ZoneArt
         {
             var slot = SlotOf(c);
             if (slot.State != SlotState.Ready || slot.Collision == null) return null;
-            if (slot.Nav == null)
+            // Built a few rows per frame by Tick once someone asks; null until then.
+            if (slot.Nav == null && slot.NavBuilder == null)
             {
-                var sw = Stopwatch.StartNew();
-                slot.Nav = ZoneNavGrid.Build(new Vector3(slot.Coord.X * ZoneSize, 0f, slot.Coord.Y * ZoneSize), ZoneSize);
-                Debug.Log($"[ZoneWorld] nav grid for zone {slot.Coord}: {slot.Nav.Count} standing spots in {sw.Elapsed.TotalMilliseconds:0} ms");
+                slot.NavBuilder = new ZoneNavGrid.Builder(new Vector3(slot.Coord.X * ZoneSize, 0f, slot.Coord.Y * ZoneSize), ZoneSize);
             }
             slot.LastWanted = Mathf.Max(slot.LastWanted, Time.unscaledTime - UnloadAfter * 0.5f);
             return slot.Nav;
@@ -256,6 +258,19 @@ namespace FriendlyPersonShooter.ZoneArt
             foreach (var s in _slots)
             {
                 if (s.State == SlotState.Ready && now - s.LastWanted > UnloadAfter) Unload(s);
+            }
+
+            // Nav grids someone asked for, a few milliseconds per frame.
+            foreach (var s in _slots)
+            {
+                if (s.NavBuilder == null) continue;
+                if (s.NavBuilder.Step(NavBudgetMs))
+                {
+                    s.Nav = s.NavBuilder.Result;
+                    s.NavBuilder = null;
+                    Debug.Log($"[ZoneWorld] nav grid for zone {s.Coord}: {s.Nav.Count} standing spots");
+                }
+                break;
             }
         }
 
@@ -456,6 +471,7 @@ namespace FriendlyPersonShooter.ZoneArt
             slot.Result = null;
             slot.Look = null;
             slot.Nav = null;
+            slot.NavBuilder = null;
             slot.State = SlotState.Empty;
         }
 

@@ -21,8 +21,11 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>The player's collision capsule (matches the walkability analysis the zones are checked with).</summary>
         public const float BodyRadius = 0.3f;
         public const float BodyHeight = 1.8f;
-        /// <summary>Steepest walkable slope (degrees).</summary>
-        public const float MaxSlope = 50f;
+        /// <summary>
+        /// Steepest walkable slope (degrees). A little more forgiving than the 50 degrees zones and bot paths are
+        /// checked against, since faceted ground has steeper patches between the 1 m spots those checks sample.
+        /// </summary>
+        public const float MaxSlope = 58f;
         /// <summary>How far a grounded player sticks to the ground going down a slope or step.</summary>
         public const float SnapDown = 0.45f;
 
@@ -183,7 +186,7 @@ namespace FriendlyPersonShooter.Arena
             }
             if (!ignoreBody && Overlaps(w, target)) return false;
             // No walking up slopes steeper than the limit (going down them is fine: you slide off the edge).
-            if (grounded && w.GroundBelow(target.x, target.z, target.y + StepHeight, out var hit, StepHeight + SnapDown) &&
+            if (w.GroundBelow(target.x, target.z, target.y + StepHeight, out var hit, StepHeight + SnapDown) &&
                 hit.point.y > pos.y + 0.02f && hit.normal.y < MinGroundNormalY)
             {
                 return false;

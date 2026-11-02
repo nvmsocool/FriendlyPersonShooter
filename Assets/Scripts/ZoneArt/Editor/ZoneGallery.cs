@@ -156,6 +156,13 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
                     continue;
                 }
                 if (top.Current is System.Collections.IEnumerator nested) stack.Push(nested);
+                else
+                {
+                    // A yield means "continue next frame": leave a short gap (not counted as main-thread time) so a
+                    // generator waiting on worker threads is polled like a game would poll it, not millions of times.
+                    var gap = Stopwatch.StartNew();
+                    while (gap.Elapsed.TotalMilliseconds < 0.25) { }
+                }
             }
             timing.Wall = wall.Elapsed.TotalSeconds;
             return result;

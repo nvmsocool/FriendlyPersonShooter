@@ -662,88 +662,96 @@ namespace FriendlyPersonShooter.ZoneArt.C
             public ZoneRequest Zone;
             public PrismTerrain Terrain;
             public PrismPalette Palette;
-            public HashSet<Collider> Plantable;
+            /// <summary>Every collider of the zone so far; plants grow only where the top surface is tagged ground.</summary>
+            public PrismCollision World;
             public System.Func<Vector3, Color> GroundColor;
             public float LowY, HighY;
             public bool[] Occupied; // 1 m grid, trunks
             public Vector2 HeroEye, HeroTarget; // keep the hero sight line clear of trees
             public float[] Budget = { 480000f, 330000f, 300000f, 600000f, 60000f };
+            /// <summary>False on a headless build: placements and trunk colliders only, no plant meshes.</summary>
+            public bool Render = true;
         }
 
-        public static void Plant(Context ctx, List<Species> species, Transform parent, Material foliage, out string summary)
+        public sealed class Planted
+        {
+            /// <summary>Plant meshes per 62.5 m chunk (null entries when empty or headless).</summary>
+            public PrismMesh[] Chunks;
+            /// <summary>Trunk collider geometry (identical in full and headless builds).</summary>
+            public MeshBuilder Trunks = new MeshBuilder();
+            public string Summary;
+        }
+
+        private struct Candidate
+        {
+            public int Species, Variant, Chunk;
+            public Matrix4x4 M;
+            public Color Tint;
+            public Vector3 Pos;
+            public float Scale;
+        }
+
+        /// <summary>
+        /// Scatters every species (any thread). Trees go first, one species after another, so the understory can avoid
+        /// their trunks; every other species is placed row by row in parallel (each row has its own random stream, so
+        /// the result never depends on scheduling).
+        /// </summary>
+        public static Planted Plant(Context ctx, List<Species> species)
         {
             var zone = ctx.Zone;
-            var t = ctx.Terrain;
+            var clock = System.Diagnostics.Stopwatch.StartNew();
             const int chunks = 4;
             float chunkSize = 250f / chunks;
-            var builders = new MeshBuilder[chunks * chunks];
-            for (int i = 0; i < builders.Length; i++) builders[i] = new MeshBuilder();
-            var trunks = new MeshBuilder();
             var oMoist = ZoneNoise.Offset(zone.Seed, 31);
-            var layerTris = new long[5];
-            var cands = new List<(Species sp, MeshBuilder tpl, Matrix4x4 m, Color tint, Vector3 pos, float scale, int chunk)>();
 
-            // Trees first so understory can gather around them.
-            var order = new List<Species>(species);
-            order.Sort((a, b) => ((int)a.Layer).CompareTo((int)b.Layer));
-            foreach (var sp in order)
+            // Trees first (stable order by layer, then as picked).
+            var order = new List<int>();
+            for (int layer = 0; layer <= (int)Layer.Reed; layer++)
+                for (int i = 0; i < species.Count; i++)
+                    if ((int)species[i].Layer == layer) order.Add(i);
+
+            var perSpecies = new List<Candidate>[species.Count];
+            foreach (int si in order)
             {
-                var rng = ZoneRandom.For(zone.Seed, "scatter" + sp.Type + sp.PatchOff.x.ToString("0"));
-                float step = sp.Spacing;
-                int n = Mathf.CeilToInt(250f / step);
-                for (int gz = 0; gz < n; gz++)
-                {
-                    for (int gx = 0; gx < n; gx++)
-                    {
-                        float lx = (gx + rng.Value()) * step, lz = (gz + rng.Value()) * step;
-                        float roll = rng.Value();
-                        if (lx < 0.5f || lz < 0.5f || lx > 249.5f || lz > 249.5f) continue;
-                        float wx = zone.Origin.x + lx, wz = zone.Origin.z + lz;
-                        float density = Density(ctx, sp, lx, lz, wx, wz, oMoist);
-                        if (roll > density) continue;
-                        if (!PrismScatterGround(wx, wz, out var hit)) continue;
-                        if (!ctx.Plantable.Contains(hit.collider)) continue;
-                        if (!Allowed(ctx, sp, lx, lz, hit.point.y > t.HeightAt(lx, lz) + 2.5f)) continue;
-                        float minUp = sp.Layer == Layer.Tree ? 0.85f : sp.Layer == Layer.Grass ? 0.6f : 0.72f;
-                        if (hit.normal.y < minUp) continue;
-                        float y = hit.point.y;
-                        if (t.HasWater)
-                        {
-                            if (sp.Layer == Layer.Reed) { if (y < t.WaterLevel - 0.7f || y > t.WaterLevel + 0.5f) continue; }
-                            else if (y < t.WaterLevel + 0.05f) continue;
-                        }
-                        else if (sp.Layer == Layer.Reed) continue;
-                        int ox = Mathf.Clamp((int)lx, 0, 249), oz = Mathf.Clamp((int)lz, 0, 249);
-                        if (sp.Layer == Layer.Tree)
-                        {
-                            if (NearOccupied(ctx, ox, oz, 2)) continue;
-                            ctx.Occupied[oz * 250 + ox] = true;
-                        }
-                        else if (sp.Layer == Layer.Shrub && ctx.Occupied[oz * 250 + ox]) continue;
+                if (species[si].Layer != Layer.Tree) continue;
+                var list = new List<Candidate>();
+                var rng = ZoneRandom.For(ZoneRandom.Hash(zone.Seed, 0x5CA7, si, (int)species[si].Type), "trees");
+                int n = Mathf.CeilToInt(250f / species[si].Spacing);
+                for (int gz = 0; gz < n; gz++) Row(ctx, species, si, gz, ref rng, oMoist, chunkSize, chunks, list);
+                perSpecies[si] = list;
+            }
+            var rest = order.FindAll(si => species[si].Layer != Layer.Tree);
+            var rowJobs = new List<(int si, int gz)>();
+            foreach (int si in rest)
+            {
+                int n = Mathf.CeilToInt(250f / species[si].Spacing);
+                for (int gz = 0; gz < n; gz++) rowJobs.Add((si, gz));
+            }
+            var rowResults = new List<Candidate>[rowJobs.Count];
+            System.Threading.Tasks.Parallel.For(0, rowJobs.Count, j =>
+            {
+                var (si, gz) = rowJobs[j];
+                var rng = ZoneRandom.For(ZoneRandom.Hash(zone.Seed, 0x5CA8, si, gz), (int)species[si].Type);
+                var list = new List<Candidate>();
+                Row(ctx, species, si, gz, ref rng, oMoist, chunkSize, chunks, list);
+                rowResults[j] = list;
+            });
+            for (int j = 0; j < rowJobs.Count; j++)
+            {
+                int si = rowJobs[j].si;
+                if (perSpecies[si] == null) perSpecies[si] = new List<Candidate>();
+                perSpecies[si].AddRange(rowResults[j]);
+            }
 
-                        float scale = rng.Range(sp.ScaleMin, sp.ScaleMax);
-                        if (sp.Layer == Layer.Grass) scale *= Mathf.Lerp(0.8f, 1.3f, density);
-                        var rot = Quaternion.Euler(rng.Range(-sp.Tilt, sp.Tilt), rng.Range(0f, 360f), rng.Range(-sp.Tilt, sp.Tilt));
-                        var pos = new Vector3(wx, y, wz);
-                        var m = Matrix4x4.TRS(pos, rot, Vector3.one * scale);
-                        Color tint;
-                        if (sp.GroundTint)
-                        {
-                            var g = ctx.GroundColor(pos);
-                            tint = Color.Lerp(g, Color.white, 0.12f) * 1.05f;
-                            tint = rng.Jitter(tint, 0.015f, 0.08f, 0.08f);
-                            tint.a = 1f;
-                        }
-                        else
-                        {
-                            tint = rng.Jitter(Color.white, 0f, 0f, 0.1f);
-                            tint.a = 1f;
-                        }
-                        var tpl = sp.Variants[rng.Range(0, sp.Variants.Count)];
-                        int ci = Mathf.Clamp((int)(lz / chunkSize), 0, chunks - 1) * chunks + Mathf.Clamp((int)(lx / chunkSize), 0, chunks - 1);
-                        cands.Add((sp, tpl, m, tint, pos, scale, ci));
-                        layerTris[(int)sp.Layer] += tpl.TriangleCount;
-                    }
+            double tPlace = clock.Elapsed.TotalMilliseconds;
+            var cands = new List<Candidate>();
+            var layerTris = new long[5];
+            foreach (int si in order)
+            {
+                foreach (var c in perSpecies[si])
+                {
+                    cands.Add(c);
+                    layerTris[(int)species[si].Layer] += species[si].Variants[c.Variant].TriangleCount;
                 }
             }
 
@@ -752,36 +760,97 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int i = 0; i < 5; i++) keep[i] = layerTris[i] > ctx.Budget[i] ? ctx.Budget[i] / layerTris[i] : 1f;
             var thin = ZoneRandom.For(zone.Seed, "thin");
             System.Array.Clear(layerTris, 0, 5);
+            var kept = new List<Candidate>(cands.Count);
+            var res = new Planted();
             foreach (var c in cands)
             {
-                if (thin.Value() > keep[(int)c.sp.Layer]) continue;
-                builders[c.chunk].Append(c.tpl, c.m, c.tint);
-                layerTris[(int)c.sp.Layer] += c.tpl.TriangleCount;
-                c.sp.Placed++;
-                c.sp.Tris += c.tpl.TriangleCount;
-                if (c.sp.TrunkR > 0f) trunks.Tube(c.pos + Vector3.down * 0.5f, c.pos + Vector3.up * c.sp.TrunkH * c.scale, c.sp.TrunkR * c.scale, c.sp.TrunkR * c.scale * 0.7f, 6, Color.white, Color.white);
+                var sp = species[c.Species];
+                if (thin.Value() > keep[(int)sp.Layer]) continue;
+                kept.Add(c);
+                int tris = sp.Variants[c.Variant].TriangleCount;
+                layerTris[(int)sp.Layer] += tris;
+                sp.Placed++;
+                sp.Tris += tris;
+                if (sp.TrunkR > 0f) res.Trunks.Tube(c.Pos + Vector3.down * 0.5f, c.Pos + Vector3.up * sp.TrunkH * c.Scale, sp.TrunkR * c.Scale, sp.TrunkR * c.Scale * 0.7f, 6, Color.white, Color.white);
             }
 
-            var root = new GameObject("Flora");
-            root.transform.SetParent(parent, false);
-            for (int i = 0; i < builders.Length; i++)
+            double tThin = clock.Elapsed.TotalMilliseconds;
+            res.Chunks = new PrismMesh[chunks * chunks];
+            if (ctx.Render)
             {
-                if (builders[i].VertexCount == 0) continue;
-                builders[i].ToGameObject($"Plants {i}", root.transform, foliage, collider: false);
+                System.Threading.Tasks.Parallel.For(0, chunks * chunks, ci =>
+                {
+                    int verts = 0;
+                    foreach (var c in kept) if (c.Chunk == ci) verts += species[c.Species].Variants[c.Variant].VertexCount;
+                    if (verts == 0) return;
+                    var pm = new PrismMesh($"Plants {ci}", verts);
+                    foreach (var c in kept) if (c.Chunk == ci) pm.Append(species[c.Species].Variants[c.Variant], c.M, c.Tint);
+                    pm.FixMissingNormals();
+                    res.Chunks[ci] = pm;
+                });
             }
-            if (trunks.VertexCount > 0)
-            {
-                var go = new GameObject("Trunk colliders");
-                go.transform.SetParent(root.transform, false);
-                go.AddComponent<MeshCollider>().sharedMesh = trunks.ToMesh("Trunks");
-            }
+
             var sb = new System.Text.StringBuilder();
             foreach (var sp in species) sb.Append(sp).Append(' ');
-            sb.Append($"(tris T{layerTris[0] / 1000}k S{layerTris[1] / 1000}k F{layerTris[2] / 1000}k G{layerTris[3] / 1000}k)");
-            summary = sb.ToString();
+            sb.Append($"(tris T{layerTris[0] / 1000}k S{layerTris[1] / 1000}k F{layerTris[2] / 1000}k G{layerTris[3] / 1000}k; ms place {tPlace:0} thin {tThin - tPlace:0} mesh {clock.Elapsed.TotalMilliseconds - tThin:0})");
+            res.Summary = sb.ToString();
+            return res;
         }
 
-        private static bool PrismScatterGround(float x, float z, out RaycastHit hit) => FriendlyPersonShooter.ZoneArt.Scatter.Ground(x, z, out hit);
+        /// <summary>One row of one species' jittered grid.</summary>
+        private static void Row(Context ctx, List<Species> species, int si, int gz, ref ZoneRandom rng, Vector2 oMoist, float chunkSize, int chunks, List<Candidate> output)
+        {
+            var zone = ctx.Zone;
+            var t = ctx.Terrain;
+            var sp = species[si];
+            float step = sp.Spacing;
+            int n = Mathf.CeilToInt(250f / step);
+            for (int gx = 0; gx < n; gx++)
+            {
+                float lx = (gx + rng.Value()) * step, lz = (gz + rng.Value()) * step;
+                float roll = rng.Value();
+                if (lx < 0.5f || lz < 0.5f || lx > 249.5f || lz > 249.5f) continue;
+                float wx = zone.Origin.x + lx, wz = zone.Origin.z + lz;
+                float density = Density(ctx, sp, lx, lz, wx, wz, oMoist);
+                if (roll > density) continue;
+                if (!ctx.World.Down(wx, wz, 600f, out float y, out var normal, out int tag)) continue;
+                if (tag != PrismCollision.TagGround) continue;
+                if (!Allowed(ctx, sp, lx, lz, y > t.HeightAt(lx, lz) + 2.5f)) continue;
+                float minUp = sp.Layer == Layer.Tree ? 0.85f : sp.Layer == Layer.Grass ? 0.6f : 0.72f;
+                if (normal.y < minUp) continue;
+                if (t.HasWater)
+                {
+                    if (sp.Layer == Layer.Reed) { if (y < t.WaterLevel - 0.7f || y > t.WaterLevel + 0.5f) continue; }
+                    else if (y < t.WaterLevel + 0.05f) continue;
+                }
+                else if (sp.Layer == Layer.Reed) continue;
+                int ox = Mathf.Clamp((int)lx, 0, 249), oz = Mathf.Clamp((int)lz, 0, 249);
+                if (sp.Layer == Layer.Tree)
+                {
+                    if (NearOccupied(ctx, ox, oz, 2)) continue;
+                    ctx.Occupied[oz * 250 + ox] = true;
+                }
+                else if (sp.Layer == Layer.Shrub && ctx.Occupied[oz * 250 + ox]) continue;
+
+                float scale = rng.Range(sp.ScaleMin, sp.ScaleMax);
+                if (sp.Layer == Layer.Grass) scale *= Mathf.Lerp(0.8f, 1.3f, density);
+                var rot = Quaternion.Euler(rng.Range(-sp.Tilt, sp.Tilt), rng.Range(0f, 360f), rng.Range(-sp.Tilt, sp.Tilt));
+                var pos = new Vector3(wx, y, wz);
+                Color tint;
+                // The same random draws happen with or without rendering, so placements match headless builds.
+                if (sp.GroundTint)
+                {
+                    var g = ctx.Render ? ctx.GroundColor(pos) : Color.white;
+                    tint = Color.Lerp(g, Color.white, 0.12f) * 1.05f;
+                    tint = rng.Jitter(tint, 0.015f, 0.08f, 0.08f);
+                }
+                else tint = rng.Jitter(Color.white, 0f, 0f, 0.1f);
+                tint.a = 1f;
+                int variant = rng.Range(0, sp.Variants.Count);
+                int ci = Mathf.Clamp((int)(lz / chunkSize), 0, chunks - 1) * chunks + Mathf.Clamp((int)(lx / chunkSize), 0, chunks - 1);
+                output.Add(new Candidate { Species = si, Variant = variant, Chunk = ci, M = Matrix4x4.TRS(pos, rot, Vector3.one * scale), Tint = tint, Pos = pos, Scale = scale });
+            }
+        }
 
         private static bool NearOccupied(Context ctx, int x, int z, int r)
         {

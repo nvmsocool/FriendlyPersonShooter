@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using FriendlyPersonShooter.Core.Expedition;
 using UnityEngine;
 
@@ -15,8 +16,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public const int N = 251;
         public const int C = 250;
         public const float Climb = 0.75f;
-        public static float MaxGrad = 0.85f;
-        public static bool Debugging;
+        public const float MaxGrad = 0.85f;
 
         public readonly ZoneRequest Zone;
         public readonly float[] H = new float[N * N];
@@ -141,7 +141,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 WaterLevel = minB - 0.4f;
                 HasWater = true;
             }
-            for (int iz = 0; iz < N; iz++)
+            Parallel.For(0, N, iz =>
             {
                 for (int ix = 0; ix < N; ix++)
                 {
@@ -151,13 +151,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float inner = Smooth(14f, 14f + s.Fall, e);
                     float border = ZoneEdges.BorderHeight(z, wx, wz);
                     float h = border + Elevation(lx, lz) * inner;
-                    h = ZoneEdges.Apply(z, wx, wz, h);
+                    h = Mathf.Lerp(border, h, ZoneEdges.Blend(z, wx, wz));
                     if (HasWater) h = Mathf.Max(h, WaterLevel - 1.1f);
                     H[iz * N + ix] = h;
                     // Hex fields stay out of the border strip.
                     NoHex[iz * N + ix] = Smooth(20f, 15f, e);
                 }
-            }
+            });
         }
 
         /// <summary>The zone's landform above the seam height at a local position (works outside the zone too).</summary>
@@ -239,32 +239,59 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         // ------------------------------------------------------------------ hexes and surface
 
+        // Per-hex noise never changes between connectivity passes, so it is sampled once.
+        private float[] _hexMask, _hexLift, _hexPillar;
+
         public void BuildHexes(Shape s, float hexThreshold)
         {
             if (Hex == null) Hex = new HexGrid(s.HexR);
             var g = Hex;
             var z = Zone;
-            var oMask = ZoneNoise.Offset(z.Seed, 21);
-            var oLift = ZoneNoise.Offset(z.Seed, 22);
+            if (_hexMask == null)
+            {
+                var oMask = ZoneNoise.Offset(z.Seed, 21);
+                var oLift = ZoneNoise.Offset(z.Seed, 22);
+                var oP = ZoneNoise.Offset(z.Seed, 23);
+                _hexMask = new float[g.Count];
+                _hexLift = new float[g.Count];
+                _hexPillar = new float[g.Count];
+                Parallel.For(0, g.Rows, row =>
+                {
+                    for (int i = row * g.Cols; i < (row + 1) * g.Cols; i++)
+                    {
+                        var c = g.Center(i);
+                        float wx = z.Origin.x + c.x, wz = z.Origin.z + c.y;
+                        _hexMask[i] = ZoneNoise.Fbm(wx + oMask.x, wz + oMask.y, 1f / 65f, 3);
+                        _hexLift[i] = ZoneNoise.Fbm(wx + oLift.x, wz + oLift.y, 1f / 48f, 3);
+                        _hexPillar[i] = ZoneNoise.Fbm(wx + oP.x, wz + oP.y, 1f / 30f, 2);
+                    }
+                });
+            }
+            Parallel.For(0, g.Rows, row =>
+            {
+                for (int i = row * g.Cols; i < (row + 1) * g.Cols; i++)
+                {
+                    var c = g.Center(i);
+                    float hmax = float.MinValue, hmin = float.MaxValue, nohex = 0f;
+                    for (int k = 0; k < 7; k++)
+                    {
+                        var p = k == 0 ? c : c + g.Corner(k - 1);
+                        float h = HeightAt(p.x, p.y);
+                        hmax = Mathf.Max(hmax, h);
+                        hmin = Mathf.Min(hmin, h);
+                        nohex = Mathf.Max(nohex, Bilinear(NoHex, p.x, p.y));
+                    }
+                    g.Hmax[i] = hmax;
+                    g.Hmin[i] = hmin;
+                    bool inside = c.x > 2f && c.y > 2f && c.x < 248f && c.y < 248f;
+                    g.On[i] = inside && _hexMask[i] > hexThreshold && nohex < 0.5f;
+                }
+            });
             var rng = ZoneRandom.For(z.Seed, "hexjitter");
             for (int i = 0; i < g.Count; i++)
             {
-                var c = g.Center(i);
-                float hmax = float.MinValue, hmin = float.MaxValue, nohex = 0f;
-                for (int k = 0; k < 7; k++)
-                {
-                    var p = k == 0 ? c : c + g.Corner(k - 1);
-                    float h = HeightAt(p.x, p.y);
-                    hmax = Mathf.Max(hmax, h);
-                    hmin = Mathf.Min(hmin, h);
-                    nohex = Mathf.Max(nohex, Bilinear(NoHex, p.x, p.y));
-                }
-                g.Hmax[i] = hmax;
-                g.Hmin[i] = hmin;
-                float wx = z.Origin.x + c.x, wz = z.Origin.z + c.y;
-                float m = ZoneNoise.Fbm(wx + oMask.x, wz + oMask.y, 1f / 65f, 3);
-                bool inside = c.x > 2f && c.y > 2f && c.x < 248f && c.y < 248f;
-                g.On[i] = inside && m > hexThreshold && nohex < 0.5f;
+                float hmax = g.Hmax[i];
+                float m = _hexMask[i];
                 float jitter = rng.Range(0, 3) * 0.2f;
                 g.Pillar[i] = false;
                 if (!g.On[i])
@@ -272,7 +299,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     g.Top[i] = hmax;
                     continue;
                 }
-                float liftN = ZoneNoise.Fbm(wx + oLift.x, wz + oLift.y, 1f / 48f, 3);
+                float liftN = _hexLift[i];
                 float lift = Mathf.Max(0f, (liftN + 0.15f) * s.LiftAmp * 1.6f);
                 lift = Mathf.Floor(lift / s.LiftStep) * s.LiftStep;
                 // Deeper inside the mask, columns rise more.
@@ -309,12 +336,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
             // A few tall basalt organ pipes for drama.
             var prng = ZoneRandom.For(z.Seed, "pillars");
-            var oP = ZoneNoise.Offset(z.Seed, 23);
             for (int i = 0; i < g.Count; i++)
             {
                 if (!g.On[i]) continue;
-                var c = g.Center(i);
-                float cl = ZoneNoise.Fbm(z.Origin.x + c.x + oP.x, z.Origin.z + c.y + oP.y, 1f / 30f, 2);
+                float cl = _hexPillar[i];
                 if (cl > 0.25f && prng.Chance(s.PillarChance * 6f))
                 {
                     g.Pillar[i] = true;
@@ -325,7 +350,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public void ComputeSurface()
         {
-            for (int iz = 0; iz < C; iz++)
+            Parallel.For(0, C, iz =>
             {
                 for (int ix = 0; ix < C; ix++)
                 {
@@ -360,27 +385,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         Steep[k] = Mathf.Max(g1, g2) > MaxGrad * MaxGrad;
                     }
                 }
-            }
+            });
         }
 
         // ------------------------------------------------------------------ connectivity
-
-        /// <summary>Debug: writes the component map (main green, others orange, hex cells tinted) to a PNG.</summary>
-        public void DebugPng(string path)
-        {
-            var tex = new Texture2D(C, C, TextureFormat.RGB24, false);
-            var px = new Color32[C * C];
-            for (int k = 0; k < C * C; k++)
-            {
-                bool hex = CellHex[k] >= 0;
-                px[k] = Comp[k] == MainComp ? (hex ? new Color32(40, 140, 90, 255) : new Color32(60, 200, 90, 255)) : (hex ? new Color32(160, 90, 30, 255) : new Color32(230, 170, 40, 255));
-            }
-            tex.SetPixels32(px);
-            tex.Apply();
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
-            System.IO.File.WriteAllBytes(path, tex.EncodeToPNG());
-            Object.DestroyImmediate(tex);
-        }
 
         private int Label(out int[] sizes, out int count)
         {
@@ -466,18 +474,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         carved++;
                         RampsCarved++;
                     }
-                    else
-                    {
-                        failed++;
-                        if (Debugging)
-                        {
-                            var bl = bounds[c];
-                            int b0 = bl.Count > 0 ? bl[0] : 0;
-                            Debug.Log($"[Prismatica] failed comp size {sizes[c]} at {b0 % C},{b0 / C} h {S[b0]:0.0} boundary {bl.Count}");
-                        }
-                    }
+                    else failed++;
                 }
-                if (Debugging) Debug.Log($"[Prismatica] connect it {it}: comps {order.Count} biggest {sizes[order[0]]} main {sizes[main]} carved {carved} failed {failed}");
             }
             BuildHexes(s, hexThreshold);
             ComputeSurface();
@@ -493,12 +491,17 @@ namespace FriendlyPersonShooter.ZoneArt.C
             if (boundary.Count == 0) return false;
             const float g = 0.5f;
             int stride = Mathf.Max(1, boundary.Count / 40);
-            float best = float.MaxValue;
-            for (int b = 0; b < boundary.Count; b += stride)
+            int samples = (boundary.Count + stride - 1) / stride;
+            // Each boundary sample finds its own shortest ramp; the earliest sample with the overall shortest wins
+            // (exactly what a sequential scan with an improving bound picks).
+            var bestT = new int[samples];
+            var bestQ = new int[samples];
+            Parallel.For(0, samples, si =>
             {
-                int s = boundary[b];
+                int s = boundary[si * stride];
                 int sx = s % C, sz = s / C;
                 float hs = S[s];
+                int best = int.MaxValue, bq = -1;
                 for (int d = 0; d < 32; d++)
                 {
                     float ang = d / 32f * Mathf.PI * 2f;
@@ -516,15 +519,20 @@ namespace FriendlyPersonShooter.ZoneArt.C
                             if (Mathf.Abs(S[q] - hs) <= g * t && !CutsTrench(sx, sz, dx, dz, t, hs, S[q]))
                             {
                                 best = t;
-                                from = s;
-                                to = q;
+                                bq = q;
                                 break;
                             }
                         }
                     }
                 }
-            }
-            if (from < 0) return false;
+                bestT[si] = best;
+                bestQ[si] = bq;
+            });
+            int win = -1;
+            for (int si = 0; si < samples; si++) if (bestQ[si] >= 0 && (win < 0 || bestT[si] < bestT[win])) win = si;
+            if (win < 0) return false;
+            from = boundary[win * stride];
+            to = bestQ[win];
             merged.Add(comp);
             return true;
         }
@@ -659,49 +667,70 @@ namespace FriendlyPersonShooter.ZoneArt.C
             return carved;
         }
 
-        public GameObject BuildMesh(Transform parent, Material material, System.Func<Vector3, Vector3, Color> colorAt, List<Collider> plantable)
+        public const int Chunk = 50;
+
+        /// <summary>The collision mesh of one 50 m terrain chunk: shared grid vertices, the same triangles as the render mesh.</summary>
+        public PrismCollider ChunkCollider(int cx, int cz)
         {
-            var root = new GameObject("Terrain");
-            root.transform.SetParent(parent, false);
-            const int chunk = 50;
-            var mb = new MeshBuilder();
             var o = Zone.Origin;
-            for (int cz = 0; cz < C; cz += chunk)
+            const int w = Chunk + 1;
+            var pos = new Vector3[w * w];
+            for (int z = 0; z <= Chunk; z++)
+            for (int x = 0; x <= Chunk; x++)
+                pos[z * w + x] = new Vector3(o.x + cx + x, this[cx + x, cz + z], o.z + cz + z);
+            var idx = new int[Chunk * Chunk * 6];
+            int n = 0;
+            for (int z = 0; z < Chunk; z++)
             {
-                for (int cx = 0; cx < C; cx += chunk)
+                for (int x = 0; x < Chunk; x++)
                 {
-                    mb.Clear();
-                    for (int z = cz; z < cz + chunk; z++)
+                    int a = z * w + x, b = a + w, c = a + w + 1, d = a + 1;
+                    if (((cx + x + cz + z) & 1) == 0)
                     {
-                        for (int x = cx; x < cx + chunk; x++)
-                        {
-                            var a = new Vector3(o.x + x, this[x, z], o.z + z);
-                            var b = new Vector3(o.x + x, this[x, z + 1], o.z + z + 1);
-                            var c = new Vector3(o.x + x + 1, this[x + 1, z + 1], o.z + z + 1);
-                            var d = new Vector3(o.x + x + 1, this[x + 1, z], o.z + z);
-                            if (((x + z) & 1) == 0)
-                            {
-                                Tri(mb, a, b, c, colorAt);
-                                Tri(mb, a, c, d, colorAt);
-                            }
-                            else
-                            {
-                                Tri(mb, a, b, d, colorAt);
-                                Tri(mb, b, c, d, colorAt);
-                            }
-                        }
+                        idx[n++] = a; idx[n++] = b; idx[n++] = c;
+                        idx[n++] = a; idx[n++] = c; idx[n++] = d;
                     }
-                    var go = mb.ToGameObject($"Terrain {cx / chunk},{cz / chunk}", root.transform, material, collider: true);
-                    plantable.Add(go.GetComponent<Collider>());
+                    else
+                    {
+                        idx[n++] = a; idx[n++] = b; idx[n++] = d;
+                        idx[n++] = b; idx[n++] = c; idx[n++] = d;
+                    }
                 }
             }
-            return root;
+            return new PrismCollider($"Terrain {cx / Chunk},{cz / Chunk}", pos, idx, PrismCollision.TagGround);
         }
 
-        private static void Tri(MeshBuilder mb, Vector3 a, Vector3 b, Vector3 c, System.Func<Vector3, Vector3, Color> colorAt)
+        /// <summary>The flat-shaded render mesh of one terrain chunk (each triangle colored at its centre).</summary>
+        public PrismMesh ChunkRender(int cx, int cz, System.Func<Vector3, Vector3, Color> colorAt)
         {
-            var n = Vector3.Cross(b - a, c - a).normalized;
-            mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, n));
+            var o = Zone.Origin;
+            var mb = new PrismMesh($"Terrain {cx / Chunk},{cz / Chunk}", Chunk * Chunk * 6);
+            void Tri(Vector3 a, Vector3 b, Vector3 c)
+            {
+                var n = Vector3.Cross(b - a, c - a).normalized;
+                mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, n));
+            }
+            for (int z = cz; z < cz + Chunk; z++)
+            {
+                for (int x = cx; x < cx + Chunk; x++)
+                {
+                    var a = new Vector3(o.x + x, this[x, z], o.z + z);
+                    var b = new Vector3(o.x + x, this[x, z + 1], o.z + z + 1);
+                    var c = new Vector3(o.x + x + 1, this[x + 1, z + 1], o.z + z + 1);
+                    var d = new Vector3(o.x + x + 1, this[x + 1, z], o.z + z);
+                    if (((x + z) & 1) == 0)
+                    {
+                        Tri(a, b, c);
+                        Tri(a, c, d);
+                    }
+                    else
+                    {
+                        Tri(a, b, d);
+                        Tri(b, c, d);
+                    }
+                }
+            }
+            return mb;
         }
 
         public static float Smooth(float e0, float e1, float x)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using static FriendlyPersonShooter.ZoneArt.C.PrismGeo;
 
@@ -30,20 +31,28 @@ namespace FriendlyPersonShooter.ZoneArt.C
             };
         }
 
-        public static void Build(ZoneRequest zone, PrismTerrain terrain, PrismPalette pal, Transform parent, Material mat, Material foliage, Material water, Material crystal,
-            Func<Vector3, Vector3, Color> colorAt, float waterLevel, PrismStructures st, System.Collections.Generic.List<Species> species)
+        /// <summary>What the far lands are made of (built on worker threads, turned into objects on the main thread).</summary>
+        public sealed class Lands
         {
-            var root = new GameObject("Far lands");
-            root.transform.SetParent(parent, false);
+            public readonly List<PrismMesh> Ground = new List<PrismMesh>();   // far material
+            public PrismMesh Trees;                                           // foliage material
+            public PrismMesh Skyline;                                         // far material
+            public PrismMesh SkylineCrystals;                                 // crystal material
+            public PrismMesh Water;                                           // water material
+        }
+
+        public static Lands Build(ZoneRequest zone, PrismTerrain terrain, PrismPalette pal, Func<Vector3, Vector3, Color> colorAt, float waterLevel,
+            PrismStructures st, List<Species> species)
+        {
+            var lands = new Lands();
             var hf = HeightFunction(zone, terrain, waterLevel);
             var o = zone.Origin;
-            Ring(root.transform, mat, hf, colorAt, o, -70f, 320f, 2.5f, 0f, 250f);
-            Ring(root.transform, mat, hf, colorAt, o, -500f, 750f, 10f, -70f, 320f);
-            Ring(root.transform, mat, hf, colorAt, o, -2200f, 2450f, 50f, -500f, 750f);
+            Ring(lands.Ground, hf, colorAt, o, -70f, 320f, 2.5f, 0f, 250f);
+            Ring(lands.Ground, hf, colorAt, o, -500f, 750f, 10f, -70f, 320f);
+            Ring(lands.Ground, hf, colorAt, o, -2200f, 2450f, 50f, -500f, 750f);
 
             // Toy forests near the zone.
             var rng = ZoneRandom.For(zone.Seed, "far");
-            var trees = new MeshBuilder();
             var templates = new MeshBuilder[8];
             for (int i = 0; i < templates.Length; i++)
             {
@@ -66,29 +75,37 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 }
                 templates[i] = t;
             }
-            var near = new System.Collections.Generic.List<MeshBuilder>();
+            var near = new List<MeshBuilder>();
             foreach (var sp in species) if (sp.Layer == Layer.Tree || sp.Type == Archetype.Puffball) near.Add(sp.Variants[0]);
             var oPatch = ZoneNoise.Offset(zone.Seed, 601);
-            for (int i = 0; i < 6500; i++)
+            const int tries = 6500;
+            // Each try has its own random stream so the tries can run in parallel and still come out the same.
+            var picks = new (MeshBuilder tpl, Matrix4x4 m, Color tint)?[tries];
+            System.Threading.Tasks.Parallel.For(0, tries, i =>
             {
-                float lx = rng.Range(-450f, 700f), lz = rng.Range(-450f, 700f);
-                if (lx > -4f && lz > -4f && lx < 254f && lz < 254f) continue;
+                var r = ZoneRandom.For(ZoneRandom.Hash(zone.Seed, 0xFA7, i), 1);
+                float lx = r.Range(-450f, 700f), lz = r.Range(-450f, 700f);
+                if (lx > -4f && lz > -4f && lx < 254f && lz < 254f) return;
                 float wx = o.x + lx, wz = o.z + lz;
                 float dx = Mathf.Max(0f, Mathf.Max(-lx, lx - 250f)), dz = Mathf.Max(0f, Mathf.Max(-lz, lz - 250f));
                 float d = Mathf.Sqrt(dx * dx + dz * dz);
-                if (rng.Value() > Mathf.Lerp(1f, 0.25f, d / 500f)) continue;
+                if (r.Value() > Mathf.Lerp(1f, 0.25f, d / 500f)) return;
                 float patch = ZoneNoise.Fbm(wx + oPatch.x, wz + oPatch.y, 1f / 70f, 2);
-                if (patch < (d < 120f ? -0.15f : 0.05f)) continue;
+                if (patch < (d < 120f ? -0.15f : 0.05f)) return;
                 float h = hf(wx, wz);
-                if (waterLevel > -900f && h < waterLevel + 0.3f) continue;
+                if (waterLevel > -900f && h < waterLevel + 0.3f) return;
                 float slope = Mathf.Abs(hf(wx + 3f, wz + 3f) - h);
-                if (slope > 1.6f) continue;
-                float s = rng.Range(0.7f, 1.5f) * (1f + d / 400f);
-                var tpl = d < 120f && near.Count > 0 ? near[rng.Range(0, near.Count)] : templates[rng.Range(0, templates.Length)];
-                if (d < 120f) s = rng.Range(0.8f, 1.3f);
-                trees.Append(tpl, Matrix4x4.TRS(new Vector3(wx, h - 0.3f, wz), rng.YawOnly(), Vector3.one * s), rng.Jitter(Color.white, 0.02f, 0.1f, 0.1f));
-            }
-            if (trees.VertexCount > 0) trees.ToGameObject("Far trees", root.transform, foliage, collider: false);
+                if (slope > 1.6f) return;
+                float s = r.Range(0.7f, 1.5f) * (1f + d / 400f);
+                var tpl = d < 120f && near.Count > 0 ? near[r.Range(0, near.Count)] : templates[r.Range(0, templates.Length)];
+                if (d < 120f) s = r.Range(0.8f, 1.3f);
+                picks[i] = (tpl, Matrix4x4.TRS(new Vector3(wx, h - 0.3f, wz), r.YawOnly(), Vector3.one * s), r.Jitter(Color.white, 0.02f, 0.1f, 0.1f));
+            });
+            int verts = 0;
+            foreach (var p in picks) if (p.HasValue) verts += p.Value.tpl.VertexCount;
+            lands.Trees = new PrismMesh("Far trees", verts);
+            foreach (var p in picks) if (p.HasValue) lands.Trees.Append(p.Value.tpl, p.Value.m, p.Value.tint);
+            lands.Trees.FixMissingNormals();
 
             // Giant distant crystals and floating islands on the skyline.
             var big = new MeshBuilder();
@@ -130,75 +147,87 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     big.Append(t, Matrix4x4.TRS(new Vector3(wx + rng.Range(-0.5f, 0.5f) * r, y, wz + rng.Range(-0.5f, 0.5f) * r), rng.YawOnly(), Vector3.one * rng.Range(1.5f, 2.5f)), Color.white);
                 }
             }
-            big.ToGameObject("Skyline", root.transform, mat, collider: false);
-            bigCrystal.ToGameObject("Skyline crystals", root.transform, crystal, collider: false);
+            lands.Skyline = new PrismMesh("Skyline", big.VertexCount);
+            lands.Skyline.Append(big);
+            lands.Skyline.FixMissingNormals();
+            lands.SkylineCrystals = new PrismMesh("Skyline crystals", bigCrystal.VertexCount);
+            lands.SkylineCrystals.Append(bigCrystal);
 
             if (waterLevel > -900f)
             {
-                var w = new MeshBuilder();
+                var w = new PrismMesh("Far water", 16);
                 float y = waterLevel;
                 var col = new Color(0.6f, 0f, 0f, 1f);
                 float a0 = -2200f, a1 = 2450f;
                 // Four big quads around the zone (the zone has its own water).
                 void Q(float x0, float z0, float x1, float z1)
                 {
-                    int i = w.Vertex(new Vector3(o.x + x0, y, o.z + z0), col, Vector3.up);
-                    w.Vertex(new Vector3(o.x + x0, y, o.z + z1), col, Vector3.up);
-                    w.Vertex(new Vector3(o.x + x1, y, o.z + z1), col, Vector3.up);
-                    w.Vertex(new Vector3(o.x + x1, y, o.z + z0), col, Vector3.up);
-                    w.Quad(i, i + 1, i + 2, i + 3);
+                    int i = w.Vertex(new Vector3(o.x + x0, y, o.z + z0), Vector3.up, col);
+                    w.Vertex(new Vector3(o.x + x0, y, o.z + z1), Vector3.up, col);
+                    w.Vertex(new Vector3(o.x + x1, y, o.z + z1), Vector3.up, col);
+                    w.Vertex(new Vector3(o.x + x1, y, o.z + z0), Vector3.up, col);
+                    w.Triangle(i, i + 1, i + 2);
+                    w.Triangle(i, i + 2, i + 3);
                 }
                 Q(a0, a0, a1, 0f);
                 Q(a0, 250f, a1, a1);
                 Q(a0, 0f, 0f, 250f);
                 Q(250f, 0f, a1, 250f);
-                var go = w.ToGameObject("Far water", root.transform, water, collider: false, castShadows: false);
-                _ = go;
+                lands.Water = w;
             }
+            return lands;
         }
 
-        private static void Ring(Transform parent, Material mat, Func<float, float, float> hf, Func<Vector3, Vector3, Color> colorAt, Vector3 o,
+        private static void Ring(List<PrismMesh> output, Func<float, float, float> hf, Func<Vector3, Vector3, Color> colorAt, Vector3 o,
             float min, float max, float cell, float holeMin, float holeMax)
         {
             int n = Mathf.RoundToInt((max - min) / cell);
-            var mb = new MeshBuilder();
-            var heights = new float[(n + 1) * (n + 1)];
-            for (int z = 0; z <= n; z++)
-            {
-                for (int x = 0; x <= n; x++) heights[z * (n + 1) + x] = hf(o.x + min + x * cell, o.z + min + z * cell);
-            }
             int w = n + 1;
-            // Flat-shaded facets (like the zone itself), colored per face so cliffs and grass stay crisp.
-            Vector3 P(int x, int z) => new Vector3(o.x + min + x * cell, heights[z * w + x], o.z + min + z * cell);
-            void T(Vector3 a, Vector3 b, Vector3 c)
+            var heights = new float[w * w];
+            System.Threading.Tasks.Parallel.For(0, w, z =>
             {
-                var nrm = Vector3.Cross(b - a, c - a).normalized;
-                mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, nrm));
-            }
-            for (int z = 0; z < n; z++)
+                for (int x = 0; x <= n; x++) heights[z * w + x] = hf(o.x + min + x * cell, o.z + min + z * cell);
+            });
+            // Flat-shaded facets (like the zone itself), colored per face so cliffs and grass stay crisp. Bands of rows
+            // are built in parallel, one mesh each.
+            const int band = 24;
+            int bands = (n + band - 1) / band;
+            var meshes = new PrismMesh[bands];
+            System.Threading.Tasks.Parallel.For(0, bands, bi =>
             {
-                for (int x = 0; x < n; x++)
+                var mb = new PrismMesh($"Far {cell} {bi}", band * n * 6);
+                Vector3 P(int x, int z) => new Vector3(o.x + min + x * cell, heights[z * w + x], o.z + min + z * cell);
+                void T(Vector3 a, Vector3 b, Vector3 c)
                 {
-                    float lx0 = min + x * cell, lz0 = min + z * cell;
-                    if (lx0 >= holeMin - 0.01f && lx0 + cell <= holeMax + 0.01f && lz0 >= holeMin - 0.01f && lz0 + cell <= holeMax + 0.01f) continue;
-                    Vector3 a = P(x, z), bb = P(x, z + 1), c = P(x + 1, z + 1), d = P(x + 1, z);
-                    if (((x + z) & 1) == 0)
+                    var nrm = Vector3.Cross(b - a, c - a).normalized;
+                    mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, nrm));
+                }
+                for (int z = bi * band; z < Mathf.Min(n, (bi + 1) * band); z++)
+                {
+                    for (int x = 0; x < n; x++)
                     {
-                        T(a, bb, c);
-                        T(a, c, d);
-                    }
-                    else
-                    {
-                        T(a, bb, d);
-                        T(bb, c, d);
+                        float lx0 = min + x * cell, lz0 = min + z * cell;
+                        if (lx0 >= holeMin - 0.01f && lx0 + cell <= holeMax + 0.01f && lz0 >= holeMin - 0.01f && lz0 + cell <= holeMax + 0.01f) continue;
+                        Vector3 a = P(x, z), bb = P(x, z + 1), c = P(x + 1, z + 1), d = P(x + 1, z);
+                        if (((x + z) & 1) == 0)
+                        {
+                            T(a, bb, c);
+                            T(a, c, d);
+                        }
+                        else
+                        {
+                            T(a, bb, d);
+                            T(bb, c, d);
+                        }
                     }
                 }
-            }
-            mb.ToGameObject($"Far {cell}", parent, mat, collider: false);
+                meshes[bi] = mb;
+            });
+            foreach (var m in meshes) if (!m.Empty) output.Add(m);
         }
 
         /// <summary>Big puffy 3D clouds drifting around (never between the aerial camera and the zone).</summary>
-        public static void Clouds(ZoneRequest zone, PrismPalette pal, Transform parent, Material mat)
+        public static PrismMesh Clouds(ZoneRequest zone, PrismPalette pal)
         {
             var rng = ZoneRandom.For(zone.Seed, "clouds");
             var mb = new MeshBuilder();
@@ -228,13 +257,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 }
                 placed++;
             }
-            if (mb.VertexCount > 0) mb.ToGameObject("Clouds", parent, mat, collider: false, castShadows: false);
-        }
-
-        private static void Tri(MeshBuilder mb, Vector3 a, Vector3 b, Vector3 c, Func<Vector3, Vector3, Color> colorAt)
-        {
-            var n = Vector3.Cross(b - a, c - a).normalized;
-            mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, n));
+            var pm = new PrismMesh("Clouds", mb.VertexCount);
+            pm.Append(mb);
+            return pm;
         }
     }
 }

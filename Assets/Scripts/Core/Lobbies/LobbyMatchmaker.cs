@@ -25,7 +25,9 @@ namespace FriendlyPersonShooter.Core.Lobbies
     /// </summary>
     public static class LobbyMatchmaker
     {
-        public static List<MergePair> ChooseMerges(IReadOnlyList<Lobby> lobbies, WorldGrid grid, LobbyRules rules)
+        /// <param name="kudos">Past kudos between players, for the small kudos bonus; null for none.</param>
+        public static List<MergePair> ChooseMerges(IReadOnlyList<Lobby> lobbies, WorldGrid grid, LobbyRules rules,
+            IKudosLookup kudos = null)
         {
             if (lobbies == null) throw new ArgumentNullException(nameof(lobbies));
 
@@ -34,7 +36,7 @@ namespace FriendlyPersonShooter.Core.Lobbies
             {
                 for (int j = i + 1; j < lobbies.Count; j++)
                 {
-                    var eval = MergeScorer.Evaluate(lobbies[i], lobbies[j], grid, rules);
+                    var eval = MergeScorer.Evaluate(lobbies[i], lobbies[j], grid, rules, kudos);
                     if (eval.Allowed && eval.Score >= rules.MinMergeScore)
                     {
                         candidates.Add(new MergePair(lobbies[i], lobbies[j], eval.Score));

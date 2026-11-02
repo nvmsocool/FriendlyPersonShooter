@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.World;
 
 namespace FriendlyPersonShooter.Core.Lobbies
@@ -27,6 +28,17 @@ namespace FriendlyPersonShooter.Core.Lobbies
 
         /// <summary>Players this player has blocked. Blocked pairs never share a lobby.</summary>
         public HashSet<int> BlockedPlayers { get; } = new HashSet<int>();
+
+        /// <summary>
+        /// Essence the player still needs, per color (for example a gate's cost minus what they have
+        /// banked). Empty when unknown. Read by the matchmaker's complementary-needs weight.
+        /// </summary>
+        public EssenceAmounts Wants { get; } = new EssenceAmounts();
+
+        /// <summary>
+        /// Essence the player holds beyond what they need and could gift, per color. Empty when unknown.
+        /// </summary>
+        public EssenceAmounts Spare { get; } = new EssenceAmounts();
 
         public LobbyPlayer(int id, ZoneCoord zone, int groupId = 0)
         {

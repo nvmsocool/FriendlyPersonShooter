@@ -40,6 +40,23 @@ namespace FriendlyPersonShooter.Core.Lobbies
         /// <summary>Closing speed (metres per second) that earns the full approach score.</summary>
         public double ApproachFullSpeed { get; set; } = 6.0;
 
+        /// <summary>
+        /// Weight for complementary essence needs: the share (0 to 1) of both lobbies' wanted essence
+        /// that the other lobby has to spare. Second in the doc's order, so it stays below one step of
+        /// proximity (0.5 with the default distances): a full match can't beat being a zone closer,
+        /// but it decides between otherwise equal pairs. Lobbies with no wants score 0 here.
+        /// </summary>
+        public double EssenceWeight { get; set; } = 0.4;
+
+        /// <summary>
+        /// Bonus per past kudos between any player in one lobby and any player in the other (third in
+        /// the doc's order, "a small bonus"). Needs a kudos lookup; without one it adds nothing.
+        /// </summary>
+        public double KudosWeight { get; set; } = 0.05;
+
+        /// <summary>Most the kudos bonus can add, so old friends nudge a pair rather than decide it.</summary>
+        public double MaxKudosBonus { get; set; } = 0.2;
+
         /// <summary>Pairs scoring below this don't merge.</summary>
         public double MinMergeScore { get; set; } = 1.0;
     }

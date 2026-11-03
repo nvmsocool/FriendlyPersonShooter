@@ -41,6 +41,15 @@ namespace FriendlyPersonShooter.Net
         /// <summary>Set by <c>-fps-game arena</c>, or by playing a scene named "Arena" in the Editor.</summary>
         public static GameMode Game = GameMode.Lobbies;
 
+        /// <summary>True when the command line chose the game (-fps-game), which skips the playtest build's menu.</summary>
+        public static bool GameGiven;
+
+        /// <summary>
+        /// Online services profile (-fps-profile name). Each profile signs in as a different anonymous player,
+        /// so two copies of the game on one machine can host and join each other.
+        /// </summary>
+        public static string Profile;
+
         /// <summary>Bot allies in the arena. Each is a full client, so it receives the game state and can aim.</summary>
         public static int ArenaBots = 3;
 
@@ -142,7 +151,14 @@ namespace FriendlyPersonShooter.Net
                         if (int.TryParse(value, out int grid)) GridSize = Math.Max(1, grid);
                         break;
                     case "-fps-game":
-                        if (Enum.TryParse(value, true, out GameMode game)) Game = game;
+                        if (Enum.TryParse(value, true, out GameMode game))
+                        {
+                            Game = game;
+                            GameGiven = true;
+                        }
+                        break;
+                    case "-fps-profile":
+                        Profile = value;
                         break;
                     case "-fps-world-seed":
                         if (uint.TryParse(value, out uint worldSeed)) WorldSeed = worldSeed;

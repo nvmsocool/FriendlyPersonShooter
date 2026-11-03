@@ -13,6 +13,13 @@ namespace FriendlyPersonShooter.Net
     [UnityEngine.Scripting.Preserve]
     public class NetTestBootstrap : ClientServerBootstrap
     {
+        /// <summary>
+        /// True when the game starts at the main menu: no netcode worlds until the player hosts or joins
+        /// (see <see cref="CreateArenaWorlds"/>). The playtest build starts there unless given -fps-game;
+        /// in the Editor, playing the scene named "Menu" does.
+        /// </summary>
+        public static bool StartsAtMenu { get; private set; }
+
         public override bool Initialize(string defaultWorldName)
         {
             NetTestSettings.ParseCommandLine();
@@ -20,7 +27,17 @@ namespace FriendlyPersonShooter.Net
             var sceneName = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
             if (sceneName == "Arena") NetTestSettings.Game = GameMode.Arena;
             if (sceneName == "Expedition") NetTestSettings.Game = GameMode.Expedition;
+            StartsAtMenu = sceneName == "Menu";
+#elif FPS_PLAYTEST
+            StartsAtMenu = !NetTestSettings.GameGiven;
 #endif
+            if (StartsAtMenu)
+            {
+                AutoConnectPort = 0;
+                CreateLocalWorld(defaultWorldName);
+                Debug.Log("[NetTest] Starting at the main menu.");
+                return true;
+            }
             if (NetTestSettings.IsFirstPerson && !NetTestSettings.PortGiven) NetTestSettings.Port = NetTestSettings.ArenaPort;
             AutoConnectPort = NetTestSettings.Port;
 
@@ -75,7 +92,17 @@ namespace FriendlyPersonShooter.Net
         /// </summary>
         private bool InitializeArena(string defaultWorldName)
         {
-            var mode = NetTestSettings.Mode;
+            CreateArenaWorlds(NetTestSettings.Mode);
+            CreateLocalWorld(defaultWorldName);
+            return true;
+        }
+
+        /// <summary>
+        /// Creates the first-person game's worlds for <paramref name="mode"/>: the server, the human's client and
+        /// <see cref="NetTestSettings.ArenaBots"/> bot allies. Also used by the main menu when hosting or joining.
+        /// </summary>
+        public static void CreateArenaWorlds(NetMode mode)
+        {
             if (mode == NetMode.All || mode == NetMode.Server) CreateServerWorld("ServerWorld");
             if (mode == NetMode.All || mode == NetMode.Client) CreateClientWorld("ClientWorld");
             if (mode == NetMode.All || mode == NetMode.Bots)
@@ -87,9 +114,7 @@ namespace FriendlyPersonShooter.Net
                     bot.EntityManager.CreateSingleton(new ArenaBotSeat { Index = i });
                 }
             }
-            CreateLocalWorld(defaultWorldName);
-            Debug.Log($"[NetTest] Game=Arena Mode={mode} arenaBots={NetTestSettings.ArenaBots} port={NetTestSettings.Port}");
-            return true;
+            Debug.Log($"[NetTest] Game={NetTestSettings.Game} Mode={mode} arenaBots={NetTestSettings.ArenaBots} port={AutoConnectPort}");
         }
     }
 }

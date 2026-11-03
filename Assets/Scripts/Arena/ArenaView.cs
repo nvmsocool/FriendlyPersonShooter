@@ -117,7 +117,9 @@ namespace FriendlyPersonShooter.Arena
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
             if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Cursor.lockState = CursorLockMode.None;
-            if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
+            // Clicking into the game captures the mouse, except on an overlay button (the session's Leave and Copy).
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked &&
+                !(UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()))
             {
                 Cursor.lockState = CursorLockMode.Locked;
             }

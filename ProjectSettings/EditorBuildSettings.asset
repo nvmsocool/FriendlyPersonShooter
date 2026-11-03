@@ -11,5 +11,14 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/Menu.unity
+    guid: eb5762266fcf36d40844b7b0894e6991
+  - enabled: 1
+    path: Assets/Scenes/Expedition.unity
+    guid: 9e426c27228006141b2500cd5cc1d7cb
+  - enabled: 1
+    path: Assets/Scenes/Arena.unity
+    guid: 66da23253e597c84eaf1b3bbe3b1efde
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

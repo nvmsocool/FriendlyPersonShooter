@@ -115,14 +115,14 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 case Archetype.GiantMushroom: s.Layer = Layer.Tree; s.Spacing = 9f; s.TrunkR = 0.6f; s.TrunkH = 5f; break;
                 case Archetype.Bamboo: s.Layer = Layer.Tree; s.Spacing = 6f; s.TrunkR = 0.45f; s.TrunkH = 4f; break;
                 case Archetype.Cactus: s.Layer = Layer.Tree; s.Spacing = 6f; s.TrunkR = 0.4f; s.TrunkH = 2.5f; break;
-                case Archetype.Puffball: s.Layer = Layer.Shrub; s.Spacing = 3.2f; s.Tilt = 8f; break;
-                case Archetype.Succulent: s.Layer = Layer.Shrub; s.Spacing = 3f; s.Tilt = 10f; break;
-                case Archetype.Mushroom: s.Layer = Layer.Shrub; s.Spacing = 3.2f; s.Tilt = 10f; break;
-                case Archetype.OrbPlant: s.Layer = Layer.Shrub; s.Spacing = 3.5f; s.Tilt = 8f; break;
-                case Archetype.Fern: s.Layer = Layer.Shrub; s.Spacing = 2.8f; s.Tilt = 8f; break;
-                case Archetype.Flowers: s.Layer = Layer.Flower; s.Spacing = 1.5f; s.Tilt = 6f; break;
-                case Archetype.Grass: s.Layer = Layer.Grass; s.Spacing = 0.85f; s.Tilt = 6f; s.GroundTint = true; s.ScaleMin = 0.9f; s.ScaleMax = 1.35f; break;
-                case Archetype.Reeds: s.Layer = Layer.Reed; s.Spacing = 1.6f; s.Tilt = 5f; break;
+                case Archetype.Puffball: s.Layer = Layer.Shrub; s.Spacing = 4.4f; s.Tilt = 8f; s.ScaleMin = 1.1f; s.ScaleMax = 1.5f; break;
+                case Archetype.Succulent: s.Layer = Layer.Shrub; s.Spacing = 4.2f; s.Tilt = 10f; s.ScaleMin = 1.15f; s.ScaleMax = 1.6f; break;
+                case Archetype.Mushroom: s.Layer = Layer.Shrub; s.Spacing = 4.4f; s.Tilt = 10f; s.ScaleMin = 1.15f; s.ScaleMax = 1.6f; break;
+                case Archetype.OrbPlant: s.Layer = Layer.Shrub; s.Spacing = 4.6f; s.Tilt = 8f; s.ScaleMin = 1.1f; s.ScaleMax = 1.5f; break;
+                case Archetype.Fern: s.Layer = Layer.Shrub; s.Spacing = 4f; s.Tilt = 8f; s.ScaleMin = 1.15f; s.ScaleMax = 1.6f; break;
+                case Archetype.Flowers: s.Layer = Layer.Flower; s.Spacing = 3.2f; s.Tilt = 6f; s.ScaleMin = 1.6f; s.ScaleMax = 2.1f; break;
+                case Archetype.Grass: s.Layer = Layer.Grass; s.Spacing = 2f; s.Tilt = 6f; s.GroundTint = true; s.ScaleMin = 1.5f; s.ScaleMax = 1.9f; break;
+                case Archetype.Reeds: s.Layer = Layer.Reed; s.Spacing = 2.4f; s.Tilt = 5f; s.ScaleMin = 1.05f; s.ScaleMax = 1.35f; break;
             }
             for (int v = 0; v < variants; v++)
             {
@@ -567,13 +567,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public static void FlowerPatch(MeshBuilder mb, ref ZoneRandom rng, Color c, Color c2, Color stem)
         {
-            int count = rng.Range(3, 7);
+            int count = rng.Range(2, 5);
             int head = rng.Range(0, 3);
             var stemC = Color.Lerp(stem, new Color(0.2f, 0.5f, 0.25f), 0.4f);
             for (int i = 0; i < count; i++)
             {
-                var b = new Vector3(rng.Range(-0.6f, 0.6f), 0, rng.Range(-0.6f, 0.6f));
-                float h = rng.Range(0.22f, 0.7f);
+                var b = new Vector3(rng.Range(-0.45f, 0.45f), 0, rng.Range(-0.45f, 0.45f));
+                float h = rng.Range(0.22f, 0.5f);
                 var top = b + new Vector3(rng.Range(-0.08f, 0.08f), h, rng.Range(-0.08f, 0.08f));
                 Blade1(mb, b, top, 0.035f, Shade(stemC, 0.7f), stemC);
                 var fc = rng.Chance(0.25f) ? c2 : c;
@@ -583,7 +583,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     case 0:
                     {
                         int petals = rng.Range(5, 7);
-                        float pl = rng.Range(0.08f, 0.16f);
+                        float pl = rng.Range(0.12f, 0.18f);
                         for (int p = 0; p < petals; p++)
                         {
                             float a0 = p / (float)petals * Mathf.PI * 2f;
@@ -600,7 +600,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         break;
                     }
                     case 1:
-                        Ball(mb, top, Vector3.one * rng.Range(0.06f, 0.12f), fc, Lite(fc, 0.3f), ref rng, 0.1f, 0, true, 0.9f);
+                        Ball(mb, top, Vector3.one * rng.Range(0.09f, 0.14f), fc, Lite(fc, 0.3f), ref rng, 0.1f, 0, true, 0.9f);
                         break;
                     default:
                     {
@@ -627,14 +627,14 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public static void GrassTuft(MeshBuilder mb, ref ZoneRandom rng)
         {
-            int blades = rng.Range(6, 11);
-            float hmax = rng.Range(0.35f, 0.75f);
+            int blades = rng.Range(4, 7);
+            float hmax = rng.Range(0.3f, 0.48f);
             for (int i = 0; i < blades; i++)
             {
-                var b = new Vector3(rng.Range(-0.2f, 0.2f), -0.05f, rng.Range(-0.2f, 0.2f));
-                float h = rng.Range(0.5f, 1f) * hmax;
-                var lean = new Vector3(b.x, 0, b.z).normalized * rng.Range(0.1f, 0.35f) * h;
-                Blade1(mb, b, b + Vector3.up * h + lean, rng.Range(0.07f, 0.13f), new Color(0.62f, 0.62f, 0.62f), new Color(1f, 1f, 1f));
+                var b = new Vector3(rng.Range(-0.18f, 0.18f), -0.05f, rng.Range(-0.18f, 0.18f));
+                float h = rng.Range(0.6f, 1f) * hmax;
+                var lean = new Vector3(b.x, 0, b.z).normalized * rng.Range(0.15f, 0.4f) * h;
+                Blade1(mb, b, b + Vector3.up * h + lean, rng.Range(0.1f, 0.15f), new Color(0.62f, 0.62f, 0.62f), new Color(1f, 1f, 1f));
             }
         }
 

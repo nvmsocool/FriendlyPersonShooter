@@ -20,6 +20,7 @@ Co-op PvE FPS in Unity 6000.6.7f1, built with friends. Design: `Docs/GameDesignD
 - Unity's C# is version 9: no file-scoped namespaces, no `required`, no raw string literals.
 - One MonoBehaviour per file, named after the class.
 - Keep `.meta` files with their assets; never delete or regenerate GUIDs.
+- `Docs/GameDesignDocument.md` is the only design doc. Update it in the same change when design rules or prototype status change. Don't create a copy elsewhere (Claude Docs, Google Docs, artifacts).
 
 ## Headless build quirks
 - The first build right after a recompile can silently skip; `build.ps1` checks the output DLL timestamp.

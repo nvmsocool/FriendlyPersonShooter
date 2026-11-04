@@ -31,7 +31,7 @@ A session is an expedition of about 20–40 minutes: head out, hunt drills for t
 flowchart LR
     A["Explore a region<br/>follow tips and landmarks"] --> B["Hunt drill enemies<br/>each family drops its color"]
     B --> C["Meet other players<br/>trade tips, buffs, essence"]
-    C --> D["Bank essence<br/>carried until a shrine"]
+    C --> D["Bank essence<br/>carried until a door or gate"]
     D --> E["Open a gate or raid<br/>spend essence, often pooled"]
     E --> F["Loot mods and frames<br/>then head somewhere harder"]
     F --> A
@@ -82,7 +82,7 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 
 **Carried vs. banked**
 
-- Essence you pick up is *carried* until you bank it at a shrine (a few in every zone).
+- Essence you pick up is *carried* until you bank it at the layer's **raid door** or a **gate** (stand by one). Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. At the raid door, Red and Green go to the raid key first if it needs them.
 - Banked essence goes into your **party's shared bank** (a party is a group you've teamed up with): everyone in the party banks into it and spends from it. Carried essence and caches stay personal. A solo player's bank is their own.
 - When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Any player who picks up your cache sends it back to you and gets a small kudos reward. Returning a stranger's lost essence becomes a common good deed.
 
@@ -161,7 +161,7 @@ The prototype (MVP step 3) has Plague and Blitz, the two combos possible with Vi
 
 Reviving a downed player is itself an aim drill that anyone can do, and more helpers make it faster. When a player goes down, bits of their soul burst out, and other players shoot them down to bring the player back.
 
-- **Bleed-out:** a downed player has about 30 seconds before they respawn at the nearest shrine and drop half their carried essence as a cache.
+- **Bleed-out:** a downed player has about 30 seconds before they respawn at the nearest shrine and drop half their carried essence as a cache. The other half stays carried.
 - **Soul fragments** burst out in waves and fly in arcs and zigzags around the body, mixing flick and tracking targets. They're faster and smaller on deeper layers.
 - **Revive:** hit about 8 fragments before bleed-out ends. Any player's bullets count, whatever the payload, and hits from several players add to the same total. A Vigor hit counts as 2.
 - **No hard fail:** fragments nobody hits just fade while new waves keep coming. The only way to fail is running out of time.
@@ -223,8 +223,8 @@ The world is a set of huge grids of zones that wrap around at the edges, one gri
 - A zone takes about 3–5 minutes to walk across, with a target of 4–8 players per zone at busy times. Both numbers get tuned in playtests.
 - Zones are stitched from hand-built tiles (ruins, rivers, towers, canyons) using the seed. Hand-built pieces keep the shooting spaces good; the seed changes their layout and color bias.
 - Every zone has a few named **landmarks** ("the Broken Tower", "Twin Falls") so players can give directions: "purple's past the Broken Tower." The compass and quick-chat use these names.
-- Every zone has a few **shrines** for banking essence and respawning.
-- **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown).
+- Every zone has a few **shrines** for respawning. Banking happens at the raid door and gates (one raid door per layer for now; add more if the walk back feels long).
+- **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown). You keep your carried essence but can't bank it for 60 seconds.
 - **No visible edge.** Fog and draw distance end inside the loaded neighbor zones, so players never see past what's loaded.
 - Crossing into a new zone blends the sky's colors only, never its cloud pattern.
 - Terrain, the spawn schedule and blooms all follow from the seed and the clock. A lobby tracks only short-lived things: live enemies and dropped caches.
@@ -368,7 +368,7 @@ Bot players let one developer test the network and gameplay without organizing p
 **What a bot does**
 
 - Logs in with a test account, joins a lobby and moves between zones like a player.
-- Picks goals the way a player would: hunt a needed color, head toward unvisited zones, go to a bloom, bank at a shrine.
+- Picks goals the way a player would: hunt a needed color, head toward unvisited zones, go to a bloom, bank at a gate or the raid door.
 - Shoots enemies, buffs nearby players (human or bot), starts chains, shoots revive fragments, and pledges essence at gates and raid doors.
 - Sends and reacts to quick-chat ("Seen any Yellow?" → heads that way), invites players to groups and accepts invites.
 - Aims with adjustable reaction time, tracking error and flick overshoot, so bots can stand in for strong and weak aimers.

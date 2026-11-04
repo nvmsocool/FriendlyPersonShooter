@@ -39,9 +39,10 @@ namespace FriendlyPersonShooter.Arena
     /// The expedition (MVP step 4) on the server, on top of the arena's combat:
     /// - Enemies spawn from the layer's seeded spawn schedule (and blooms) in zones near players.
     ///   Each spawn event spawns once; enemies it made leave when it ends.
-    /// - Every player who hit an enemy gets its full essence drop, carried until they stand at a shrine.
+    /// - Every player who hit an enemy gets its full essence drop, carried until they stand at the raid door
+    ///   or a gate, which bank it (not shrines; see <see cref="Banking"/>). A reset blocks banking for a minute.
     /// - Standing at the gate with enough banked essence pays for access; walking through ends the expedition.
-    /// - Bleeding out drops half the carried essence as a cache and respawns you at the nearest shrine.
+    /// - Bleeding out drops half the carried essence as a cache and respawns you at the nearest shrine (the rest stays carried).
     ///   Anyone else who walks over the cache sends it back to its owner (and earns kudos).
     /// </summary>
     public partial class ArenaServerSystem
@@ -55,6 +56,7 @@ namespace FriendlyPersonShooter.Arena
         private DropLedger _ledger;
         private Gate _gate;
         private CacheRegistry _caches;
+        private Banking _banking;
         private readonly Dictionary<int, EssenceWallet> _wallets = new Dictionary<int, EssenceWallet>();
         /// <summary>Banked essence is one pool for the whole party; carried essence stays personal.</summary>
         private readonly EssenceAmounts _partyBank = new EssenceAmounts();
@@ -80,6 +82,10 @@ namespace FriendlyPersonShooter.Arena
             _caches = new CacheRegistry();
             CreateSocial();
             CreateRaid();
+            // Doors bank, shrines don't: shrines are where bleeding out and Reset position put you.
+            _banking = new Banking(_map);
+            _banking.AddSite(RaidDoorPoint, _raid.Settings.UseRadius);
+            foreach (var g in _map.Gates) _banking.AddSite(g.Point.World, ExpeditionWorld.GateUseRadius);
             Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} grid={_map.Grid.Width}x{_map.Grid.Height} zone={_map.Grid.ZoneSize}m " +
                       $"start={_map.StartZone} gate={_map.Gates[0].Point.Zone} landmarks={_map.Landmarks.Count} shrines={_map.Shrines.Count}");
         }
@@ -99,7 +105,7 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!_trackers.TryGetValue(id, out var t))
             {
-                t = new ExpeditionTracker(_map, _gate, WalletOf(id), _time, _blooms);
+                t = new ExpeditionTracker(_map, _gate, WalletOf(id), _time, _blooms, null, _banking);
                 _trackers[id] = t;
             }
             return t;
@@ -109,6 +115,7 @@ namespace FriendlyPersonShooter.Arena
         {
             _ledger.PlayerGone(id);
             _raid?.Leave(id);
+            _banking?.Forget(id);
             _wallets.Remove(id);
             _trackers.Remove(id);
         }
@@ -249,7 +256,7 @@ namespace FriendlyPersonShooter.Arena
             _spawned.Clear();
         }
 
-        /// <summary>Shrines, the gate and caches for every player, then their HUD status.</summary>
+        /// <summary>Banking, the gate and caches for every player, then their HUD status.</summary>
         private void UpdateExpeditionPlayers()
         {
             foreach (var (owner, transform, status, entity) in SystemAPI
@@ -263,14 +270,20 @@ namespace FriendlyPersonShooter.Arena
                 var pos = ExpeditionWorld.Ground(transform.ValueRO.Position);
 
                 bool inRaid = InsideRaid(id);
+                bool lockedAtBank = false;
                 if (!state.Vitals.IsDown && !inRaid)
                 {
-                    var shrine = _map.NearestShrine(pos);
-                    if (_map.Distance(shrine.Point.World, pos) <= ExpeditionWorld.ShrineRadius && !wallet.CarriedAll().IsEmpty)
+                    // At the raid door this runs after the key took its Red and Green (StepRaid goes first);
+                    // at a gate it runs before paying, so freshly banked Yellow can open it straight away.
+                    if (!RaidArena.Contains(transform.ValueRO.Position))
                     {
-                        int banked = wallet.BankAll().Total;
-                        _banked += banked;
-                        AddXp(id, banked * XpRewards.PerEssenceBanked);
+                        int banked = _banking.TryBank(wallet, pos, _time).Total;
+                        if (banked > 0)
+                        {
+                            _banked += banked;
+                            AddXp(id, banked * XpRewards.PerEssenceBanked);
+                        }
+                        lockedAtBank = !_banking.CanBank(id, _time) && _banking.IsAtBank(pos) && !wallet.CarriedAll().IsEmpty;
                     }
 
                     float toGate = _map.Distance(_gate.Site.Point.World, pos);
@@ -319,6 +332,13 @@ namespace FriendlyPersonShooter.Arena
                         true, prey, "prey");
                 }
                 if (TryRaidObjective(id, pos, objective.Phase, out var raidObjective)) objective = raidObjective;
+                // Standing at a door that won't bank yet (after a reset): say why nothing happens.
+                string lockout = lockedAtBank ? Banking.LockoutText(_banking.LockedFor(id, _time)) : null;
+                if (lockout != null && !objective.Text.StartsWith(lockout))
+                {
+                    objective = new ExpeditionObjective(objective.Phase, $"{lockout}. {objective.Text}",
+                        objective.HasTarget, objective.Target, objective.TargetLabel);
+                }
                 var next = new ExpeditionStatus
                 {
                     Carried = wallet.Carried(color),

@@ -44,7 +44,8 @@ namespace FriendlyPersonShooter.Core.Tests
 
             o = _tracker.Update(800, start);
             Assert.That(o.Phase, Is.EqualTo(ExpeditionPhase.Bank));
-            Assert.That(o.Target, Is.EqualTo(_map.NearestShrine(start).Point.World));
+            Assert.That(o.Target, Is.EqualTo(_gate.Site.Point.World), "the gate banks, so head straight there");
+            Assert.That(o.Text, Does.StartWith("Take your Yellow to the gate"));
             Assert.That(o.Text, Does.Contain("40 carried"));
 
             _wallet.BankAll();
@@ -99,6 +100,23 @@ namespace FriendlyPersonShooter.Core.Tests
             o = _tracker.Update(mid, next.Point.World + new Vector2(3, 3));
             Assert.That(o.Target, Is.EqualTo(_blooms.NearestActive(next.Point.World + new Vector2(3, 3), EssenceColor.Yellow, mid, 1).Point.World));
             Assert.That(o.TargetLabel, Does.StartWith("the Yellow bloom near "));
+        }
+
+        [Test]
+        public void Banking_AfterAReset_SaysHowLongUntilYouCanBank()
+        {
+            var banking = new Banking(_map);
+            var tracker = new ExpeditionTracker(_map, _gate, _wallet, 0, _blooms, null, banking);
+            _wallet.PickUp(EssenceColor.Yellow, 40);
+            banking.PositionReset(_wallet.PlayerId, 100);
+
+            var o = tracker.Update(117.5, _map.StartPoint.World);
+            Assert.That(o.Phase, Is.EqualTo(ExpeditionPhase.Bank));
+            Assert.That(o.Text, Does.StartWith("Can't bank your essence for 43s (you reset)"));
+            Assert.That(o.Target, Is.EqualTo(_gate.Site.Point.World));
+
+            o = tracker.Update(160, _map.StartPoint.World);
+            Assert.That(o.Text, Does.StartWith("Take your Yellow to the gate"));
         }
 
         [Test]

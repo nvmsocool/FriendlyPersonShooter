@@ -97,7 +97,7 @@ namespace FriendlyPersonShooter.Arena
             "3 Seen any Yellow?      4 Yellow here\n" +
             "5 Follow me      6 Group up?\n" +
             "7 Gate at...      K give kudos\n\n" +
-            "<color=#B8B0D8>Stuck? Reset position takes you to the nearest shrine.</color>";
+            "<color=#B8B0D8>Stuck? Reset position takes you to the nearest shrine. You keep your essence, but you can't bank it for a minute.</color>";
 
         private const string PayloadGuide =
             "<b><size=26>Payloads</size></b>   shoot allies to buff them, enemies to weaken them\n\n" +
@@ -107,7 +107,7 @@ namespace FriendlyPersonShooter.Arena
             "<color=#D98CFF><b>RELAY</b></color>  allies: their next 5 hits also carry Might and add a chain link.  enemies: tag (hits splash)\n\n" +
             "<b>Chains</b>  buffing different allies in a row builds a chain; an enemy hit cashes it for bonus damage.\n" +
             "<b>Down?</b>  allies shoot your soul fragments to revive you.\n\n" +
-            "<b>Expedition</b>  gather Yellow, bank it at shrines, pay the gate with banked Yellow and walk through (aim for under 20:00). Follow the light beam. Banked essence is shared by the party.\n" +
+            "<b>Expedition</b>  gather Yellow, bank it at the raid door or the gate, pay the gate with banked Yellow and walk through (aim for under 20:00). Follow the light beam. Banked essence is shared by the party.\n" +
             "<b>Glimmers</b>  small yellow diamonds: one shot pops them for a little Yellow.\n" +
             "<b>Skills</b>  XP levels you up; spend points with the Skills button below.";
 

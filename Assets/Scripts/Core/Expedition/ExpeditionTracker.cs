@@ -9,7 +9,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     {
         /// <summary>Hunt the gate's color until carried + banked covers the cost.</summary>
         Gather = 0,
-        /// <summary>Enough in hand, but not enough banked: get to a shrine.</summary>
+        /// <summary>Enough in hand, but not enough banked: get to the gate (or raid door), which banks it.</summary>
         Bank = 1,
         /// <summary>Enough banked: walk to the gate and pay.</summary>
         Unlock = 2,
@@ -30,7 +30,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// so ~5 shots and ~0.6 hits per window: ~5 windows, ~11 s of fighting per kill. Add ~9 s to
     /// find and reach the next one: ~20 s a kill, about 3 kills a minute.</item>
     /// <item>40 kills ≈ 13 minutes of hunting, plus ~3 minutes to walk the 2 zones to the gate and
-    /// ~1 minute to detour to a shrine: about 17 minutes. Blooms, other players' shared drops and
+    /// ~1 minute of slack: about 17 minutes. (The gate banks, so there is no detour to bank.) Blooms, other players' shared drops and
     /// chains make it faster; a bleed-out (half of carried lost to a cache) makes it slower.</item>
     /// </list>
     /// </summary>
@@ -50,7 +50,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         public readonly bool HasTarget;
         /// <summary>World ground position (x, z) to point the compass at.</summary>
         public readonly Vector2 Target;
-        /// <summary>Short description of the target, for example "the shrine near the Old Mill in zone (1,2)".</summary>
+        /// <summary>Short description of the target, for example "the gate near the Old Mill in zone (1,2)".</summary>
         public readonly string TargetLabel;
 
         public ExpeditionObjective(ExpeditionPhase phase, string text, bool hasTarget, Vector2 target, string targetLabel)
@@ -66,7 +66,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// One player's goal for the MVP step-4 session: gather the gate's color, bank it at a shrine,
+    /// One player's goal for the MVP step-4 session: gather the gate's color, bank it (at the gate or raid door),
     /// pay at the gate, go through. The phase is worked out from the wallet and gate each update, so
     /// it moves back if the player bleeds out and loses carried essence, or gifts it away. Records
     /// when each phase was first reached and when the run finished.
@@ -78,16 +78,18 @@ namespace FriendlyPersonShooter.Core.Expedition
         private readonly EssenceWallet _wallet;
         private readonly BloomSchedule _blooms;
         private readonly ExpeditionSettings _settings;
+        private readonly Banking _banking;
         private readonly double?[] _reachedAt = new double?[5];
         private double? _completedAt;
 
         public ExpeditionTracker(LayerMap map, Gate gate, EssenceWallet wallet, double startTime,
-            BloomSchedule blooms = null, ExpeditionSettings settings = null)
+            BloomSchedule blooms = null, ExpeditionSettings settings = null, Banking banking = null)
         {
             _map = map ?? throw new ArgumentNullException(nameof(map));
             _gate = gate ?? throw new ArgumentNullException(nameof(gate));
             _wallet = wallet ?? throw new ArgumentNullException(nameof(wallet));
             _blooms = blooms;
+            _banking = banking;
             _settings = settings ?? new ExpeditionSettings();
             StartedAt = startTime;
             Phase = CurrentPhase();
@@ -175,11 +177,13 @@ namespace FriendlyPersonShooter.Core.Expedition
                 }
                 case ExpeditionPhase.Bank:
                 {
-                    var shrine = _map.NearestShrine(position);
-                    string label = $"the shrine {_map.Describe(shrine.Point.World)}";
-                    return new ExpeditionObjective(Phase,
-                        $"Bank your {color} at a shrine: {carried} carried, {banked}/{GoalAmount} banked. Nearest is {label}",
-                        true, shrine.Point.World, label);
+                    // The gate banks, so carrying enough means heading straight there.
+                    string label = $"the gate {gatePlace}";
+                    double locked = _banking != null ? _banking.LockedFor(PlayerId, now) : 0.0;
+                    string text = locked > 0.0
+                        ? $"{Banking.LockoutText(locked)}. Then take your {color} to {label}"
+                        : $"Take your {color} to {label} to bank it: {carried} carried, {banked}/{GoalAmount} banked";
+                    return new ExpeditionObjective(Phase, text, true, gatePoint, label);
                 }
                 case ExpeditionPhase.Unlock:
                 {

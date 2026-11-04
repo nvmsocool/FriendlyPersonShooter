@@ -27,7 +27,7 @@ namespace FriendlyPersonShooter.ZoneArt
     {
         /// <summary>A named place players give directions by; build something memorable here.</summary>
         Landmark,
-        /// <summary>Banks essence and respawns players; needs flat open ground within <see cref="ZoneRequest.ShrineClearRadius"/>.</summary>
+        /// <summary>Respawns players (and Reset position lands there); needs flat open ground within <see cref="ZoneRequest.ShrineClearRadius"/>.</summary>
         Shrine,
         /// <summary>The gate to the next layer; needs flat open ground within <see cref="ZoneRequest.GateClearRadius"/>.</summary>
         Gate,

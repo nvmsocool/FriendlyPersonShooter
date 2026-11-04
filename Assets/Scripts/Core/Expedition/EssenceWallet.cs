@@ -13,13 +13,12 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     /// <summary>
     /// One player's essence, split into <em>carried</em> (picked up, at risk until banked) and
-    /// <em>banked</em> (safe; stored at a shrine).
+    /// <em>banked</em> (safe; stored at the raid door or a gate, see <see cref="Banking"/>).
     ///
     /// Rules where the design doc was silent:
     /// <list type="bullet">
-    /// <item>Spending (gates, later raid keys) uses banked essence only. Banking at a shrine is the
-    /// step that commits essence, so a run has a clear "bank it" beat, and there is a shrine in every
-    /// zone, including the gate's.</item>
+    /// <item>Spending (gates, later raid keys) uses banked essence only. Banking is the step that
+    /// commits essence, so a run has a clear "bank it" beat; the gate banks too, so paying needs no detour.</item>
     /// <item>Gifts move pool to pool: carried essence arrives carried, banked essence arrives banked.
     /// So handing a friend banked essence at the gate lets them pay right away, while carried
     /// essence stays at risk until they bank it. By default carried goes first.</item>
@@ -75,7 +74,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             (banked ? _banked : _carried).Add(amounts);
         }
 
-        /// <summary>Moves all carried essence to banked (standing at a shrine). Returns what moved.</summary>
+        /// <summary>Moves all carried essence to banked (standing at the raid door or a gate). Returns what moved.</summary>
         public EssenceAmounts BankAll()
         {
             var moved = _carried.Clone();

@@ -118,7 +118,7 @@ namespace FriendlyPersonShooter.Core.Progression
 
         /// <summary>A buff or heal that landed on an ally.</summary>
         public const int AllyBuff = 2;
-        /// <summary>Per essence banked at a shrine.</summary>
+        /// <summary>Per essence banked (at the raid door or a gate).</summary>
         public const int PerEssenceBanked = 2;
         public const int Revive = 25;
     }

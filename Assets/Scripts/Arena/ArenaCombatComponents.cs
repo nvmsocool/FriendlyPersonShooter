@@ -69,6 +69,10 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public bool Exposed;
         [GhostField] public bool Slowed;
         [GhostField] public bool Tagged;
+        /// <summary>Raid boss: which way its weak plate faces (degrees), and whether the plate is open or about to open.</summary>
+        [GhostField(Quantization = 10)] public float Yaw;
+        [GhostField] public bool PlateOpen;
+        [GhostField] public bool PlateWarn;
     }
 
     /// <summary>A downed player's soul fragment. Shoot it to help revive them.</summary>
@@ -124,6 +128,18 @@ namespace FriendlyPersonShooter.Arena
         CacheReturned = 7,
         /// <summary>Player reached a new level. Value = the level.</summary>
         LevelUp = 8,
+        /// <summary>Raid: the key is full. Value = seconds until whoever stands at the door goes in.</summary>
+        RaidGathering = 9,
+        /// <summary>Raid: a group went in. Value = how many.</summary>
+        RaidStarted = 10,
+        /// <summary>Raid: the boss fell. Value = seconds the run took.</summary>
+        RaidCleared = 11,
+        /// <summary>Raid: the run failed. Value = (int)RaidOutcome.</summary>
+        RaidFailed = 12,
+        /// <summary>Raid: the boss called in adds. Value = the wave.</summary>
+        RaidAdds = 13,
+        /// <summary>Raid: Player pledged essence to the key. Value = how much.</summary>
+        RaidPledged = 14,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

@@ -44,6 +44,24 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        private static System.Numerics.Vector2 _raidDoor;
+        private static uint _raidDoorSeed = uint.MaxValue;
+
+        /// <summary>Where the layer's raid door stands (world x, z). The raid arena floats above it.</summary>
+        public static System.Numerics.Vector2 RaidDoor
+        {
+            get
+            {
+                var map = Map;
+                if (_raidDoorSeed != map.Seed)
+                {
+                    _raidDoorSeed = map.Seed;
+                    _raidDoor = RaidSite.DoorFor(map);
+                }
+                return _raidDoor;
+            }
+        }
+
         /// <summary>Side of the square world in metres (0 in the arena).</summary>
         public static float Size => Active ? Map.Grid.Width * Map.Grid.ZoneSize : 0f;
 

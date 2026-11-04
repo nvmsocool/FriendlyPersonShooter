@@ -26,6 +26,13 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public FixedString128Bytes Objective;
         /// <summary>Where the player is, by landmark ("near the Broken Tower in zone (3,4)").</summary>
         [GhostField] public FixedString128Bytes Location;
+
+        /// <summary>Raid door (MVP step 6): its phase, the key so far, and the countdown or time left.</summary>
+        [GhostField] public Core.Expedition.RaidPhase RaidPhase;
+        [GhostField] public bool InRaid;
+        [GhostField] public int KeyRed;
+        [GhostField] public int KeyGreen;
+        [GhostField(Quantization = 10)] public float RaidTimer;
     }
 
     /// <summary>Essence dropped by a player who bled out. Walk over it to send it back to them.</summary>

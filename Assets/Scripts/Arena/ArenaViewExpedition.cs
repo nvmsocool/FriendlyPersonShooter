@@ -168,6 +168,7 @@ namespace FriendlyPersonShooter.Arena
             e.Append($"<color=#FFE14D>Yellow</color>  carried <b>{s.Carried}</b>   party bank <b>{s.Banked} / {s.Goal}</b>");
             if (s.Kudos > 0) e.Append($"   kudos {s.Kudos}");
             e.Append($"\n{s.Objective}\n");
+            WriteRaidHud(s, e);
             if (s.HasTarget && !s.Complete)
             {
                 var delta = ExpeditionWorld.Near(new float3(s.Target.x, 0f, s.Target.y), _camRef) - _camRef;

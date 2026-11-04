@@ -127,6 +127,20 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
+        /// Takes up to <paramref name="amount"/> of one color, carried first, then banked (a raid key pledge).
+        /// Returns how much was taken.
+        /// </summary>
+        public int Take(EssenceColor color, int amount)
+        {
+            if (amount <= 0) return 0;
+            int fromCarried = Math.Min(amount, _carried[color]);
+            _carried[color] -= fromCarried;
+            int fromBanked = Math.Min(amount - fromCarried, _banked[color]);
+            _banked[color] -= fromBanked;
+            return fromCarried + fromBanked;
+        }
+
+        /// <summary>
         /// Removes <paramref name="share"/> of each carried color (rounded down) for a bleed-out
         /// cache and returns it. Use <see cref="Combat.ReviveSettings.EssenceDropShare"/> for the share.
         /// </summary>

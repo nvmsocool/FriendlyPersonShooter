@@ -19,11 +19,18 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>Glimmers never attack.</summary>
         public static EnemyAttackSettings ForGlimmer() => new EnemyAttackSettings { Range = 0f, Damage = 0f, MinCooldown = 1e6f, MaxCooldown = 1e6f };
 
+        /// <summary>The raid boss: a long, slow wind-up, then a heavy bolt at anyone on the platform.</summary>
+        public static EnemyAttackSettings ForBulwark() => new EnemyAttackSettings
+        {
+            Range = 60f, Damage = 18f, TelegraphTime = 1.2f, MinCooldown = 1.8f, MaxCooldown = 3f,
+        };
+
         public static EnemyAttackSettings For(EnemyFamily family)
         {
             switch (family)
             {
                 case EnemyFamily.Wisp: return ForWisp();
+                case EnemyFamily.Bulwark: return ForBulwark();
                 case EnemyFamily.Skitter: return ForSkitter();
                 case EnemyFamily.Glimmer: return ForGlimmer();
                 default: return ForMite();

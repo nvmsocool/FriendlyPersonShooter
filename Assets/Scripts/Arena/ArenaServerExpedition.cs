@@ -79,6 +79,7 @@ namespace FriendlyPersonShooter.Arena
             _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed);
             _caches = new CacheRegistry();
             CreateSocial();
+            CreateRaid();
             Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} grid={_map.Grid.Width}x{_map.Grid.Height} zone={_map.Grid.ZoneSize}m " +
                       $"start={_map.StartZone} gate={_map.Gates[0].Point.Zone} landmarks={_map.Landmarks.Count} shrines={_map.Shrines.Count}");
         }
@@ -107,6 +108,7 @@ namespace FriendlyPersonShooter.Arena
         private void ExpeditionPlayerGone(int id)
         {
             _ledger.PlayerGone(id);
+            _raid?.Leave(id);
             _wallets.Remove(id);
             _trackers.Remove(id);
         }
@@ -157,6 +159,7 @@ namespace FriendlyPersonShooter.Arena
             if (_time >= _nextStatus)
             {
                 _nextStatus = _time + StatusInterval;
+                StepRaid(ecb);
                 UpdateExpeditionPlayers();
                 _caches.ExpireOld(_time);
                 SyncCaches(ecb);
@@ -199,7 +202,10 @@ namespace FriendlyPersonShooter.Arena
                 _spawnedEvents.Remove(key);
             }
             _scratch.Clear();
-            foreach (var kv in _enemies) if (kv.Value.Family != EnemyFamily.Glimmer && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+            foreach (var kv in _enemies)
+            {
+                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+            }
             foreach (var e in _scratch)
             {
                 var s = _enemies[e];
@@ -256,7 +262,8 @@ namespace FriendlyPersonShooter.Arena
                 var tracker = TrackerOf(id);
                 var pos = ExpeditionWorld.Ground(transform.ValueRO.Position);
 
-                if (!state.Vitals.IsDown)
+                bool inRaid = InsideRaid(id);
+                if (!state.Vitals.IsDown && !inRaid)
                 {
                     var shrine = _map.NearestShrine(pos);
                     if (_map.Distance(shrine.Point.World, pos) <= ExpeditionWorld.ShrineRadius && !wallet.CarriedAll().IsEmpty)
@@ -311,7 +318,8 @@ namespace FriendlyPersonShooter.Arena
                         $"Gather {color}: {tracker.Collected}/{tracker.GoalAmount}. {FamilyName(color)} spotted {_map.Describe(prey)}",
                         true, prey, "prey");
                 }
-                status.ValueRW = new ExpeditionStatus
+                if (TryRaidObjective(id, pos, objective.Phase, out var raidObjective)) objective = raidObjective;
+                var next = new ExpeditionStatus
                 {
                     Carried = wallet.Carried(color),
                     Banked = wallet.Banked(color),
@@ -324,8 +332,10 @@ namespace FriendlyPersonShooter.Arena
                     Kudos = _caches.KudosOf(id),
                     BloomNear = _blooms.NearestActive(pos, color, _time, 1) != null,
                     Objective = Truncate(objective.Text),
-                    Location = Truncate(_map.Describe(pos)),
+                    Location = Truncate(inRaid ? "in the raid arena, high above the raid door" : _map.Describe(pos)),
                 };
+                WriteRaidStatus(id, ref next);
+                status.ValueRW = next;
             }
         }
 
@@ -413,6 +423,7 @@ namespace FriendlyPersonShooter.Arena
             Debug.Log($"[Expedition] t={_time:0} events={_eventsSpawned} essence={_essenceAwarded} banked={_banked} unlocks={_gateUnlocks} " +
                       $"completions={_completions} cachesDropped={_cachesDropped} cachesReturned={_cachesReturned} players=[{sb}]");
             Debug.Log($"[Social] t={_time:0} {SocialLog()}");
+            Debug.Log($"[Raid] t={_time:0} {RaidLog()}");
         }
     }
 }

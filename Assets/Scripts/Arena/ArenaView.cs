@@ -75,6 +75,7 @@ namespace FriendlyPersonShooter.Arena
             CreateCombatMaterials();
             CreateExpeditionMaterials();
             CreateFeedbackMaterials();
+            CreateRaidMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();
@@ -154,7 +155,11 @@ namespace FriendlyPersonShooter.Arena
                 _camRef = feet;
             }
             if (_wrap && ExpeditionTerrain.Active && eye.HasValue) UpdateZoneView();
-            if (_wrap) DrawExpeditionWorld();
+            if (_wrap)
+            {
+                DrawExpeditionWorld();
+                DrawRaid();
+            }
 
             DrawPlayers(world, local);
             DrawCombat(world, local);

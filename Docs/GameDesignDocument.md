@@ -419,7 +419,7 @@ Tackle the riskiest part first: networking and lobby matchmaking, proven with te
 
 ### Prototype status (November 2026)
 
-Steps 1–4 are built and pass their bot-only checks; step 5 is built. Each step still needs its human playtest.
+Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. Each step still needs its human playtest.
 
 | Step | Built | Measured with bots |
 | --- | --- | --- |
@@ -428,6 +428,7 @@ Steps 1–4 are built and pass their bot-only checks; step 5 is built. Each step
 | 3. Chains and revives | Haste and Relay, chains with the bonus, Plague and Blitz combos, soul-fragment revive, Medic bot | Bots cash 2-link chains, form combos and revive downed allies (8 fragment hits in about 20 s), also on a 150 ms link |
 | 4. First layer and gate | Expedition mode: generated wrapping 4x4 layer of 250 m zones, landmarks, shrines, seeded spawns and blooms, essence, caches, one 40-Yellow gate, objective HUD with a light beam | A Might bot hunted 40 Yellow, banked it and passed the gate in 14:21; a Haste bot that mostly buffed earned only 9 |
 | 5. Strangers | Quick-chat (fixed lines with color and landmark slots, 60 m earshot, rate limits), sightings and shared map knowledge, kudos with anti-farming rules, encounter-exchange measurement, matchmaker weights for complementary essence needs and past kudos (in the core logic; not yet fed from the game) | Wired into the expedition: number keys say lines, K gives kudos, bots call for a res and say thanks. The real check needs several humans |
+| 6. First raid | A raid door near the start shrine with a 20 Red + 12 Green key pledged from carried or banked essence; a 20 s gather countdown, then whoever stands at the door goes in (up to 8); a floating arena; the Bulwark boss (health scales per player, armored shell, a turning plate that opens for full damage, add waves at 75/50/25%); clear gives 300 XP and 10 Yellow; wipe, timeout (8 min) and reset | 4 bots cleared it in 2:40 with one down and a revive; 1 player alone wiped in 22 s. Bots don't yet gather Red and Green or answer the gather call |
 
 **First human playtest (Nov 3, 2026).** Friends played a hosted build over Relay. Fixed right after: a HUD in place of the debug text (help moved to the Esc menu), Reset position, player colors, per-payload shot sounds, and the sky that seemed to spin when crossing zones. Added next: party-shared bank, clearer damage taken, your own quick-chat in the feed, a player-only minimap, levels with a skill tree, damage numbers, Glimmers, filled pits, and no view past the loaded zones.
 

@@ -18,6 +18,11 @@ namespace FriendlyPersonShooter.Core.Combat
         public float WeakPointRadius;
         /// <summary>False while the target can't be hit (a Wisp between blink windows). Bullets pass through.</summary>
         public bool Hittable;
+        /// <summary>
+        /// The weak point counts only when the ray reaches it before (or about where) it enters the body:
+        /// a plate on one side of a shell can't be shot through the shell from behind.
+        /// </summary>
+        public bool WeakPointOnSurface;
 
         public static HitTarget Body(int id, Vector3 center, float radius, bool isPlayer = false)
         {
@@ -58,6 +63,9 @@ namespace FriendlyPersonShooter.Core.Combat
     /// </summary>
     public static class HitScan
     {
+        /// <summary>How far past the body's surface a surface weak point still counts (metres).</summary>
+        public const float SurfaceSlack = 0.5f;
+
         /// <summary>
         /// Casts a ray (direction need not be normalized) and returns true with the nearest hit
         /// within <paramref name="maxRange"/>. Skips <paramref name="ignoreId"/> (the shooter).
@@ -82,6 +90,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 bool weakHit = t.HasWeakPoint &&
                                HitGeometry.RaySphere(origin, dir, t.WeakPointCenter, t.WeakPointRadius, out weakDist) &&
                                weakDist <= maxRange;
+                if (weakHit && t.WeakPointOnSurface && bodyHit && weakDist > bodyDist + SurfaceSlack) weakHit = false;
                 if (!bodyHit && !weakHit) continue;
 
                 // The hit point is where the ray first touches the target. A pass through the weak

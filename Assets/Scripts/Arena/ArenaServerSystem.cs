@@ -74,6 +74,12 @@ namespace FriendlyPersonShooter.Arena
             public Vector3 Home;
             public double Born;
             public float Phase;
+            /// <summary>Raid boss behavior (Family Bulwark).</summary>
+            public BulwarkBehavior Boss;
+            /// <summary>Max health when it isn't the family's default (the boss, scaled to the group).</summary>
+            public float MaxHealth;
+            /// <summary>Part of the raid fight: removed (without drops) when the run ends.</summary>
+            public bool Raid;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -130,6 +136,7 @@ namespace FriendlyPersonShooter.Arena
             _time += dt;
             var tick = SystemAPI.GetSingleton<NetworkTime>().ServerTick;
             int tickIndex = tick.IsValid ? (int)tick.TickIndexForValidTick : 0;
+            _tick = tickIndex;
 
             if (!_seeded)
             {
@@ -193,8 +200,8 @@ namespace FriendlyPersonShooter.Arena
                     // Stuck somewhere: back to the nearest shrine (the arena's spawn ring), no penalty.
                     state.NextUnstuck = _time + UnstuckCooldown;
                     var random = new Unity.Mathematics.Random(NextSeed() | 1u);
-                    float3 spot = ExpeditionWorld.Active
-                        ? ExpeditionWorld.ShrineSpawn(transform.ValueRO.Position, ref random)
+                    float3 spot = InsideRaid(id) ? RaidArena.SpawnSpot(random.NextInt(8), 8)
+                        : ExpeditionWorld.Active ? ExpeditionWorld.ShrineSpawn(transform.ValueRO.Position, ref random)
                         : ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
                     transform.ValueRW.Position = spot;
                     if (SystemAPI.HasComponent<ArenaMotion>(entity)) SystemAPI.SetComponent(entity, new ArenaMotion { Grounded = true });
@@ -343,13 +350,16 @@ namespace FriendlyPersonShooter.Arena
             var prefab = SystemAPI.GetSingleton<ArenaEnemyPrefab>().Value;
             var e = EntityManager.Instantiate(prefab);
             int id = _nextEnemyId++;
-            state.Vitals = new EnemyVitals(id, state.Family, _combat);
+            state.Vitals = state.MaxHealth > 0f
+                ? new EnemyVitals(id, state.Family, _combat, state.MaxHealth)
+                : new EnemyVitals(id, state.Family, _combat);
             state.AttackSettings = EnemyAttackSettings.For(state.Family);
             state.Attack = EnemyAttack.Create(NextSeed(), state.AttackSettings);
             EntityManager.SetComponentData(e, LocalTransform.FromPosition(ToFloat3(position)));
             EntityManager.SetComponentData(e, new ArenaEnemy
             {
                 Family = state.Family, Health = state.Vitals.Health, MaxHealth = state.Vitals.Health, Hittable = true,
+                Yaw = state.Boss.Yaw,
             });
             _enemies[e] = state;
             _enemyById[id] = e;
@@ -442,12 +452,22 @@ namespace FriendlyPersonShooter.Arena
                         var before = s.Skitter.Position;
                         s.Skitter.Step(moveDt, _skitter);
                         if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
+                        if (s.Raid) KeepInArena(ref s.Skitter, before);
                         position = s.Skitter.Position;
                         break;
                     case EnemyFamily.Glimmer:
                         position = GlimmerPosition(s);
                         if (_time - s.Born >= GlimmerLife) _expired.Add(e);
                         break;
+                    case EnemyFamily.Bulwark:
+                    {
+                        float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
+                        s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, _bulwark);
+                        int wave = s.Boss.TakeWaveDue(fraction, _bulwark);
+                        if (wave > 0) _raidWaveDue = wave;
+                        position = s.Boss.Position;
+                        break;
+                    }
                     default:
                         if (stepped.Add(s.Swarm)) s.Swarm.Step(moveDt);
                         position = s.Swarm.Mites[s.MiteIndex].Position;
@@ -475,8 +495,9 @@ namespace FriendlyPersonShooter.Arena
                 EntityManager.SetComponentData(e, LocalTransform.FromPosition(ToFloat3(position)));
                 EntityManager.SetComponentData(e, new ArenaEnemy
                 {
-                    Family = s.Family, Health = s.Vitals.Health, MaxHealth = _combat.EnemyHealth(s.Family),
+                    Family = s.Family, Health = s.Vitals.Health, MaxHealth = s.Vitals.MaxHealth,
                     Hittable = hittable, Telegraph = s.Telegraph,
+                    Yaw = s.Boss.Yaw, PlateOpen = s.Boss.Open, PlateWarn = s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(_bulwark),
                     Withered = s.Vitals.Debuffs.Has(EffectKind.Wither), Exposed = s.Vitals.Debuffs.Has(EffectKind.Expose),
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
                 });
@@ -509,6 +530,7 @@ namespace FriendlyPersonShooter.Arena
             if (ExpeditionWorld.Active)
             {
                 if (s.Family == EnemyFamily.Mite) s.Swarm.Alive[s.MiteIndex] = false;
+                if (s.Family == EnemyFamily.Bulwark) RaidBossKilled();
                 ExpeditionKill(s);
                 return;
             }
@@ -632,7 +654,15 @@ namespace FriendlyPersonShooter.Arena
                     {
                         var enemyEntity = _enemyById[hit.TargetId];
                         var enemy = _enemies[enemyEntity];
-                        var result = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, payload, ArenaWeapon.BaseDamage, hit.WeakPoint, _time, _combos);
+                        // The raid boss's shell shrugs off most damage; only its open plate takes full hits.
+                        float baseDamage = ArenaWeapon.BaseDamage;
+                        bool weakPoint = hit.WeakPoint;
+                        if (enemy.Family == EnemyFamily.Bulwark)
+                        {
+                            enemy.Boss.HitOutcome(hit.WeakPoint, _bulwark, out float armor, out weakPoint);
+                            baseDamage *= armor;
+                        }
+                        var result = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, payload, baseDamage, weakPoint, _time, _combos);
                         _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id);
                         _enemyHits++;
                         if (result.WeakPoint) _weakHits++;
@@ -749,6 +779,11 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case EnemyFamily.Glimmer:
                         target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
+                        break;
+                    case EnemyFamily.Bulwark:
+                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _bulwark.BodyRadius,
+                            BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, _bulwark), _bulwark.PlateRadius);
+                        target.WeakPointOnSurface = true;
                         break;
                     default:
                         target = HitTarget.Body(s.Vitals.Id, past.Position, _mites.MiteRadius);

@@ -32,6 +32,7 @@ namespace FriendlyPersonShooter.Arena
         private const float ReviveHelpChance = 0.7f;
         private const float FragmentRadius = 0.2f;
 
+        private static readonly BulwarkSettings BossShape = new BulwarkSettings();
         private BotAim _aim;
         private BotMover _mover;
         private readonly BotPath _path = new BotPath();
@@ -140,6 +141,20 @@ namespace FriendlyPersonShooter.Arena
                     var enemy = EntityManager.GetComponentData<ArenaEnemy>(_target);
                     aimPoint = tpos;
                     radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f : enemy.Family == EnemyFamily.Glimmer ? 0.4f : 0.15f;
+                    if (enemy.Family == EnemyFamily.Bulwark)
+                    {
+                        // Aim at the plate while it's open and facing us; otherwise at the shell.
+                        var plate = BulwarkBehavior.PlateCenterOf(ToVec(tpos), enemy.Yaw, BossShape);
+                        var toMe = math.normalizesafe(eye - tpos);
+                        var facing = BulwarkBehavior.FacingOf(enemy.Yaw);
+                        bool plateFacesMe = facing.X * toMe.x + facing.Z * toMe.z > 0.3f;
+                        if (enemy.PlateOpen && plateFacesMe)
+                        {
+                            aimPoint = new float3(plate.X, plate.Y, plate.Z);
+                            radius = BossShape.PlateRadius;
+                        }
+                        else radius = BossShape.BodyRadius * 0.8f;
+                    }
                 }
                 var aim = _aim.Step(dt, ToVec(eye), _target.Index, ToVec(aimPoint), radius);
                 input.Yaw = aim.Yaw;
@@ -180,11 +195,15 @@ namespace FriendlyPersonShooter.Arena
                     }
                 }
                 if (!travelling && _hasLeader) anchor = ExpeditionWorld.Near(_leader, pos);
+                // In the raid arena: stay on the platform, near the fight (the leader may be down on the ground).
+                if (RaidArena.Contains(pos) && !RaidArena.Contains(anchor)) anchor = RaidArena.Center;
             }
 
             // On generated ground, far anchors are reached along a path (ramps, bridges, around cliffs).
             bool climb = false;
-            if (ExpeditionTerrain.Active && (math.distance(pos.xz, anchor.xz) > moveSettings.MaxDistance + 2f || math.abs(anchor.y - pos.y) > 3f))
+            bool onPlatform = ExpeditionWorld.Active && RaidArena.Contains(pos);
+            if (ExpeditionTerrain.Active && !onPlatform &&
+                (math.distance(pos.xz, anchor.xz) > moveSettings.MaxDistance + 2f || math.abs(anchor.y - pos.y) > 3f))
             {
                 anchor = _path.Steer(dt, pos, anchor, out climb);
                 if (_target == Entity.Null) input.Yaw = math.degrees(math.atan2(anchor.x - pos.x, anchor.z - pos.z));

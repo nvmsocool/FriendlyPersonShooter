@@ -118,6 +118,7 @@ namespace FriendlyPersonShooter.Arena
             var slowed = new List<Matrix4x4>();
             var tagged = new List<Matrix4x4>();
             var glimmers = new List<Matrix4x4>();
+            _bossSeen = false;
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
@@ -141,13 +142,18 @@ namespace FriendlyPersonShooter.Arena
                         float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 9f);
                         glimmers.Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 200f, 45f), new Vector3(size, size * 1.4f, size) * pulse));
                         break;
+                    case EnemyFamily.Bulwark:
+                        // The raid boss: a big shell with a plate on one side (its health bar is on the HUD).
+                        size = 4.2f;
+                        AddBoss(en, p);
+                        break;
                     default:
                         size = 0.3f;
                         (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * size));
                         break;
                 }
 
-                if (en.Family != EnemyFamily.Mite && en.Family != EnemyFamily.Glimmer)
+                if (en.Family != EnemyFamily.Mite && en.Family != EnemyFamily.Glimmer && en.Family != EnemyFamily.Bulwark)
                 {
                     AddBar(p + Vector3.up * (size * 0.5f + 0.5f), barRot, 1f, en.Health / math.max(en.MaxHealth, 1f), 0f, _d, _e, null);
                 }
@@ -163,6 +169,7 @@ namespace FriendlyPersonShooter.Arena
             DrawList(cores, _coreMat);
             DrawList(mites, _miteMat);
             DrawList(glimmers, _glimmerMat);
+            DrawBosses();
             DrawList(_f, _telegraphMat);
             DrawList(_d, _barBackMat);
             DrawList(_e, _barHealthMat);
@@ -444,6 +451,10 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case AnnounceKind.ChainCashed:
                         if (m.Value >= 3) lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} cashed a x{m.Value} chain!\n");
+                        break;
+                    default:
+                        var raid = RaidAnnouncement(m);
+                        if (raid != null) lines.Append(raid);
                         break;
                 }
             }

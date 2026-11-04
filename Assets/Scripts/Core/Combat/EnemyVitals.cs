@@ -12,12 +12,17 @@ namespace FriendlyPersonShooter.Core.Combat
     {
         private readonly float _slowFloor;
 
-        public EnemyVitals(int id, EnemyFamily family, CombatSettings settings)
+        public EnemyVitals(int id, EnemyFamily family, CombatSettings settings) : this(id, family, settings, settings.EnemyHealth(family))
+        {
+        }
+
+        /// <summary>An enemy with its own max health (a raid boss scaled to the group).</summary>
+        public EnemyVitals(int id, EnemyFamily family, CombatSettings settings, float maxHealth)
         {
             _slowFloor = settings.SlowFloor;
             Id = id;
             Family = family;
-            MaxHealth = settings.EnemyHealth(family);
+            MaxHealth = maxHealth;
             Health = MaxHealth;
             Debuffs = new EffectSet(settings.MaxDebuffSlots, settings.ExtraSourceShare, settings.StackCapMultiplier);
         }

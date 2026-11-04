@@ -30,6 +30,8 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case EnemyFamily.Wisp: return WispDrop;
                 case EnemyFamily.Skitter: return SkitterDrop;
                 case EnemyFamily.Glimmer: return GlimmerDrop;
+                // The raid boss pays out through the raid's clear reward instead.
+                case EnemyFamily.Bulwark: return 0f;
                 default: return MiteDrop;
             }
         }

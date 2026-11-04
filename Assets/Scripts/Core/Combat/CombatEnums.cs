@@ -54,6 +54,8 @@ namespace FriendlyPersonShooter.Core.Combat
         Mite = 2,
         /// <summary>A small, short-lived target that pops up near players: one shot, a little Yellow, no attack.</summary>
         Glimmer = 3,
+        /// <summary>The raid boss: an armored shell whose weak plate opens on a rhythm and turns (see <see cref="BulwarkBehavior"/>).</summary>
+        Bulwark = 4,
     }
 
     /// <summary>What happened when an effect was offered to a set of slots.</summary>

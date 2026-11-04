@@ -99,6 +99,8 @@ namespace FriendlyPersonShooter.Core.Combat
 
         /// <summary>Glimmers die to any single shot.</summary>
         public float GlimmerHealth { get; set; } = 5f;
+        /// <summary>The raid boss's health per player in the raid (see <see cref="BulwarkSettings.HealthFor"/>).</summary>
+        public float BulwarkHealth { get; set; } = 1300f;
 
         public float EnemyHealth(EnemyFamily family)
         {
@@ -107,6 +109,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 case EnemyFamily.Wisp: return WispHealth;
                 case EnemyFamily.Skitter: return SkitterHealth;
                 case EnemyFamily.Glimmer: return GlimmerHealth;
+                case EnemyFamily.Bulwark: return BulwarkHealth;
                 default: return MiteHealth;
             }
         }

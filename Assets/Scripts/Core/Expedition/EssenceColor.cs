@@ -45,6 +45,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             {
                 case EnemyFamily.Wisp: return EssenceColor.Yellow;
                 case EnemyFamily.Skitter: return EssenceColor.Red;
+                case EnemyFamily.Glimmer: return EssenceColor.Yellow;
                 default: return EssenceColor.Green;
             }
         }

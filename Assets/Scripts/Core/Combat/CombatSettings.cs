@@ -97,12 +97,16 @@ namespace FriendlyPersonShooter.Core.Combat
             return 0f;
         }
 
+        /// <summary>Glimmers die to any single shot.</summary>
+        public float GlimmerHealth { get; set; } = 5f;
+
         public float EnemyHealth(EnemyFamily family)
         {
             switch (family)
             {
                 case EnemyFamily.Wisp: return WispHealth;
                 case EnemyFamily.Skitter: return SkitterHealth;
+                case EnemyFamily.Glimmer: return GlimmerHealth;
                 default: return MiteHealth;
             }
         }

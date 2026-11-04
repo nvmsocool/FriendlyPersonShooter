@@ -122,6 +122,37 @@ namespace FriendlyPersonShooter.Arena
         ExpeditionComplete = 6,
         /// <summary>Expedition: Other returned Player's cache. Value = essence returned.</summary>
         CacheReturned = 7,
+        /// <summary>Player reached a new level. Value = the level.</summary>
+        LevelUp = 8,
+    }
+
+    /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>
+    public struct ArenaProgress : IComponentData
+    {
+        [GhostField] public int Level;
+        /// <summary>XP towards the next level, out of <see cref="XpNext"/>.</summary>
+        [GhostField] public int Xp;
+        [GhostField] public int XpNext;
+        /// <summary>Unspent skill points.</summary>
+        [GhostField] public int Points;
+        /// <summary>Skill ranks, 2 bits per skill (see Core.Progression.PlayerProgress.RankIn).</summary>
+        [GhostField] public int Ranks;
+    }
+
+    /// <summary>Client-to-server: spend a skill point on a skill.</summary>
+    public struct SkillBuyRequest : IRpcCommand
+    {
+        public byte Skill;
+    }
+
+    /// <summary>Server-to-everyone: an enemy's attack hit a player (draw the bolt; the victim gets a warning).</summary>
+    public struct EnemyAttackFx : IRpcCommand
+    {
+        public int VictimNetworkId;
+        public EnemyFamily Family;
+        public float Damage;
+        public float3 From;
+        public float3 To;
     }
 
     /// <summary>Server-to-everyone: something worth a message on screen (combo discovered, revive, big chain).</summary>

@@ -713,6 +713,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     RampsCarved++;
                 }
             }
+            carved += FillPits(sizes, baseId, minSize, forced, main);
             BuildHexes(s, hexThreshold);
             ComputeSurface();
             Label(out _, out _);
@@ -720,6 +721,85 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int k = 0; k < C * C; k++) if (Comp[k] != MainComp) stranded++;
             StrandedShare = stranded / (float)(C * C);
             return carved;
+        }
+
+        /// <summary>How far below the lowest walkable rim a filled pit's floor ends up (players step up to 1 m).</summary>
+        private const float PitFillBelowRim = 0.6f;
+        public int PitsFilled;
+
+        /// <summary>
+        /// Small stranded patches (too small to be worth a ramp) that sit below the walkable ground around them are
+        /// holes players fall into and can't climb out of. Raise each, with its steep walls, to just under the lowest
+        /// walkable rim, so one step gets you out. Returns how many were filled.
+        /// </summary>
+        private int FillPits(List<int> sizes, int baseId, int minSize, HashSet<int> forced, int main)
+        {
+            var cells = new Dictionary<int, List<int>>();
+            for (int k = 0; k < C * C; k++)
+            {
+                int c = Comp[k];
+                if (c < baseId || sizes[c - baseId] >= minSize || forced.Contains(c)) continue;
+                if (!cells.TryGetValue(c, out var list)) cells[c] = list = new List<int>();
+                list.Add(k);
+            }
+            var ids = new List<int>(cells.Keys);
+            ids.Sort();
+            int filled = 0;
+            foreach (int c in ids)
+            {
+                var list = cells[c];
+                float rim = float.MaxValue, floor = float.MinValue;
+                foreach (int k in list)
+                {
+                    floor = Mathf.Max(floor, S[k]);
+                    int x = k % C, z = k / C;
+                    for (int dz = -2; dz <= 2; dz++)
+                    {
+                        for (int dx = -2; dx <= 2; dx++)
+                        {
+                            int nx = x + dx, nz = z + dz;
+                            if (nx < 0 || nz < 0 || nx >= C || nz >= C) continue;
+                            int q = nz * C + nx;
+                            if (Comp[q] == main) rim = Mathf.Min(rim, S[q]);
+                        }
+                    }
+                }
+                if (rim == float.MaxValue) continue;
+                float fill = rim - PitFillBelowRim;
+                // Only real holes: a ledge or a shallow dip is left alone.
+                if (fill <= floor + 0.3f) continue;
+                foreach (int k in list)
+                {
+                    int x = k % C, z = k / C;
+                    for (int dz = -1; dz <= 1; dz++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int nx = x + dx, nz = z + dz;
+                            if (nx < 0 || nz < 0 || nx >= C || nz >= C) continue;
+                            int q = nz * C + nx;
+                            // The pit and its unwalkable walls; walkable ground around it keeps its height.
+                            if (Comp[q] != c && Comp[q] != -1) continue;
+                            RaiseCell(nx, nz, fill);
+                        }
+                    }
+                }
+                filled++;
+                PitsFilled++;
+            }
+            return filled;
+        }
+
+        private void RaiseCell(int x, int z, float h)
+        {
+            for (int vz = z; vz <= z + 1; vz++)
+            {
+                for (int vx = x; vx <= x + 1; vx++)
+                {
+                    int v = vz * N + vx;
+                    if (H[v] < h) H[v] = KeepSeam(v, h);
+                }
+            }
         }
 
         public const int Chunk = 50;

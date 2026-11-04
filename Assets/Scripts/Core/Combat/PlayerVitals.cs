@@ -33,7 +33,28 @@ namespace FriendlyPersonShooter.Core.Combat
         public BuffAcceptance Acceptance { get; set; } = BuffAcceptance.Everyone;
 
         public float Health { get; private set; }
-        public float MaxHealth { get; }
+        public float MaxHealth { get; private set; }
+
+        // ---- Skill tree bonuses (0 = none). Set by the game from the player's skill ranks. ----
+        /// <summary>Added to shot damage as a fraction (0.1 = +10%), on top of Might.</summary>
+        public float SkillDamageBonus { get; set; }
+        /// <summary>Added to the move speed multiplier (0.06 = +6%).</summary>
+        public float SkillMoveBonus { get; set; }
+        /// <summary>Added to the jump multiplier (0.15 = +15%).</summary>
+        public float SkillJumpBonus { get; set; }
+        /// <summary>Multiplies the heals and buff strengths this player gives (1 = normal).</summary>
+        public float GivePotency { get; set; } = 1f;
+        /// <summary>Multiplies the durations of the buffs this player gives (1 = normal).</summary>
+        public float GiveDuration { get; set; } = 1f;
+
+        /// <summary>Changes max health (skills), keeping the same share of health.</summary>
+        public void SetMaxHealth(float max)
+        {
+            if (max <= 0f || Math.Abs(max - MaxHealth) < 1e-4f) return;
+            float share = MaxHealth > 0f ? Health / MaxHealth : 1f;
+            MaxHealth = max;
+            if (!IsDown) Health = Math.Max(1f, Math.Min(MaxHealth, MaxHealth * share));
+        }
         public EffectSet Buffs { get; }
 
         public float Shield => Buffs.StrengthOf(EffectKind.Shield);
@@ -47,7 +68,7 @@ namespace FriendlyPersonShooter.Core.Combat
             get
             {
                 float empower = Buffs.StrengthOf(EffectKind.Empower);
-                return IsBlitzed ? empower * _settings.BlitzEmpowerMultiplier : empower;
+                return (IsBlitzed ? empower * _settings.BlitzEmpowerMultiplier : empower) + SkillDamageBonus;
             }
         }
 
@@ -55,7 +76,7 @@ namespace FriendlyPersonShooter.Core.Combat
         public bool IsBlitzed => Buffs.Has(EffectKind.Hasted) && Buffs.Has(EffectKind.Empower);
 
         /// <summary>Multiply the player's move speed by this (1 when not Hasted).</summary>
-        public float MoveSpeedMultiplier => 1f + Buffs.StrengthOf(EffectKind.Hasted);
+        public float MoveSpeedMultiplier => 1f + Buffs.StrengthOf(EffectKind.Hasted) + SkillMoveBonus;
 
         /// <summary>Multiply the player's jump strength by this (1 when not Hasted).</summary>
         public float JumpMultiplier
@@ -63,8 +84,8 @@ namespace FriendlyPersonShooter.Core.Combat
             get
             {
                 float haste = Buffs.StrengthOf(EffectKind.Hasted);
-                if (haste <= 0f || _settings.HasteMoveBonus <= 0f) return 1f;
-                return 1f + haste * (_settings.HasteJumpBonus / _settings.HasteMoveBonus);
+                if (haste <= 0f || _settings.HasteMoveBonus <= 0f) return 1f + SkillJumpBonus;
+                return 1f + haste * (_settings.HasteJumpBonus / _settings.HasteMoveBonus) + SkillJumpBonus;
             }
         }
 

@@ -1,3 +1,4 @@
+using FriendlyPersonShooter.Core.Progression;
 using Unity.Entities;
 using Unity.NetCode;
 using UnityEngine;
@@ -15,7 +16,12 @@ namespace FriendlyPersonShooter.Arena
         public const float ConnectTimeout = 20f;
 
         private Text _code, _center;
-        private GameObject _pause;
+        private GameObject _pause, _help, _skills;
+        private bool _showSkills;
+        private Text _skillsToggle, _points;
+        private readonly Button[] _skillButtons = new Button[SkillTree.Count];
+        private readonly Text[] _skillLabels = new Text[SkillTree.Count];
+        private int _shownRanks = -1, _shownPoints = -1;
         private float _started;
         private bool _connected;
         private EntityQuery _id, _connection;
@@ -47,20 +53,32 @@ namespace FriendlyPersonShooter.Arena
             var top = new Vector2(0.5f, 1f);
             SessionUi.Label(p, "The game keeps running while this is open. Click outside this box to play.", 22, top, new Vector2(0, -24), new Vector2(1040, 34), TextAnchor.MiddleCenter, SessionUi.Muted);
 
+            var middle = new Vector2(0.5f, 0.5f);
+            _help = SessionUi.Rect(p, "Help", middle, Vector2.zero, new Vector2(1100, 640)).gameObject;
             var help = new Vector2(0f, 1f);
-            var controls = SessionUi.Label(p, Controls, 21, help, new Vector2(40, -78), new Vector2(480, 400), TextAnchor.UpperLeft);
+            var controls = SessionUi.Label(_help.transform, Controls, 21, help, new Vector2(40, -78), new Vector2(480, 400), TextAnchor.UpperLeft);
             controls.supportRichText = true;
-            var payloads = SessionUi.Label(p, PayloadGuide, 21, help, new Vector2(560, -78), new Vector2(510, 400), TextAnchor.UpperLeft);
+            var payloads = SessionUi.Label(_help.transform, PayloadGuide, 21, help, new Vector2(560, -78), new Vector2(510, 400), TextAnchor.UpperLeft);
             payloads.supportRichText = true;
+            _skills = SessionUi.Rect(p, "Skills", middle, Vector2.zero, new Vector2(1100, 640)).gameObject;
+            BuildSkillTree(_skills.transform);
+            _skills.SetActive(false);
 
+            // Bottom row: Skills, Reset position, (Copy join code), End/Leave game.
             var bottom = new Vector2(0.5f, 0f);
-            SessionUi.Button(p, "Reset position", bottom, new Vector2(hasCode ? -350 : -175, 34), new Vector2(320, 74), SessionUi.Quiet, ResetPosition, 26);
+            int count = hasCode ? 4 : 3;
+            float X(int i) => (i - (count - 1) * 0.5f) * 262f;
+            var size = new Vector2(244, 74);
+            int slot = 0;
+            var toggle = SessionUi.Button(p, "Skills", bottom, new Vector2(X(slot++), 34), size, new Color(0.55f, 0.35f, 0.85f), ToggleSkills, 26);
+            _skillsToggle = toggle.GetComponentInChildren<Text>();
+            SessionUi.Button(p, "Reset position", bottom, new Vector2(X(slot++), 34), size, SessionUi.Quiet, ResetPosition, 26);
             if (hasCode)
             {
-                SessionUi.Button(p, "Copy join code", bottom, new Vector2(0, 34), new Vector2(320, 74), SessionUi.Secondary,
+                SessionUi.Button(p, "Copy join code", bottom, new Vector2(X(slot++), 34), size, SessionUi.Secondary,
                     () => GUIUtility.systemCopyBuffer = PlaySession.JoinCode, 26);
             }
-            SessionUi.Button(p, hasCode ? "End game" : "Leave game", bottom, new Vector2(hasCode ? 350 : 175, 34), new Vector2(320, 74), SessionUi.Primary,
+            SessionUi.Button(p, hasCode ? "End game" : "Leave game", bottom, new Vector2(X(slot), 34), size, SessionUi.Primary,
                 () => PlaySession.Leave(), 26);
             _pause.SetActive(false);
             // Straight into play: the mouse is captured from the start (Esc frees it and shows the options).
@@ -89,7 +107,75 @@ namespace FriendlyPersonShooter.Arena
             "<color=#D98CFF><b>RELAY</b></color>  allies: their next 5 hits also carry Might and add a chain link.  enemies: tag (hits splash)\n\n" +
             "<b>Chains</b>  buffing different allies in a row builds a chain; an enemy hit cashes it for bonus damage.\n" +
             "<b>Down?</b>  allies shoot your soul fragments to revive you.\n\n" +
-            "<b>Expedition</b>  gather Yellow, bank it at shrines, pay the gate with banked Yellow and walk through (aim for under 20:00). Follow the light beam.";
+            "<b>Expedition</b>  gather Yellow, bank it at shrines, pay the gate with banked Yellow and walk through (aim for under 20:00). Follow the light beam. Banked essence is shared by the party.\n" +
+            "<b>Glimmers</b>  small yellow diamonds: one shot pops them for a little Yellow.\n" +
+            "<b>Skills</b>  XP levels you up; spend points with the Skills button below.";
+
+        private static readonly string[] BranchNames = { "<color=#FF9A4D>OFFENSE</color>", "<color=#66FF8C>SUPPORT</color>", "<color=#66D9FF>SURVIVAL</color>" };
+
+        /// <summary>Three columns of three skills; each needs a rank in the one above it.</summary>
+        private void BuildSkillTree(Transform parent)
+        {
+            var top = new Vector2(0.5f, 1f);
+            _points = SessionUi.Label(parent, "", 26, top, new Vector2(0, -62), new Vector2(1000, 36), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
+            _points.supportRichText = true;
+            for (int b = 0; b < 3; b++)
+            {
+                float x = (b - 1) * 350f;
+                var header = SessionUi.Label(parent, BranchNames[b], 24, top, new Vector2(x, -104), new Vector2(320, 34), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
+                header.supportRichText = true;
+                for (int k = 0; k < SkillTree.PerBranch; k++)
+                {
+                    int index = b * SkillTree.PerBranch + k;
+                    float y = -146f - k * 104f;
+                    if (k > 0) SessionUi.Box(parent, "Link", top, new Vector2(x, y + 12f), new Vector2(6, 12), new Color(1f, 1f, 1f, 0.25f));
+                    var id = (SkillId)index;
+                    var button = SessionUi.Button(parent, "", top, new Vector2(x, y), new Vector2(320, 92), SessionUi.Quiet, () => BuySkill(id), 20);
+                    _skillButtons[index] = button;
+                    _skillLabels[index] = button.GetComponentInChildren<Text>();
+                    _skillLabels[index].supportRichText = true;
+                    _skillLabels[index].fontStyle = FontStyle.Normal;
+                }
+            }
+            SessionUi.Label(parent, "Each skill needs a rank in the one above it. Max 3 ranks. Your level and skills last for this game.", 18,
+                new Vector2(0.5f, 0f), new Vector2(0, 124), new Vector2(1000, 28), TextAnchor.MiddleCenter, SessionUi.Muted);
+        }
+
+        private void ToggleSkills()
+        {
+            _showSkills = !_showSkills;
+            _shownRanks = -1;
+        }
+
+        private static void BuySkill(SkillId id) => ArenaFx.SkillBuys.Add((byte)id);
+
+        private void RefreshSkills()
+        {
+            _help.SetActive(!_showSkills);
+            _skills.SetActive(_showSkills);
+            var progress = ArenaFx.LocalProgress;
+            int points = ArenaFx.HasProgress ? progress.Points : 0;
+            _skillsToggle.text = _showSkills ? "Help" : points > 0 ? $"Skills ({points})" : "Skills";
+            if (!_showSkills || (progress.Ranks == _shownRanks && points == _shownPoints)) return;
+            _shownRanks = progress.Ranks;
+            _shownPoints = points;
+            _points.text = ArenaFx.HasProgress
+                ? $"Level {progress.Level}    {progress.Xp} / {progress.XpNext} XP    " +
+                  (points > 0 ? $"<color=#FFD84D>{points} skill point{(points > 1 ? "s" : "")} to spend</color>" : "<color=#B8B0D8>no points: earn XP by killing, buffing allies, banking and reviving</color>")
+                : "Not in the game yet";
+            for (int i = 0; i < SkillTree.Count; i++)
+            {
+                var info = SkillTree.All[i];
+                int rank = PlayerProgress.RankIn(progress.Ranks, info.Id);
+                bool can = ArenaFx.HasProgress && PlayerProgress.CanBuy(progress.Ranks, points, info.Id);
+                bool locked = info.TryGetRequirement(out var req) && PlayerProgress.RankIn(progress.Ranks, req) == 0;
+                string pips = new string('#', rank) + new string('-', SkillTree.MaxRank - rank);
+                _skillLabels[i].text = $"<b><size=23>{info.Name}</size></b>   [{pips}]\n{info.PerRank}" +
+                                       (locked ? $"\n<color=#B8B0D8>needs {SkillTree.All[(int)req].Name}</color>" : "");
+                _skillButtons[i].interactable = can;
+                _skillButtons[i].image.color = rank >= SkillTree.MaxRank ? new Color(0.75f, 0.6f, 0.2f) : can ? new Color(0.1f, 0.52f, 0.62f) : SessionUi.Quiet;
+            }
+        }
 
         /// <summary>Asks the server to move this player to the nearest shrine, then goes back to playing.</summary>
         private static void ResetPosition()
@@ -102,6 +188,7 @@ namespace FriendlyPersonShooter.Arena
         private void Update()
         {
             _pause.SetActive(Cursor.lockState != CursorLockMode.Locked);
+            if (_pause.activeSelf) RefreshSkills();
             if (PlaySession.IsHost || !PlaySession.InGame) return;
 
             var world = ClientServerBootstrap.ClientWorld;

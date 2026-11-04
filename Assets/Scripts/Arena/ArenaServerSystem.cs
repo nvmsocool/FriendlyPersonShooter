@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Combat;
+using FriendlyPersonShooter.Core.Progression;
 using FriendlyPersonShooter.Net;
 using Unity.Collections;
 using Unity.Entities;
@@ -43,6 +44,9 @@ namespace FriendlyPersonShooter.Arena
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
+            public PlayerProgress Progress = new PlayerProgress();
+            /// <summary>When an enemy last hurt this player (Second Wind waits a while after it).</summary>
+            public double LastHurt = -100;
         }
 
         private sealed class FragmentGhost
@@ -66,6 +70,10 @@ namespace FriendlyPersonShooter.Arena
             public bool Telegraph;
             /// <summary>Expedition: the spawn event this enemy came from.</summary>
             public SpawnKey Spawn;
+            /// <summary>Glimmers: where it hovers, when it appeared, and its bob phase.</summary>
+            public Vector3 Home;
+            public double Born;
+            public float Phase;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -141,6 +149,7 @@ namespace FriendlyPersonShooter.Arena
             Shoot(tickIndex, ecb);
             if (ExpeditionWorld.Active) StepExpedition(ecb);
             else RespawnEnemies();
+            StepSkillRequests();
             SendAnnouncements(ecb);
             ecb.Playback(EntityManager);
 
@@ -154,7 +163,7 @@ namespace FriendlyPersonShooter.Arena
                           $"damageDealt={_damageDealt:0} damageTaken={_damageTaken:0} healing={_healing:0} downs={_downs} revives={_revives} bleedOuts={_bleedOuts} " +
                           $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
                           $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
-                          $"plagueSpreads={_plagueSpreads} hp=[{hp}]");
+                          $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} hp=[{hp}]");
                 if (ExpeditionWorld.Active) LogExpedition();
             }
         }
@@ -193,6 +202,7 @@ namespace FriendlyPersonShooter.Arena
                 }
 
                 state.Vitals.Tick(dt);
+                StepRegen(state, dt);
                 state.Position = ToVec(transform.ValueRO.Position);
                 if (state.Revive != null)
                 {
@@ -244,6 +254,7 @@ namespace FriendlyPersonShooter.Arena
                     ChainTimeLeft = holding ? chain.TimeLeft : 0f,
                     Blitz = v.IsBlitzed,
                 };
+                WriteProgress(entity, state);
             }
 
             if (_seen.Count == _players.Count) return;
@@ -433,6 +444,10 @@ namespace FriendlyPersonShooter.Arena
                         if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
                         position = s.Skitter.Position;
                         break;
+                    case EnemyFamily.Glimmer:
+                        position = GlimmerPosition(s);
+                        if (_time - s.Born >= GlimmerLife) _expired.Add(e);
+                        break;
                     default:
                         if (stepped.Add(s.Swarm)) s.Swarm.Step(moveDt);
                         position = s.Swarm.Mites[s.MiteIndex].Position;
@@ -440,15 +455,20 @@ namespace FriendlyPersonShooter.Arena
                 }
 
                 float wither = s.Vitals.Tick(dt);
-                if (ExpeditionWorld.Active) NearCandidates(position);
-                var attack = s.Attack.Step(dt, position, _candidates, s.AttackSettings);
-                if (attack.Kind == AttackEventKind.TelegraphStarted) s.Telegraph = true;
-                else if (attack.Kind != AttackEventKind.None) s.Telegraph = false;
-                if (attack.Kind == AttackEventKind.Hit && _playerById.TryGetValue(attack.TargetId, out var victim) &&
-                    _players.TryGetValue(victim, out var victimState))
+                if (s.Family != EnemyFamily.Glimmer)
                 {
-                    _damageTaken += victimState.Vitals.TakeEnemyDamage(attack.Damage, out bool wentDown);
-                    if (wentDown) GoDown(victimState);
+                    if (ExpeditionWorld.Active) NearCandidates(position);
+                    var attack = s.Attack.Step(dt, position, _candidates, s.AttackSettings);
+                    if (attack.Kind == AttackEventKind.TelegraphStarted) s.Telegraph = true;
+                    else if (attack.Kind != AttackEventKind.None) s.Telegraph = false;
+                    if (attack.Kind == AttackEventKind.Hit && _playerById.TryGetValue(attack.TargetId, out var victim) &&
+                        _players.TryGetValue(victim, out var victimState))
+                    {
+                        _damageTaken += victimState.Vitals.TakeEnemyDamage(attack.Damage, out bool wentDown);
+                        victimState.LastHurt = _time;
+                        SendAttackFx(ecb, s.Family, attack.Damage, position, victimState);
+                        if (wentDown) GoDown(victimState);
+                    }
                 }
 
                 s.History.Record(tick, position, hittable, teleported);
@@ -463,6 +483,7 @@ namespace FriendlyPersonShooter.Arena
                 if (wither > 0f && s.Vitals.IsDead) _scratch.Add(e);
             }
             foreach (var e in _scratch) KillEnemy(e, ecb);
+            RemoveExpiredGlimmers(ecb);
 
             // Plague: Withered + Tagged enemies spread their Wither to neighbours.
             _plagueVitals.Clear();
@@ -495,6 +516,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 case EnemyFamily.Wisp: _wispRespawns.Add(_time + EnemyRespawnDelay); break;
                 case EnemyFamily.Skitter: _skitterRespawns.Add(_time + EnemyRespawnDelay); break;
+                case EnemyFamily.Glimmer: break;
                 default:
                     s.Swarm.Alive[s.MiteIndex] = false;
                     if (s.Swarm.AliveCount == 0) _swarmRespawnAt = _time + EnemyRespawnDelay;
@@ -539,7 +561,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 if (input.ValueRO.Fire == 0 || !_players.TryGetValue(entity, out var shooter)) continue;
                 if (shooter.Vitals.IsDown || _time < shooter.NextFire) continue;
-                shooter.NextFire = _time + ArenaWeapon.FireInterval;
+                int ranks = shooter.Progress.PackedRanks;
+                shooter.NextFire = _time + ArenaWeapon.FireInterval / PlayerProgress.FireRateFor(ranks);
                 _shots++;
 
                 // Rewind everyone else to the tick this player was looking at when they fired.
@@ -552,7 +575,8 @@ namespace FriendlyPersonShooter.Arena
 
                 var eye = transform.ValueRO.Position + new float3(0f, ArenaSettings.EyeHeight, 0f);
                 var dir = math.normalize(ArenaSettings.Forward(input.ValueRO.Yaw, input.ValueRO.Pitch));
-                float range = math.min(ArenaWeapon.Range, ArenaLayout.RaycastCover(eye, dir, ArenaWeapon.Range));
+                float reach = ArenaWeapon.Range * PlayerProgress.RangeFor(ranks);
+                float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
 
                 BuildTargets(seenTick, shooter.Vitals.Id, eye);
                 var end = eye + dir * range;
@@ -567,6 +591,7 @@ namespace FriendlyPersonShooter.Arena
                         var target = _players[_playerById[hit.TargetId]];
                         var result = _lobby.HitPlayer(shooter.Vitals, target.Vitals, payload, _time, _combos);
                         SocialBuff(shooter.Vitals.Id, target.Vitals.Id, result);
+                        if (result.Refused == RefuseReason.None) AddXp(shooter.Vitals.Id, XpRewards.AllyBuff);
                         _allyHits++;
                         _healing += result.Healed + result.ShieldGained;
                         confirm.TargetIsPlayer = 1;
@@ -597,6 +622,7 @@ namespace FriendlyPersonShooter.Arena
                             {
                                 _revives++;
                                 downed.Revive = null;
+                                AddXp(shooter.Vitals.Id, XpRewards.Revive);
                                 _announce.Add((AnnounceKind.Revived, 0, ownerId, shooter.Vitals.Id));
                             }
                         }
@@ -720,6 +746,9 @@ namespace FriendlyPersonShooter.Arena
                     case EnemyFamily.Skitter:
                         target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _skitter.BodyRadius,
                             past.Position + _skitter.CoreOffset, _skitter.CoreRadius);
+                        break;
+                    case EnemyFamily.Glimmer:
+                        target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
                         break;
                     default:
                         target = HitTarget.Body(s.Vitals.Id, past.Position, _mites.MiteRadius);

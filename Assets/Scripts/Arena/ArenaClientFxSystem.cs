@@ -16,6 +16,13 @@ namespace FriendlyPersonShooter.Arena
         public static float DamageDealt, HealingGiven;
         public static int Kills, AllyHits, AllyHitsRefused, ChainsCashed, FragmentHits;
         public static int BestChain;
+        /// <summary>Enemy attacks that landed on anyone (bolts are drawn for all; the victim gets the warning).</summary>
+        public static readonly List<(EnemyAttackFx Attack, float Time)> EnemyAttacks = new List<(EnemyAttackFx, float)>();
+        /// <summary>The human's level and skills (set by the view each frame), for the Esc menu's skill tree.</summary>
+        public static ArenaProgress LocalProgress;
+        public static bool HasProgress;
+        /// <summary>Skills the human chose to buy, sent to the server by the client system.</summary>
+        public static readonly List<byte> SkillBuys = new List<byte>();
     }
 
     /// <summary>
@@ -60,6 +67,21 @@ namespace FriendlyPersonShooter.Arena
             {
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.Announcements.Add((msg.ValueRO, now));
+            }
+            foreach (var (attack, entity) in SystemAPI.Query<RefRO<EnemyAttackFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (keep) ArenaFx.EnemyAttacks.Add((attack.ValueRO, now));
+            }
+            if (keep && ArenaFx.SkillBuys.Count > 0 && SystemAPI.HasSingleton<NetworkId>())
+            {
+                foreach (byte skill in ArenaFx.SkillBuys)
+                {
+                    var rpc = ecb.CreateEntity();
+                    ecb.AddComponent(rpc, new SkillBuyRequest { Skill = skill });
+                    ecb.AddComponent<SendRpcCommandRequest>(rpc);
+                }
+                ArenaFx.SkillBuys.Clear();
             }
             ecb.Playback(EntityManager);
         }

@@ -16,6 +16,8 @@ namespace FriendlyPersonShooter.Core.Combat
         public static EnemyAttackSettings ForWisp() => new EnemyAttackSettings { Range = 20f, Damage = 6f };
         public static EnemyAttackSettings ForSkitter() => new EnemyAttackSettings { Range = 15f, Damage = 8f };
         public static EnemyAttackSettings ForMite() => new EnemyAttackSettings { Range = 2f, Damage = 2f };
+        /// <summary>Glimmers never attack.</summary>
+        public static EnemyAttackSettings ForGlimmer() => new EnemyAttackSettings { Range = 0f, Damage = 0f, MinCooldown = 1e6f, MaxCooldown = 1e6f };
 
         public static EnemyAttackSettings For(EnemyFamily family)
         {
@@ -23,6 +25,7 @@ namespace FriendlyPersonShooter.Core.Combat
             {
                 case EnemyFamily.Wisp: return ForWisp();
                 case EnemyFamily.Skitter: return ForSkitter();
+                case EnemyFamily.Glimmer: return ForGlimmer();
                 default: return ForMite();
             }
         }

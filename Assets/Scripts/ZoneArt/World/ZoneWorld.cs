@@ -30,6 +30,13 @@ namespace FriendlyPersonShooter.ZoneArt
         public static float UrgentBudgetMs = 40f;
         /// <summary>Neighbouring zones start building once a point of interest is this close to them (metres).</summary>
         public static float PrefetchDistance = 150f;
+        /// <summary>
+        /// The camera's point of view loads every neighbouring zone, so what you can see is always built; fog
+        /// (from <see cref="ViewFogStart"/> to <see cref="ViewFogEnd"/> metres) hides the edge of the loaded ground,
+        /// which is never nearer than one zone away.
+        /// </summary>
+        public static float ViewFogStart = 140f;
+        public static float ViewFogEnd = 235f;
         /// <summary>Zones nobody has been near for this long unload (seconds).</summary>
         public static float UnloadAfter = 60f;
         /// <summary>Main-thread milliseconds per frame spent on bot nav grids.</summary>
@@ -250,6 +257,7 @@ namespace FriendlyPersonShooter.ZoneArt
             foreach (var s in _slots) s.Priority = float.MaxValue;
             foreach (var (p, isUrgent) in _interest)
             {
+                bool isView = ViewPoint.HasValue && p == ViewPoint.Value;
                 var c = ZoneAt(Wrap(p.x), Wrap(p.z));
                 var own = SlotOf(c);
                 Want(own, 0f, now);
@@ -261,7 +269,7 @@ namespace FriendlyPersonShooter.ZoneArt
                         if (dx == 0 && dy == 0) continue;
                         var n = Map.Grid.Wrap(c.X + dx, c.Y + dy);
                         float d = DistanceToZone(p, n);
-                        if (d < PrefetchDistance) Want(SlotOf(n), d, now);
+                        if (isView || d < PrefetchDistance) Want(SlotOf(n), d, now);
                     }
                 }
             }
@@ -558,6 +566,11 @@ namespace FriendlyPersonShooter.ZoneArt
             RenderSettings.fogDensity = Mathf.Lerp(a.State.FogDensity, to.State.FogDensity, t);
             RenderSettings.fogStartDistance = Mathf.Lerp(a.State.FogStart, to.State.FogStart, t);
             RenderSettings.fogEndDistance = Mathf.Lerp(a.State.FogEnd, to.State.FogEnd, t);
+            // Whatever the zone's own fog, the ground past the loaded zones must never show.
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogStartDistance = ViewFogStart;
+            RenderSettings.fogEndDistance = ViewFogEnd;
 
             if (t >= 1f || a.Skybox == null || to.Skybox == null || a.Skybox.shader != to.Skybox.shader)
             {

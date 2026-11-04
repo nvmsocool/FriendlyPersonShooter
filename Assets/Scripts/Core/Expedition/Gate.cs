@@ -71,6 +71,9 @@ namespace FriendlyPersonShooter.Core.Expedition
             return GateUnlockOutcome.Unlocked;
         }
 
+        /// <summary>Gives a player access without paying (a party member already paid with the shared bank).</summary>
+        public void GrantAccess(int playerId) => _accessSeed[playerId] = Seed;
+
         /// <summary>True when every member has access. An empty group can't pass.</summary>
         public bool CanGroupPass(IEnumerable<int> members)
         {

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Combat;
+using FriendlyPersonShooter.Core.Progression;
 using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.World;
 using FriendlyPersonShooter.Net;
@@ -55,6 +56,10 @@ namespace FriendlyPersonShooter.Arena
         private Gate _gate;
         private CacheRegistry _caches;
         private readonly Dictionary<int, EssenceWallet> _wallets = new Dictionary<int, EssenceWallet>();
+        /// <summary>Banked essence is one pool for the whole party; carried essence stays personal.</summary>
+        private readonly EssenceAmounts _partyBank = new EssenceAmounts();
+        /// <summary>Once anyone pays the gate it is open for the whole party, including players who join later.</summary>
+        private bool _partyUnlocked;
         private readonly Dictionary<int, ExpeditionTracker> _trackers = new Dictionary<int, ExpeditionTracker>();
         private readonly HashSet<SpawnKey> _spawnedEvents = new HashSet<SpawnKey>();
         private readonly Dictionary<SpawnKey, double> _eventEnds = new Dictionary<SpawnKey, double>();
@@ -82,8 +87,9 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!_wallets.TryGetValue(id, out var w))
             {
-                w = new EssenceWallet(id);
+                w = new EssenceWallet(id, _partyBank);
                 _wallets[id] = w;
+                if (_partyUnlocked) _gate.GrantAccess(id);
             }
             return w;
         }
@@ -121,6 +127,10 @@ namespace FriendlyPersonShooter.Arena
 
         private void ExpeditionKill(EnemyState s)
         {
+            // Everyone who hit it gets the kill's XP.
+            _intScratch.Clear();
+            _intScratch.AddRange(_ledger.HittersOf(s.Vitals.Id));
+            foreach (int hitter in _intScratch) AddXp(hitter, XpRewards.Kill(s.Family));
             var awards = _ledger.Killed(s.Vitals.Id, s.Family);
             foreach (var a in awards) _essenceAwarded += a.Amount;
             DropLedger.Pay(awards, WalletOf);
@@ -138,6 +148,7 @@ namespace FriendlyPersonShooter.Arena
         private void StepExpedition(EntityCommandBuffer ecb)
         {
             StepSocial(ecb);
+            StepGlimmers(ecb);
             if (_time >= _nextSpawnCheck)
             {
                 _nextSpawnCheck = _time + SpawnCheckInterval;
@@ -188,7 +199,7 @@ namespace FriendlyPersonShooter.Arena
                 _spawnedEvents.Remove(key);
             }
             _scratch.Clear();
-            foreach (var kv in _enemies) if (ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+            foreach (var kv in _enemies) if (kv.Value.Family != EnemyFamily.Glimmer && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
             foreach (var e in _scratch)
             {
                 var s = _enemies[e];
@@ -250,7 +261,9 @@ namespace FriendlyPersonShooter.Arena
                     var shrine = _map.NearestShrine(pos);
                     if (_map.Distance(shrine.Point.World, pos) <= ExpeditionWorld.ShrineRadius && !wallet.CarriedAll().IsEmpty)
                     {
-                        _banked += wallet.BankAll().Total;
+                        int banked = wallet.BankAll().Total;
+                        _banked += banked;
+                        AddXp(id, banked * XpRewards.PerEssenceBanked);
                     }
 
                     float toGate = _map.Distance(_gate.Site.Point.World, pos);
@@ -258,6 +271,8 @@ namespace FriendlyPersonShooter.Arena
                         _gate.Unlock(wallet) == GateUnlockOutcome.Unlocked)
                     {
                         _gateUnlocks++;
+                        _partyUnlocked = true;
+                        foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
                         _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, 0));
                     }
                     if (toGate <= ExpeditionWorld.GatePassRadius && tracker.PassedGate(_time))

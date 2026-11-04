@@ -74,7 +74,8 @@ namespace FriendlyPersonShooter.Arena
             }
             CreateCombatMaterials();
             CreateExpeditionMaterials();
-            if (viewCamera != null) viewCamera.farClipPlane = 1500f;
+            CreateFeedbackMaterials();
+            if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();
             BuildUi();
@@ -157,6 +158,7 @@ namespace FriendlyPersonShooter.Arena
 
             DrawPlayers(world, local);
             DrawCombat(world, local);
+            DrawFeedback(world, local);
 
             if (eye.HasValue && viewCamera != null)
             {
@@ -170,6 +172,7 @@ namespace FriendlyPersonShooter.Arena
             _center.text = "";
             if (_wrap) WriteExpeditionHud();
             WriteCombatHud(world, local);
+            WriteFeedbackHud(world, local);
             _hud.Apply();
         }
 

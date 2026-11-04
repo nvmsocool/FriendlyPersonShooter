@@ -42,6 +42,91 @@ namespace FriendlyPersonShooter.Arena
             source.Play();
         }
 
+        private static AudioClip[] _hurt;
+        private static AudioClip _levelUp;
+
+        /// <summary>The local player got hit by an enemy: a low, gritty buzz, unlike any shot.</summary>
+        public static void Hurt()
+        {
+            if (Application.isBatchMode || !EnsurePool()) return;
+            if (_hurt == null)
+            {
+                _hurt = new AudioClip[3];
+                for (int v = 0; v < _hurt.Length; v++) _hurt[v] = MakeHurt(v);
+            }
+            PlayFlat(_hurt[Rng.Next(_hurt.Length)], Range(0.92f, 1.08f), 0.9f);
+        }
+
+        /// <summary>The local player reached a new level: a rising three-note arpeggio.</summary>
+        public static void LevelUp()
+        {
+            if (Application.isBatchMode || !EnsurePool()) return;
+            if (_levelUp == null) _levelUp = MakeLevelUp();
+            PlayFlat(_levelUp, 1f, 0.7f);
+        }
+
+        private static void PlayFlat(AudioClip clip, float pitch, float volume)
+        {
+            var source = _pool[_next];
+            _next = (_next + 1) % _pool.Length;
+            source.clip = clip;
+            source.pitch = pitch;
+            source.volume = Volume * volume;
+            source.spatialBlend = 0f;
+            source.Play();
+        }
+
+        private static AudioClip MakeHurt(int variant)
+        {
+            var rng = new System.Random(77 + variant);
+            const float length = 0.28f;
+            int n = (int)(Rate * length);
+            var data = new float[n];
+            float phase = 0f, low = 0f;
+            float baseF = 110f + 12f * variant;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)Rate;
+                float u = t / length;
+                float f = baseF * (1f - 0.35f * u);
+                phase += f / Rate;
+                // Square-ish buzz plus filtered noise: harsh, so it reads as "ouch".
+                float sq = Mathf.Sign(Mathf.Sin(phase * 2f * Mathf.PI)) * 0.5f + 0.5f * Mathf.Sin(phase * 2f * Mathf.PI);
+                float noise = (float)rng.NextDouble() * 2f - 1f;
+                low += (noise - low) * 0.25f;
+                float env = Mathf.Clamp01(t / 0.005f) * Mathf.Exp(-u * 4.5f);
+                float tail = Mathf.Clamp01((n - i) / (Rate * 0.01f));
+                data[i] = Mathf.Clamp((0.55f * sq + 0.6f * low) * env * tail * 0.8f, -1f, 1f);
+            }
+            var clip = AudioClip.Create($"Hurt {variant}", n, 1, Rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip MakeLevelUp()
+        {
+            const float note = 0.11f;
+            float[] freqs = { 660f, 880f, 1320f };
+            int per = (int)(Rate * note);
+            int n = per * freqs.Length + (int)(Rate * 0.25f);
+            var data = new float[n];
+            for (int k = 0; k < freqs.Length; k++)
+            {
+                float phase = 0f;
+                for (int i = per * k; i < n; i++)
+                {
+                    float t = (i - per * k) / (float)Rate;
+                    phase += freqs[k] / Rate;
+                    float env = Mathf.Clamp01(t / 0.004f) * Mathf.Exp(-t * 7f);
+                    data[i] += 0.32f * Mathf.Sin(phase * 2f * Mathf.PI) * env;
+                }
+            }
+            for (int i = 0; i < n; i++) data[i] = Mathf.Clamp(data[i] * Mathf.Clamp01((n - i) / (Rate * 0.01f)), -1f, 1f);
+            var clip = AudioClip.Create("Level up", n, 1, Rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
         private static float Range(float a, float b) => a + (float)Rng.NextDouble() * (b - a);
 
         private static bool EnsurePool()

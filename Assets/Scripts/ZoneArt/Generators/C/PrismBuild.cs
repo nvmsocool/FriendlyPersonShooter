@@ -194,7 +194,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             _result.HeroViews.Add(_hero);
             Mark("look");
-            _result.Notes = $"{_pal.Mood}; ground repairs {_groundRepairs} (ground walk {_groundWalk}); props removed {_propsRemoved}; links {_linksBuilt}; final walk {_finalWalk}; tree retries {_treeRetries}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
+            _result.Notes = $"{_pal.Mood}; ground repairs {_groundRepairs} (ground walk {_groundWalk}); props removed {_propsRemoved}; links {_linksBuilt}; final walk {_finalWalk}; tree retries {_treeRetries}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, pits {_t.PitsFilled}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
         }
 
         private Dictionary<string, Material> CreateMaterials()
@@ -386,7 +386,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 world.Build();
                 var walk = PrismWalk.Analyze(_zone, world);
                 _groundWalk = walk;
-                if (walk.TwoWayShare > 0.985f && walk.UnreachableAnchors.Count == 0) break;
+                if (walk.TwoWayShare > 0.995f && walk.UnreachableAnchors.Count == 0) break;
                 int carved = _t.RepairFromWalk(walk.Map, _shape, _thr, RepairMinCells, walk.UnreachableAnchors.ConvertAll(ai => L(_zone.Anchors[ai].World)));
                 _groundRepairs += carved;
                 if (carved == 0) break;

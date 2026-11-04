@@ -139,7 +139,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     var enemy = EntityManager.GetComponentData<ArenaEnemy>(_target);
                     aimPoint = tpos;
-                    radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f : 0.15f;
+                    radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f : enemy.Family == EnemyFamily.Glimmer ? 0.4f : 0.15f;
                 }
                 var aim = _aim.Step(dt, ToVec(eye), _target.Index, ToVec(aimPoint), radius);
                 input.Yaw = aim.Yaw;

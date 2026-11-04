@@ -177,7 +177,7 @@ namespace FriendlyPersonShooter.Core.Combat
             int relaySource = shooter.RelaySourceId;
             PayloadKind relayPayload = shooter.RelayPayload;
 
-            result.EffectOutcome = ApplyBuff(target, shooter.Id, payload, shooter.RelayCarry, ref result);
+            result.EffectOutcome = ApplyBuff(target, shooter.Id, payload, shooter.RelayCarry, ref result, shooter.GivePotency, shooter.GiveDuration);
             if (relayed)
             {
                 result.Relayed = true;
@@ -187,7 +187,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 // The relayed payload still never buffs the player who relayed it.
                 result.RelayedOutcome = target.Id == relaySource
                     ? EffectOutcome.Refused
-                    : ApplyBuff(target, relaySource, relayPayload, PayloadKind.Might, ref result);
+                    : ApplyBuff(target, relaySource, relayPayload, PayloadKind.Might, ref result, 1f, 1f);
             }
             return result;
         }
@@ -248,30 +248,32 @@ namespace FriendlyPersonShooter.Core.Combat
         }
 
         /// <summary>Applies a payload's buff; heals and shield are added to <paramref name="result"/>.</summary>
+        /// <param name="power">Multiplies heal and buff strength (the giver's skills).</param>
+        /// <param name="time">Multiplies buff duration (the giver's skills).</param>
         private EffectOutcome ApplyBuff(PlayerVitals target, int sourceId, PayloadKind payload, PayloadKind relayCarry,
-            ref HitResult result)
+            ref HitResult result, float power, float time)
         {
             var s = Settings;
             switch (payload)
             {
                 case PayloadKind.Vigor:
                 {
-                    float overflow = target.Heal(s.VigorHeal, out float healed);
+                    float overflow = target.Heal(s.VigorHeal * power, out float healed);
                     result.Healed += healed;
                     if (overflow <= 0f) return EffectOutcome.None;
-                    result.ShieldGained += target.Buffs.AddShield(sourceId, overflow, s.ShieldCap, s.ShieldDuration, out var outcome);
+                    result.ShieldGained += target.Buffs.AddShield(sourceId, overflow, s.ShieldCap * power, s.ShieldDuration * time, out var outcome);
                     return outcome;
                 }
                 case PayloadKind.Haste:
-                    return target.Buffs.Apply(EffectKind.Hasted, sourceId, s.HasteMoveBonus, s.HasteDuration);
+                    return target.Buffs.Apply(EffectKind.Hasted, sourceId, s.HasteMoveBonus * power, s.HasteDuration * time);
                 case PayloadKind.Relay:
                 {
-                    var outcome = target.Buffs.Apply(EffectKind.Relayed, sourceId, 1f, s.RelayDuration);
+                    var outcome = target.Buffs.Apply(EffectKind.Relayed, sourceId, 1f, s.RelayDuration * time);
                     target.SetRelay(sourceId, relayCarry, s.RelayHits);
                     return outcome;
                 }
                 default:
-                    return target.Buffs.Apply(EffectKind.Empower, sourceId, s.MightDamageBonus, s.MightDuration);
+                    return target.Buffs.Apply(EffectKind.Empower, sourceId, s.MightDamageBonus * power, s.MightDuration * time);
             }
         }
     }

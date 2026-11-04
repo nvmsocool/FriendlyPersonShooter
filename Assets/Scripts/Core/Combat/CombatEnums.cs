@@ -52,6 +52,8 @@ namespace FriendlyPersonShooter.Core.Combat
         Wisp = 0,
         Skitter = 1,
         Mite = 2,
+        /// <summary>A small, short-lived target that pops up near players: one shot, a little Yellow, no attack.</summary>
+        Glimmer = 3,
     }
 
     /// <summary>What happened when an effect was offered to a set of slots.</summary>

@@ -165,7 +165,7 @@ namespace FriendlyPersonShooter.Arena
             int minutes = (int)(s.Elapsed / 60f), seconds = (int)(s.Elapsed % 60f);
             var e = _hud.Expedition;
             e.Append($"<b>EXPEDITION</b>   {minutes:00}:{seconds:00} / 20:00\n");
-            e.Append($"<color=#FFE14D>Yellow</color>  carried <b>{s.Carried}</b>   banked <b>{s.Banked} / {s.Goal}</b>");
+            e.Append($"<color=#FFE14D>Yellow</color>  carried <b>{s.Carried}</b>   party bank <b>{s.Banked} / {s.Goal}</b>");
             if (s.Kudos > 0) e.Append($"   kudos {s.Kudos}");
             e.Append($"\n{s.Objective}\n");
             if (s.HasTarget && !s.Complete)

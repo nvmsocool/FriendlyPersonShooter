@@ -20,6 +20,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float SkitterDrop { get; set; } = 2f;
         /// <summary>Green per single Mite; a 12-Mite swarm is worth 3.</summary>
         public float MiteDrop { get; set; } = 0.25f;
+        /// <summary>Yellow per Glimmer: a little, for always having something to shoot.</summary>
+        public float GlimmerDrop { get; set; } = 1f;
 
         public float DropFor(EnemyFamily family)
         {
@@ -27,6 +29,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             {
                 case EnemyFamily.Wisp: return WispDrop;
                 case EnemyFamily.Skitter: return SkitterDrop;
+                case EnemyFamily.Glimmer: return GlimmerDrop;
                 default: return MiteDrop;
             }
         }

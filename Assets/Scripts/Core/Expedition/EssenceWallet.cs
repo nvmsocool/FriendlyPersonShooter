@@ -30,11 +30,23 @@ namespace FriendlyPersonShooter.Core.Expedition
     public sealed class EssenceWallet
     {
         private readonly EssenceAmounts _carried = new EssenceAmounts();
-        private readonly EssenceAmounts _banked = new EssenceAmounts();
+        private readonly EssenceAmounts _banked;
 
         public EssenceWallet(int playerId)
         {
             PlayerId = playerId;
+            _banked = new EssenceAmounts();
+        }
+
+        /// <summary>
+        /// A wallet whose banked essence is the party's shared pool: banking adds to it, spending (the gate) takes
+        /// from it, and every wallet built on the same pool sees the same banked amounts. Carried essence stays
+        /// each player's own.
+        /// </summary>
+        public EssenceWallet(int playerId, EssenceAmounts sharedBank)
+        {
+            PlayerId = playerId;
+            _banked = sharedBank ?? throw new ArgumentNullException(nameof(sharedBank));
         }
 
         public int PlayerId { get; }

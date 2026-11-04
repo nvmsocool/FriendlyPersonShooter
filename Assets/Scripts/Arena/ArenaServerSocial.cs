@@ -103,7 +103,11 @@ namespace FriendlyPersonShooter.Arena
                 if (!result.Delivered) continue;
                 _chatLines++;
                 _exchanges.RecordQuickChat(result);
-                foreach (int to in result.Recipients)
+                // Everyone in earshot, and the sender too so they see what they said.
+                _intScratch.Clear();
+                _intScratch.AddRange(result.Recipients);
+                if (!_intScratch.Contains(sender)) _intScratch.Add(sender);
+                foreach (int to in _intScratch)
                 {
                     if (!connectionOf.TryGetValue(to, out var connection)) continue;
                     var rpc = ecb.CreateEntity();

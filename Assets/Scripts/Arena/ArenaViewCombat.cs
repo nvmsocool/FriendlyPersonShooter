@@ -117,6 +117,7 @@ namespace FriendlyPersonShooter.Arena
             var exposed = new List<Matrix4x4>();
             var slowed = new List<Matrix4x4>();
             var tagged = new List<Matrix4x4>();
+            var glimmers = new List<Matrix4x4>();
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
@@ -134,13 +135,19 @@ namespace FriendlyPersonShooter.Arena
                         (en.Telegraph ? _f : _c).Add(Matrix4x4.TRS(p, Quaternion.identity, new Vector3(size, 0.9f, size)));
                         cores.Add(Matrix4x4.TRS(p + Vector3.up * 0.1f, Quaternion.identity, Vector3.one * 0.4f));
                         break;
+                    case EnemyFamily.Glimmer:
+                        // A small spinning yellow diamond: one shot pops it for a little Yellow.
+                        size = 0.5f;
+                        float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 9f);
+                        glimmers.Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 200f, 45f), new Vector3(size, size * 1.4f, size) * pulse));
+                        break;
                     default:
                         size = 0.3f;
                         (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * size));
                         break;
                 }
 
-                if (en.Family != EnemyFamily.Mite)
+                if (en.Family != EnemyFamily.Mite && en.Family != EnemyFamily.Glimmer)
                 {
                     AddBar(p + Vector3.up * (size * 0.5f + 0.5f), barRot, 1f, en.Health / math.max(en.MaxHealth, 1f), 0f, _d, _e, null);
                 }
@@ -155,6 +162,7 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_c, _skitterMat);
             DrawList(cores, _coreMat);
             DrawList(mites, _miteMat);
+            DrawList(glimmers, _glimmerMat);
             DrawList(_f, _telegraphMat);
             DrawList(_d, _barBackMat);
             DrawList(_e, _barHealthMat);
@@ -227,12 +235,14 @@ namespace FriendlyPersonShooter.Arena
             int myId = -1;
             PayloadKind myPayload = PayloadKind.Vigor;
             bool alive = false;
+            int ranks = 0;
             Vector3 eye = Vector3.zero;
             if (local != Entity.Null)
             {
                 myId = em.GetComponentData<GhostOwner>(local).NetworkId;
                 myPayload = em.GetComponentData<ArenaLoadout>(local).Payload;
                 alive = em.GetComponentData<ArenaVitals>(local).Health > 0f;
+                if (em.HasComponent<ArenaProgress>(local)) ranks = em.GetComponentData<ArenaProgress>(local).Ranks;
                 eye = (Vector3)em.GetComponentData<LocalTransform>(local).Position + Vector3.up * ArenaSettings.EyeHeight;
             }
 
@@ -241,10 +251,11 @@ namespace FriendlyPersonShooter.Arena
                           UnityEngine.InputSystem.Mouse.current.leftButton.isPressed;
             if (firing && alive && now >= _nextLocalShot)
             {
-                _nextLocalShot = now + ArenaWeapon.FireInterval;
+                _nextLocalShot = now + ArenaWeapon.FireInterval / FriendlyPersonShooter.Core.Progression.PlayerProgress.FireRateFor(ranks);
                 var look = ArenaLocalInputSystem.LocalLook;
                 float3 dir = math.normalize(ArenaSettings.Forward(look.x, look.y));
-                float range = math.min(ArenaWeapon.Range, ArenaLayout.RaycastCover(eye, dir, ArenaWeapon.Range));
+                float reach = ArenaWeapon.Range * FriendlyPersonShooter.Core.Progression.PlayerProgress.RangeFor(ranks);
+                float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
                 var gun = eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
                 _localTracers.Add((gun, eye + (Vector3)dir * range, myPayload, now));
                 ArenaAudio.Shot(myPayload, gun, own: true);
@@ -337,6 +348,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 hud.SetVitals(false, 0f, 0f, 0f);
             }
+            _announceLocalId = localId;
             WriteAnnouncements(now);
 
             hud.Stats.Append($"Damage {ArenaFx.DamageDealt:0}   Healing {ArenaFx.HealingGiven:0}   Kills {ArenaFx.Kills}\n");
@@ -397,6 +409,7 @@ namespace FriendlyPersonShooter.Arena
         }
     
         private const float AnnounceSeconds = 3.5f;
+        private int _announceLocalId;
 
         /// <summary>Recent server announcements, newest first, under the crosshair.</summary>
         private void WriteAnnouncements(float now)
@@ -423,6 +436,11 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case AnnounceKind.BledOut:
                         lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} bled out\n");
+                        break;
+                    case AnnounceKind.LevelUp:
+                        lines.Append(m.PlayerNetworkId == _announceLocalId
+                            ? $"<color=#D9B3FF>LEVEL {m.Value}!</color>  Esc to spend your skill point\n"
+                            : $"{PlayerColors.Tag(m.PlayerNetworkId)} reached level {m.Value}\n");
                         break;
                     case AnnounceKind.ChainCashed:
                         if (m.Value >= 3) lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} cashed a x{m.Value} chain!\n");

@@ -26,9 +26,6 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Friends who can join one host (the host's own bots don't count: they connect in-process).</summary>
         public const int MaxFriends = 7;
 
-        /// <summary>Port the host's own client and bots use to reach its server in-process.</summary>
-        private const ushort HostPort = 7980;
-
         /// <summary>The code friends type to join this host, or null when not hosting (or playing solo).</summary>
         public static string JoinCode { get; private set; }
 
@@ -79,11 +76,32 @@ namespace FriendlyPersonShooter.Arena
         {
             NetTestSettings.Game = GameMode.Expedition;
             NetTestSettings.ArenaBots = Mathf.Clamp(bots, 0, 3);
-            // The server listens (on the relay, when hosting, and in-process); the client and bots connect in-process.
-            ClientServerBootstrap.AutoConnectPort = HostPort;
-            ClientServerBootstrap.DefaultConnectAddress = NetworkEndpoint.LoopbackIpv4;
-            ClientServerBootstrap.DefaultListenAddress = NetworkEndpoint.AnyIpv4;
+            // No auto listen/connect: the relay driver must bind to port 0, so the server listens on Any:0 and the
+            // in-process client and bots connect to whatever port its IPC driver got.
+            ClientServerBootstrap.AutoConnectPort = 0;
             NetTestBootstrap.CreateArenaWorlds(NetMode.All);
+
+            var server = ClientServerBootstrap.ServerWorld;
+            NetworkEndpoint local = default;
+            using (var query = server.EntityManager.CreateEntityQuery(ComponentType.ReadWrite<NetworkStreamDriver>()))
+            {
+                ref var driver = ref query.GetSingletonRW<NetworkStreamDriver>().ValueRW;
+                if (!driver.Listen(NetworkEndpoint.AnyIpv4)) throw new SessionException("Couldn't start the game's server.");
+                ref var store = ref driver.DriverStore;
+                for (int i = store.FirstDriver; i < store.LastDriver; i++)
+                {
+                    if (store.GetDriverType(i) == TransportType.IPC) local = NetworkEndpoint.LoopbackIpv4.WithPort(driver.GetLocalEndPoint(i).Port);
+                }
+            }
+            if (!local.IsValid) throw new SessionException("Couldn't start the game's server (no in-process driver).");
+
+            var clients = ClientServerBootstrap.ClientWorlds;
+            for (int i = 0; i < clients.Count; i++)
+            {
+                var em = clients[i].EntityManager;
+                using var query = em.CreateEntityQuery(ComponentType.ReadWrite<NetworkStreamDriver>());
+                query.GetSingletonRW<NetworkStreamDriver>().ValueRW.Connect(em, local);
+            }
         }
 
         /// <summary>Signs in, finds the host's relay server by join code, starts a client and loads the game.</summary>

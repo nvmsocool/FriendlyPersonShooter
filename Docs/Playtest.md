@@ -42,6 +42,9 @@ FriendlyPersonShooter.exe -fps-profile host
 FriendlyPersonShooter.exe -fps-profile guest
 ```
 
+`-fps-join CODE` makes a copy join that game straight from the menu, e.g.
+`FriendlyPersonShooter.exe -fps-profile guest -fps-join GHRDRR`.
+
 ## In the Editor
 
 Play the `Menu` scene to use the menu. Playing `Expedition` or `Arena` directly still starts those games right away,
@@ -58,5 +61,5 @@ as before. The net test's command-line flags also still work in the playtest bui
 | Menu start (no worlds until you host or join) | `Net/NetTestBootstrap.cs` (`StartsAtMenu`, `CreateArenaWorlds`) |
 | Build | `Assets/Editor/PlaytestBuild.cs` (defines `FPS_PLAYTEST`) |
 
-The host runs the server, its own client and its bots in one process. Its client and bots connect in-process; friends
-connect through the relay. Everyone uses the same expedition world seed.
+The host runs the server, its own client and its bots in one process. The server listens on port 0 (Relay wants an
+ephemeral port); its client and bots connect to the server's in-process (IPC) driver, and friends connect through the relay. Everyone uses the same expedition world seed.

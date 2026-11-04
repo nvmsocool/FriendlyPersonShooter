@@ -50,6 +50,9 @@ namespace FriendlyPersonShooter.Net
         /// </summary>
         public static string Profile;
 
+        /// <summary>Join code from -fps-join CODE: the menu joins that game straight away (for testing host and join).</summary>
+        public static string JoinCode;
+
         /// <summary>Bot allies in the arena. Each is a full client, so it receives the game state and can aim.</summary>
         public static int ArenaBots = 3;
 
@@ -156,6 +159,9 @@ namespace FriendlyPersonShooter.Net
                             Game = game;
                             GameGiven = true;
                         }
+                        break;
+                    case "-fps-join":
+                        JoinCode = value;
                         break;
                     case "-fps-profile":
                         Profile = value;

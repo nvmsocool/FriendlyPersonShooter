@@ -36,6 +36,12 @@ namespace FriendlyPersonShooter.Arena
             Build();
             _code.text = PlayerPrefs.GetString(CodePref, "");
             if (!string.IsNullOrEmpty(PlaySession.LastMessage)) Show(PlaySession.LastMessage, true);
+            if (!string.IsNullOrEmpty(NetTestSettings.JoinCode) && string.IsNullOrEmpty(PlaySession.LastMessage))
+            {
+                _code.text = NetTestSettings.JoinCode;
+                NetTestSettings.JoinCode = null;
+                OnJoin();
+            }
             if (!NetTestBootstrap.StartsAtMenu) Show("This copy started without the menu, so hosting and joining won't work here. Play the Menu scene.", true);
         }
 

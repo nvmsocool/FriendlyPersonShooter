@@ -73,6 +73,7 @@ namespace FriendlyPersonShooter.Arena
             _healthImage = SessionUi.Box(vitals.transform, "Health", tl, new Vector2(16, -16), new Vector2(BarWidth, 34), new Color(0.35f, 0.9f, 0.45f));
             _healthFill = _healthImage.rectTransform;
             _health = Text(vitals.transform, 22, tl, new Vector2(16, -16), new Vector2(BarWidth, 34), TextAnchor.MiddleCenter, FontStyle.Bold);
+            _health.color = new Color(1f, 0.85f, 0.3f); // Yellow, the same as the skill point text.
             SessionUi.Box(vitals.transform, "Shield back", tl, new Vector2(16, -58), new Vector2(BarWidth, 16), new Color(0f, 0f, 0f, 0.5f));
             _shieldFill = SessionUi.Box(vitals.transform, "Shield", tl, new Vector2(16, -58), new Vector2(0, 16), new Color(0.35f, 0.85f, 1f)).rectTransform;
             // Level and XP under the health and shield bars.

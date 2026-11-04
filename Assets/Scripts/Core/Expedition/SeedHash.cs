@@ -5,7 +5,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// part of the world gets its own independent random stream. The same inputs always give the
     /// same output on every machine.
     /// </summary>
-    internal static class SeedHash
+    public static class SeedHash
     {
         // Salts keep the streams for different systems apart even with the same coordinates.
         public const int LayerSalt = 1;

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Numerics;
 
@@ -44,6 +45,10 @@ namespace FriendlyPersonShooter.Core.Combat
         /// </summary>
         public EffectOutcome RelayedOutcome;
 
+        /// <summary>The second payload a Split gun carries (None if not Split), and what it did.</summary>
+        public PayloadKind SecondPayload;
+        public EffectOutcome SecondOutcome;
+
         // Chains (filled in by LobbyCombat; see ChainTracker).
         /// <summary>Bonus fraction this hit got from cashing a chain (weak-point factor included). 0 if none.</summary>
         public float ChainBonus;
@@ -66,6 +71,27 @@ namespace FriendlyPersonShooter.Core.Combat
     ///
     /// Chains and combos live per lobby; <see cref="LobbyCombat"/> wraps this class to feed them.
     /// </summary>
+    /// <summary>
+    /// What a shot carries: its payload (or None), an optional second payload (Split), how strong
+    /// each is (mod tier, Split, frame), and how much a hit without a payload heals an ally.
+    /// </summary>
+    public struct ShotEffects
+    {
+        public PayloadKind Payload;
+        public PayloadKind Second;
+        public float Strength;
+        public float SecondStrength;
+        /// <summary>Heal for an ally hit by a shot with no payload (a tiny amount).</summary>
+        public float PlainHeal;
+        /// <summary>Multiplies Vigor's heal (frames that fire fast heal less per hit).</summary>
+        public float HealScale;
+
+        public static ShotEffects Of(PayloadKind payload) =>
+            new ShotEffects { Payload = payload, Second = PayloadKind.None, Strength = 1f, SecondStrength = 1f, HealScale = 1f };
+
+        public bool HasPayload => Payload != PayloadKind.None || Second != PayloadKind.None;
+    }
+
     public sealed class HitResolver
     {
         public HitResolver(CombatSettings settings)
@@ -98,6 +124,14 @@ namespace FriendlyPersonShooter.Core.Combat
         public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, PayloadKind payload, float baseDamage, bool weakPoint,
             float chainBonus)
         {
+            return HitEnemy(shooter, target, ShotEffects.Of(payload), baseDamage, weakPoint, chainBonus);
+        }
+
+        /// <summary>An enemy hit carrying <paramref name="fx"/> (payloads at their strengths).</summary>
+        public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, ShotEffects fx, float baseDamage, bool weakPoint,
+            float chainBonus)
+        {
+            var payload = fx.Payload;
             var result = new HitResult
             {
                 Payload = payload,
@@ -105,6 +139,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 TargetId = target.Id,
                 WeakPoint = weakPoint,
                 Effect = Payloads.EnemyEffect(payload),
+                SecondPayload = PayloadKind.None,
             };
             if (target.IsDead)
             {
@@ -137,8 +172,13 @@ namespace FriendlyPersonShooter.Core.Combat
                 return result;
             }
 
-            result.EffectOutcome = ApplyDebuff(target, shooter.Id, payload);
-            if (relayed) result.RelayedOutcome = ApplyDebuff(target, relaySource, result.RelayedPayload);
+            result.EffectOutcome = ApplyDebuff(target, shooter.Id, payload, fx.Strength);
+            if (fx.Second != PayloadKind.None)
+            {
+                result.SecondPayload = fx.Second;
+                result.SecondOutcome = ApplyDebuff(target, shooter.Id, fx.Second, fx.SecondStrength);
+            }
+            if (relayed) result.RelayedOutcome = ApplyDebuff(target, relaySource, result.RelayedPayload, 1f);
             return result;
         }
 
@@ -158,12 +198,23 @@ namespace FriendlyPersonShooter.Core.Combat
 
         public HitResult HitPlayer(PlayerVitals shooter, PlayerVitals target, PayloadKind payload)
         {
+            return HitPlayer(shooter, target, ShotEffects.Of(payload));
+        }
+
+        /// <summary>
+        /// An ally hit carrying <paramref name="fx"/>. Without a payload it heals <see cref="ShotEffects.PlainHeal"/>
+        /// (no shield, no buff); a relayed payload still applies.
+        /// </summary>
+        public HitResult HitPlayer(PlayerVitals shooter, PlayerVitals target, ShotEffects fx)
+        {
+            var payload = fx.Payload;
             var result = new HitResult
             {
                 Payload = payload,
                 TargetIsPlayer = true,
                 TargetId = target.Id,
                 Effect = Payloads.AllyEffect(payload),
+                SecondPayload = PayloadKind.None,
             };
 
             result.Refused = CheckBuff(shooter, target);
@@ -177,7 +228,26 @@ namespace FriendlyPersonShooter.Core.Combat
             int relaySource = shooter.RelaySourceId;
             PayloadKind relayPayload = shooter.RelayPayload;
 
-            result.EffectOutcome = ApplyBuff(target, shooter.Id, payload, shooter.RelayCarry, ref result, shooter.GivePotency, shooter.GiveDuration);
+            if (payload == PayloadKind.None)
+            {
+                if (fx.PlainHeal > 0f)
+                {
+                    target.Heal(fx.PlainHeal, out float healed);
+                    result.Healed += healed;
+                }
+                result.EffectOutcome = EffectOutcome.None;
+            }
+            else
+            {
+                result.EffectOutcome = ApplyBuff(target, shooter.Id, payload, shooter.RelayCarry, ref result,
+                    shooter.GivePotency * fx.Strength, shooter.GiveDuration, fx.HealScale);
+            }
+            if (fx.Second != PayloadKind.None)
+            {
+                result.SecondPayload = fx.Second;
+                result.SecondOutcome = ApplyBuff(target, shooter.Id, fx.Second, shooter.RelayCarry, ref result,
+                    shooter.GivePotency * fx.SecondStrength, shooter.GiveDuration, fx.HealScale);
+            }
             if (relayed)
             {
                 result.Relayed = true;
@@ -187,9 +257,19 @@ namespace FriendlyPersonShooter.Core.Combat
                 // The relayed payload still never buffs the player who relayed it.
                 result.RelayedOutcome = target.Id == relaySource
                     ? EffectOutcome.Refused
-                    : ApplyBuff(target, relaySource, relayPayload, PayloadKind.Might, ref result, 1f, 1f);
+                    : ApplyBuff(target, relaySource, relayPayload, PayloadKind.Might, ref result, 1f, 1f, 1f);
             }
             return result;
+        }
+
+        /// <summary>
+        /// Self-share: the shooter gets a share of a buff they just gave. Relay isn't shared (it would
+        /// relay to themselves). Returns the outcome; heal and shield go into <paramref name="result"/>.
+        /// </summary>
+        public EffectOutcome GiveSelf(PlayerVitals shooter, PayloadKind payload, float share, float healScale, ref HitResult result)
+        {
+            if (payload == PayloadKind.None || payload == PayloadKind.Relay || shooter.IsDown) return EffectOutcome.None;
+            return ApplyBuff(shooter, shooter.Id, payload, shooter.RelayCarry, ref result, shooter.GivePotency * share, shooter.GiveDuration, healScale);
         }
 
         /// <summary>
@@ -235,15 +315,16 @@ namespace FriendlyPersonShooter.Core.Combat
             return added;
         }
 
-        private EffectOutcome ApplyDebuff(EnemyVitals target, int sourceId, PayloadKind payload)
+        private EffectOutcome ApplyDebuff(EnemyVitals target, int sourceId, PayloadKind payload, float strength)
         {
             var s = Settings;
             switch (payload)
             {
-                case PayloadKind.Vigor: return target.Debuffs.Apply(EffectKind.Wither, sourceId, s.WitherDps, s.WitherDuration);
-                case PayloadKind.Haste: return target.Debuffs.Apply(EffectKind.Slow, sourceId, s.SlowAmount, s.SlowDuration);
-                case PayloadKind.Relay: return target.Debuffs.Apply(EffectKind.Tag, sourceId, s.TagSplashShare, s.TagDuration);
-                default: return target.Debuffs.Apply(EffectKind.Expose, sourceId, s.ExposeBonus, s.ExposeDuration);
+                case PayloadKind.None: return EffectOutcome.None;
+                case PayloadKind.Vigor: return target.Debuffs.Apply(EffectKind.Wither, sourceId, s.WitherDps * strength, s.WitherDuration);
+                case PayloadKind.Haste: return target.Debuffs.Apply(EffectKind.Slow, sourceId, Math.Min(0.8f, s.SlowAmount * strength), s.SlowDuration);
+                case PayloadKind.Relay: return target.Debuffs.Apply(EffectKind.Tag, sourceId, s.TagSplashShare * strength, s.TagDuration);
+                default: return target.Debuffs.Apply(EffectKind.Expose, sourceId, s.ExposeBonus * strength, s.ExposeDuration);
             }
         }
 
@@ -251,14 +332,15 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <param name="power">Multiplies heal and buff strength (the giver's skills).</param>
         /// <param name="time">Multiplies buff duration (the giver's skills).</param>
         private EffectOutcome ApplyBuff(PlayerVitals target, int sourceId, PayloadKind payload, PayloadKind relayCarry,
-            ref HitResult result, float power, float time)
+            ref HitResult result, float power, float time, float healScale)
         {
             var s = Settings;
             switch (payload)
             {
+                case PayloadKind.None: return EffectOutcome.None;
                 case PayloadKind.Vigor:
                 {
-                    float overflow = target.Heal(s.VigorHeal * power, out float healed);
+                    float overflow = target.Heal(s.VigorHeal * power * healScale, out float healed);
                     result.Healed += healed;
                     if (overflow <= 0f) return EffectOutcome.None;
                     result.ShieldGained += target.Buffs.AddShield(sourceId, overflow, s.ShieldCap * power, s.ShieldDuration * time, out var outcome);

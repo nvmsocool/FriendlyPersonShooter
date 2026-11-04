@@ -23,6 +23,8 @@ namespace FriendlyPersonShooter.Arena
         public static bool HasProgress;
         /// <summary>Skills the human chose to buy, sent to the server by the client system.</summary>
         public static readonly List<byte> SkillBuys = new List<byte>();
+        /// <summary>Loot boxes the human has opened this session (drawn shut and dark).</summary>
+        public static readonly HashSet<int> OpenedBoxes = new HashSet<int>();
     }
 
     /// <summary>
@@ -67,6 +69,11 @@ namespace FriendlyPersonShooter.Arena
             {
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.Announcements.Add((msg.ValueRO, now));
+            }
+            foreach (var (opened, entity) in SystemAPI.Query<RefRO<LootBoxOpened>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (keep) ArenaFx.OpenedBoxes.Add(opened.ValueRO.BoxId);
             }
             foreach (var (attack, entity) in SystemAPI.Query<RefRO<EnemyAttackFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
             {

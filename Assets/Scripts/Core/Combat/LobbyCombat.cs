@@ -34,10 +34,17 @@ namespace FriendlyPersonShooter.Core.Combat
         public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, PayloadKind payload, float baseDamage, bool weakPoint,
             double time, List<ComboEvent> combos = null)
         {
-            if (target.IsDead) return Hits.HitEnemy(shooter, target, payload, baseDamage, weakPoint);
+            return HitEnemy(shooter, target, ShotEffects.Of(payload), baseDamage, weakPoint, time, combos);
+        }
+
+        /// <summary>An enemy hit carrying <paramref name="fx"/> (a found gun's payloads at their strengths).</summary>
+        public HitResult HitEnemy(PlayerVitals shooter, EnemyVitals target, ShotEffects fx, float baseDamage, bool weakPoint,
+            double time, List<ComboEvent> combos = null)
+        {
+            if (target.IsDead) return Hits.HitEnemy(shooter, target, fx, baseDamage, weakPoint, 0f);
 
             var cash = Chains.OnEnemyHit(shooter.Id, time, weakPoint, shooter.HasRelay);
-            var result = Hits.HitEnemy(shooter, target, payload, baseDamage, weakPoint, cash.Bonus);
+            var result = Hits.HitEnemy(shooter, target, fx, baseDamage, weakPoint, cash.Bonus);
             if (cash.Cashed)
             {
                 result.ChainEvent = ChainEvent.Cashed;
@@ -51,11 +58,23 @@ namespace FriendlyPersonShooter.Core.Combat
         public HitResult HitPlayer(PlayerVitals shooter, PlayerVitals target, PayloadKind payload, double time,
             List<ComboEvent> combos = null)
         {
-            bool relayed = shooter.HasRelay;
-            var result = Hits.HitPlayer(shooter, target, payload);
-            if (result.Refused != RefuseReason.None) return result;
+            return HitPlayer(shooter, target, ShotEffects.Of(payload), time, combos);
+        }
 
-            var chain = Chains.OnBuff(shooter.Id, target.Id, time, relayed);
+        /// <summary>
+        /// An ally hit carrying <paramref name="fx"/>. A hit with no payload (and no relayed one) only
+        /// heals a tiny amount: it starts and passes no chain. <paramref name="conductor"/> gives a chain
+        /// this hit starts one extra link.
+        /// </summary>
+        public HitResult HitPlayer(PlayerVitals shooter, PlayerVitals target, ShotEffects fx, double time,
+            List<ComboEvent> combos = null, bool conductor = false)
+        {
+            bool relayed = shooter.HasRelay;
+            var result = Hits.HitPlayer(shooter, target, fx);
+            if (result.Refused != RefuseReason.None) return result;
+            if (!fx.HasPayload && !relayed) return result;
+
+            var chain = Chains.OnBuff(shooter.Id, target.Id, time, relayed, conductor);
             result.ChainEvent = chain.Event;
             result.ChainLinks = chain.Links;
             Combos.Check(target, combos);

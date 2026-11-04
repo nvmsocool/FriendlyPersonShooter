@@ -5,12 +5,9 @@ using Unity.NetCode;
 
 namespace FriendlyPersonShooter.Arena
 {
-    /// <summary>Weapon numbers for the arena. One automatic rifle for everyone in step 2.</summary>
+    /// <summary>Hit shapes for players. Gun numbers live in Core.Arsenal (frames and mods).</summary>
     public static class ArenaWeapon
     {
-        public const float FireInterval = 0.12f;
-        public const float BaseDamage = 10f;
-        public const float Range = 80f;
         /// <summary>Players are hit as a sphere around the chest: easy enough to buff a dodging ally.</summary>
         public const float PlayerHitRadius = 0.6f;
         public const float PlayerHitHeight = 1.0f;
@@ -49,10 +46,44 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public bool Blitz;
     }
 
-    /// <summary>The payload a player's gun carries.</summary>
+    /// <summary>
+    /// A player's two guns (packed Core.Arsenal.Gun values), which one is in hand, and its magazine.
+    /// <see cref="Payload"/> is the payload of the gun in hand (None when its payload slot is empty).
+    /// </summary>
     public struct ArenaLoadout : IComponentData
     {
         [GhostField] public PayloadKind Payload;
+        [GhostField] public ulong GunA;
+        [GhostField] public ulong GunB;
+        [GhostField] public byte Active;
+        [GhostField] public int Ammo;
+        /// <summary>Reload progress 0..1; 1 when not reloading.</summary>
+        [GhostField(Quantization = 100)] public float Reload;
+    }
+
+    /// <summary>A gun or mod lying on the ground. Owner 0 = anyone can take it; otherwise only that player sees and takes it.</summary>
+    public struct ArenaGroundItem : IComponentData
+    {
+        [GhostField] public ulong Item;
+        [GhostField] public int Owner;
+    }
+
+    /// <summary>Singleton holding the ground item ghost prefab built in code.</summary>
+    public struct ArenaGroundItemPrefab : IComponentData
+    {
+        public Entity Value;
+    }
+
+    /// <summary>Server-to-opener: you opened this loot box (it stays open for you this session).</summary>
+    public struct LootBoxOpened : IRpcCommand
+    {
+        public int BoxId;
+    }
+
+    /// <summary>Bot-to-server: give me my role's kit (a gun with this payload).</summary>
+    public struct BotKitRequest : IRpcCommand
+    {
+        public PayloadKind Payload;
     }
 
     /// <summary>An enemy, replicated to everyone.</summary>
@@ -186,9 +217,12 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>Server-to-everyone: someone fired; draw a tracer from their gun to where it stopped.</summary>
     public struct ShotFx : IRpcCommand
     {
+        /// <summary>0 for a ricochet (everyone draws it, the shooter too).</summary>
         public int ShooterNetworkId;
         public float3 From;
         public float3 To;
         public PayloadKind Payload;
+        /// <summary>The gun's frame (Core.Arsenal.FrameKind): how to draw it (beam, launcher shell).</summary>
+        public byte Frame;
     }
 }

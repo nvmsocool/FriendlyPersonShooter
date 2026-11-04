@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Progression;
 using FriendlyPersonShooter.Net;
@@ -40,7 +41,13 @@ namespace FriendlyPersonShooter.Arena
         {
             public PlayerVitals Vitals;
             public PositionHistory History = new PositionHistory(64);
-            public double NextFire;
+            /// <summary>Two guns (Core.Arsenal), their firing state and final stats; null until the starting kit is handed out.</summary>
+            public Loadout Loadout;
+            public GunState[] Guns = new GunState[2];
+            public GunStats[] Stats = new GunStats[2];
+            public ulong[] Packed = new ulong[2];
+            /// <summary>A bot already got its role's kit.</summary>
+            public bool BotKit;
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
@@ -154,6 +161,7 @@ namespace FriendlyPersonShooter.Arena
             StepEnemies(dt, tickIndex, ecb);
             SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
+            StepLoot(ecb);
             if (ExpeditionWorld.Active) StepExpedition(ecb);
             else RespawnEnemies();
             StepSkillRequests();
@@ -170,7 +178,8 @@ namespace FriendlyPersonShooter.Arena
                           $"damageDealt={_damageDealt:0} damageTaken={_damageTaken:0} healing={_healing:0} downs={_downs} revives={_revives} bleedOuts={_bleedOuts} " +
                           $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
                           $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
-                          $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} hp=[{hp}]");
+                          $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} boxes={_boxesOpened} itemsTaken={_itemsTaken} " +
+                          $"blasts={_blastCount} ricochets={_ricochets} hp=[{hp}]");
                 if (ExpeditionWorld.Active) LogExpedition();
             }
         }
@@ -194,7 +203,8 @@ namespace FriendlyPersonShooter.Arena
                 }
                 _playerById[id] = entity;
 
-                if (input.ValueRO.SwapPayload.IsSet) loadout.ValueRW.Payload = NextPayload(loadout.ValueRO.Payload);
+                EnsureKit(state);
+                if (input.ValueRO.SwapGun.IsSet && state.Revive == null) SwapGun(state);
                 if (input.ValueRO.Unstuck.IsSet && state.Revive == null && _time >= state.NextUnstuck)
                 {
                     // Stuck somewhere: back to the nearest shrine (the arena's spawn ring). You keep your essence,
@@ -264,6 +274,7 @@ namespace FriendlyPersonShooter.Arena
                     ChainTimeLeft = holding ? chain.TimeLeft : 0f,
                     Blitz = v.IsBlitzed,
                 };
+                loadout.ValueRW = LoadoutGhost(state);
                 WriteProgress(entity, state);
             }
 
@@ -276,18 +287,6 @@ namespace FriendlyPersonShooter.Arena
                 if (ExpeditionWorld.Active) ExpeditionPlayerGone(_players[e].Vitals.Id);
                 _playerById.Remove(_players[e].Vitals.Id);
                 _players.Remove(e);
-            }
-        }
-
-        /// <summary>The payload swap key cycles Vigor, Might, Haste, Relay.</summary>
-        public static PayloadKind NextPayload(PayloadKind p)
-        {
-            switch (p)
-            {
-                case PayloadKind.Vigor: return PayloadKind.Might;
-                case PayloadKind.Might: return PayloadKind.Haste;
-                case PayloadKind.Haste: return PayloadKind.Relay;
-                default: return PayloadKind.Vigor;
             }
         }
 
@@ -572,143 +571,7 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------- Shooting ----------
 
-        private void Shoot(int tick, EntityCommandBuffer ecb)
-        {
-            var connections = new Dictionary<int, Entity>();
-            foreach (var (id, connection) in SystemAPI.Query<RefRO<NetworkId>>().WithEntityAccess())
-            {
-                connections[id.ValueRO.Value] = connection;
-            }
-
-            foreach (var (input, transform, loadout, owner, entity) in SystemAPI
-                         .Query<RefRO<ArenaInput>, RefRO<LocalTransform>, RefRO<ArenaLoadout>, RefRO<GhostOwner>>()
-                         .WithAll<ArenaPlayer>().WithEntityAccess())
-            {
-                if (input.ValueRO.Fire == 0 || !_players.TryGetValue(entity, out var shooter)) continue;
-                if (shooter.Vitals.IsDown || _time < shooter.NextFire) continue;
-                int ranks = shooter.Progress.PackedRanks;
-                shooter.NextFire = _time + ArenaWeapon.FireInterval / PlayerProgress.FireRateFor(ranks);
-                _shots++;
-
-                // Rewind everyone else to the tick this player was looking at when they fired.
-                int delay = 0;
-                if (SystemAPI.HasComponent<CommandDataInterpolationDelay>(entity))
-                {
-                    delay = (int)SystemAPI.GetComponent<CommandDataInterpolationDelay>(entity).Delay;
-                }
-                int seenTick = tick - delay;
-
-                var eye = transform.ValueRO.Position + new float3(0f, ArenaSettings.EyeHeight, 0f);
-                var dir = math.normalize(ArenaSettings.Forward(input.ValueRO.Yaw, input.ValueRO.Pitch));
-                float reach = ArenaWeapon.Range * PlayerProgress.RangeFor(ranks);
-                float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
-
-                BuildTargets(seenTick, shooter.Vitals.Id, eye);
-                var end = eye + dir * range;
-                var payload = loadout.ValueRO.Payload;
-                if (HitScan.Cast(ToVec(eye), ToVec(dir), range, _targets, out var hit, shooter.Vitals.Id))
-                {
-                    end = ToFloat3(hit.Point);
-                    _combos.Clear();
-                    var confirm = new HitConfirm { Point = end };
-                    if (hit.IsPlayer)
-                    {
-                        var target = _players[_playerById[hit.TargetId]];
-                        var result = _lobby.HitPlayer(shooter.Vitals, target.Vitals, payload, _time, _combos);
-                        SocialBuff(shooter.Vitals.Id, target.Vitals.Id, result);
-                        if (result.Refused == RefuseReason.None) AddXp(shooter.Vitals.Id, XpRewards.AllyBuff);
-                        _allyHits++;
-                        _healing += result.Healed + result.ShieldGained;
-                        confirm.TargetIsPlayer = 1;
-                        confirm.Refused = (byte)(result.Refused != RefuseReason.None ? 1 : 0);
-                        confirm.Healed = result.Healed + result.ShieldGained;
-                        bool chained = result.ChainEvent == ChainEvent.Started || result.ChainEvent == ChainEvent.Grew;
-                        confirm.ChainLinks = (byte)(chained ? result.ChainLinks : 0);
-                    }
-                    else if (hit.TargetId >= FragmentIdBase)
-                    {
-                        int ownerId = (hit.TargetId - FragmentIdBase) / FragmentIdsPerPlayer;
-                        int fragmentId = (hit.TargetId - FragmentIdBase) % FragmentIdsPerPlayer;
-                        confirm.Fragment = 1;
-                        confirm.TargetIsPlayer = 1;
-                        if (_playerById.TryGetValue(ownerId, out var ownerEntity) && _players.TryGetValue(ownerEntity, out var downed) &&
-                            downed.Revive != null)
-                        {
-                            var revive = downed.Revive;
-                            var r = _lobby.HitFragment(shooter.Vitals, revive, fragmentId, payload);
-                            confirm.Refused = (byte)(r.Accepted ? 0 : 1);
-                            confirm.ReviveProgress = revive.ProgressFraction;
-                            if (r.Accepted)
-                            {
-                                _fragmentHits++;
-                                SocialFragment(shooter.Vitals.Id, ownerId, revive, r.Revived);
-                            }
-                            if (r.Revived)
-                            {
-                                _revives++;
-                                downed.Revive = null;
-                                AddXp(shooter.Vitals.Id, XpRewards.Revive);
-                                _announce.Add((AnnounceKind.Revived, 0, ownerId, shooter.Vitals.Id));
-                            }
-                        }
-                        else confirm.Refused = 1;
-                    }
-                    else
-                    {
-                        var enemyEntity = _enemyById[hit.TargetId];
-                        var enemy = _enemies[enemyEntity];
-                        // The raid boss's shell shrugs off most damage; only its open plate takes full hits.
-                        float baseDamage = ArenaWeapon.BaseDamage;
-                        bool weakPoint = hit.WeakPoint;
-                        if (enemy.Family == EnemyFamily.Bulwark)
-                        {
-                            enemy.Boss.HitOutcome(hit.WeakPoint, _bulwark, out float armor, out weakPoint);
-                            baseDamage *= armor;
-                        }
-                        var result = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, payload, baseDamage, weakPoint, _time, _combos);
-                        _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id);
-                        _enemyHits++;
-                        if (result.WeakPoint) _weakHits++;
-                        _damageDealt += result.DamageDealt;
-                        if (result.ChainEvent == ChainEvent.Cashed && result.ChainLinks >= 2)
-                        {
-                            _chainsCashed++;
-                            _chainLinksCashed += result.ChainLinks;
-                            _chainDamage += result.DamageDealt * result.ChainBonus / (1f + result.ChainBonus);
-                            confirm.ChainCashed = 1;
-                            confirm.ChainLinks = (byte)result.ChainLinks;
-                            confirm.ChainBonus = result.ChainBonus;
-                            _announce.Add((AnnounceKind.ChainCashed, result.ChainLinks, shooter.Vitals.Id, 0));
-                        }
-                        if (result.SplashDamage > 0f) Splash(enemy, hit.TargetId, result.SplashDamage, ecb);
-                        if (result.Killed)
-                        {
-                            KillEnemy(enemyEntity, ecb);
-                            _kills++;
-                        }
-                        confirm.WeakPoint = (byte)(result.WeakPoint ? 1 : 0);
-                        confirm.Killed = (byte)(result.Killed ? 1 : 0);
-                        confirm.Damage = result.DamageDealt;
-                    }
-                    QueueCombos();
-
-                    if (connections.TryGetValue(owner.ValueRO.NetworkId, out var shooterConnection))
-                    {
-                        var rpc = ecb.CreateEntity();
-                        ecb.AddComponent(rpc, confirm);
-                        ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = shooterConnection });
-                    }
-                }
-
-                // Everyone else draws the tracer; the shooter already drew their own.
-                var fx = ecb.CreateEntity();
-                ecb.AddComponent(fx, new ShotFx
-                {
-                    ShooterNetworkId = owner.ValueRO.NetworkId, From = eye - new float3(0f, 0.2f, 0f), To = end, Payload = payload,
-                });
-                ecb.AddComponent(fx, new SendRpcCommandRequest { TargetConnection = Entity.Null });
-            }
-        }
+        // Shoot (every frame of gun) is in ArenaServerGuns.cs.
 
         /// <summary>A hit on a Tagged enemy splashes plain damage to enemies close to it.</summary>
         private void Splash(EnemyState source, int hitId, float amount, EntityCommandBuffer ecb)

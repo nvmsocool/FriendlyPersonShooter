@@ -89,6 +89,8 @@ namespace FriendlyPersonShooter.Core.Combat
             public readonly List<int> Members = new List<int>(5);
             public double ExpiresAt;
             public bool RelayLink;
+            /// <summary>Extra links from the starter's Conductor mod.</summary>
+            public int ExtraLinks;
             public int Holder => Members[Members.Count - 1];
         }
 
@@ -103,7 +105,8 @@ namespace FriendlyPersonShooter.Core.Combat
 
         /// <summary>An accepted buff (any payload) from <paramref name="shooterId"/> on <paramref name="targetId"/>.</summary>
         /// <param name="relayed">True when the shooter was Relayed when they fired (read before the hit).</param>
-        public ChainBuff OnBuff(int shooterId, int targetId, double time, bool relayed = false)
+        /// <param name="conductor">True when the shooter's gun has Conductor: a chain this buff starts gets one extra link.</param>
+        public ChainBuff OnBuff(int shooterId, int targetId, double time, bool relayed = false, bool conductor = false)
         {
             Prune(time);
             if (shooterId == targetId) return default;
@@ -120,7 +123,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 return new ChainBuff { Event = ev, ChainId = keptOld.Id, Links = Links(keptOld) };
             }
 
-            var started = new Chain { Id = _nextId++, ExpiresAt = time + _settings.ChainWindow, RelayLink = relayed };
+            var started = new Chain { Id = _nextId++, ExpiresAt = time + _settings.ChainWindow, RelayLink = relayed, ExtraLinks = conductor ? 1 : 0 };
             started.Members.Add(shooterId);
             started.Members.Add(targetId);
             _chains.Add(started);
@@ -211,7 +214,7 @@ namespace FriendlyPersonShooter.Core.Combat
 
         private int Links(Chain c)
         {
-            int raw = c.Members.Count - 1 + (c.RelayLink ? 1 : 0);
+            int raw = c.Members.Count - 1 + (c.RelayLink ? 1 : 0) + c.ExtraLinks;
             return Math.Min(raw, _settings.ChainMaxLinks);
         }
 

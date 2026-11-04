@@ -14,7 +14,7 @@ namespace FriendlyPersonShooter.Arena
             var settings = new CombatSettings();
             em.AddComponentData(prefab, new ArenaVitals { Health = settings.PlayerMaxHealth, MaxHealth = settings.PlayerMaxHealth });
             em.AddComponentData(prefab, new ArenaBuffs { MoveMultiplier = 1f, JumpMultiplier = 1f });
-            em.AddComponentData(prefab, new ArenaLoadout { Payload = PayloadKind.Vigor });
+            em.AddComponentData(prefab, new ArenaLoadout { Payload = PayloadKind.None, Reload = 1f });
             em.AddComponentData(prefab, new ArenaProgress { Level = 1, XpNext = FriendlyPersonShooter.Core.Progression.SkillTree.XpToNext(1) });
             if (ExpeditionWorld.Active) em.AddComponent<ExpeditionStatus>(prefab);
             // Lets the server rewind other ghosts to what this player saw when they fired.
@@ -74,6 +74,20 @@ namespace FriendlyPersonShooter.Arena
                 UsePreSerialization = false,
             });
             EntityManager.AddComponentData(holder, new ArenaCachePrefab { Value = cache });
+
+            var item = EntityManager.CreateEntity();
+            EntityManager.AddComponentData(item, LocalTransform.Identity);
+            EntityManager.AddComponent<ArenaGroundItem>(item);
+            GhostPrefabCreation.ConvertToGhostPrefab(EntityManager, item, new GhostPrefabCreation.Config
+            {
+                Name = "ArenaGroundItem",
+                Importance = 3,
+                SupportedGhostModes = GhostModeMask.Interpolated,
+                DefaultGhostMode = GhostMode.Interpolated,
+                OptimizationMode = GhostOptimizationMode.Static,
+                UsePreSerialization = false,
+            });
+            EntityManager.AddComponentData(holder, new ArenaGroundItemPrefab { Value = item });
         }
     }
 }

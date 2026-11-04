@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Net;
 using Unity.Collections;
@@ -46,6 +47,8 @@ namespace FriendlyPersonShooter.Arena
         private PayloadKind _wanted;
         private float _retargetIn;
         private float _swapCooldown;
+        /// <summary>Range of the gun in hand.</summary>
+        private float _range = 60f;
         private Entity _target;
         private bool _targetIsPlayer;
         private Unity.Mathematics.Random _random;
@@ -96,7 +99,10 @@ namespace FriendlyPersonShooter.Arena
             _me = me;
             var pos = EntityManager.GetComponentData<LocalTransform>(me).Position;
             var vitals = EntityManager.GetComponentData<ArenaVitals>(me);
-            var payload = EntityManager.GetComponentData<ArenaLoadout>(me).Payload;
+            var loadout = EntityManager.GetComponentData<ArenaLoadout>(me);
+            var payload = loadout.Payload;
+            var gun = Gun.Unpack(loadout.Active == 0 ? loadout.GunA : loadout.GunB);
+            _range = GunFrames.For(gun.Frame)?.Range ?? 60f;
             var input = new ArenaInput();
 
             if (vitals.Health <= 0f)
@@ -108,8 +114,11 @@ namespace FriendlyPersonShooter.Arena
             _swapCooldown -= dt;
             if (payload != _wanted && _swapCooldown <= 0f)
             {
-                input.SwapPayload.Set();
-                _swapCooldown = 0.3f;
+                // Ask the server for this role's kit (a gun with the wanted payload); retry until it shows up.
+                var rpc = EntityManager.CreateEntity();
+                EntityManager.AddComponentData(rpc, new BotKitRequest { Payload = _wanted });
+                EntityManager.AddComponent<SendRpcCommandRequest>(rpc);
+                _swapCooldown = 2f;
             }
 
             _retargetIn -= dt;
@@ -389,7 +398,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     var p = ExpeditionWorld.Near(enemyPos[i].Position, _self);
                     float d = math.distance(eye, p);
-                    bool hittable = (enemyData[i].Hittable || enemyData[i].Family == EnemyFamily.Wisp) && d <= ArenaWeapon.Range &&
+                    bool hittable = (enemyData[i].Hittable || enemyData[i].Family == EnemyFamily.Wisp) && d <= _range &&
                                     Visible(eye, ToVec(p));
                     _enemyList.Add(new MedicEnemy { Id = _enemyList.Count, Position = ToVec(p), Hittable = hittable });
                     _enemyEntities.Add(enemies[i]);

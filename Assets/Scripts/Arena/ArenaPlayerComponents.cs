@@ -44,7 +44,14 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Jump;
         /// <summary>1 while the fire button is held.</summary>
         public int Fire;
-        public InputEvent SwapPayload;
+        /// <summary>Q: switch to the other gun.</summary>
+        public InputEvent SwapGun;
+        /// <summary>R: reload.</summary>
+        public InputEvent Reload;
+        /// <summary>E: open a loot box or take the item at your feet.</summary>
+        public InputEvent Interact;
+        /// <summary>1 while aiming down the sights (right mouse).</summary>
+        public int Zoom;
         /// <summary>"Reset position" from the Esc menu: the server moves the player to the nearest shrine.</summary>
         public InputEvent Unstuck;
     }

@@ -11,6 +11,8 @@ namespace FriendlyPersonShooter.Core.Combat
         Haste = 2,
         // Frenzy = 3, Ward = 4, Focus = 5 (not built yet)
         Relay = 6,
+        /// <summary>A gun with an empty payload slot: damages enemies, heals allies a tiny bit, starts no chains.</summary>
+        None = 7,
     }
 
     /// <summary>A timed effect sitting in a player's buff slots or an enemy's debuff slots.</summary>
@@ -36,6 +38,8 @@ namespace FriendlyPersonShooter.Core.Combat
         Slow = 66,
         /// <summary>Enemy debuff from Relay. Strength is the share of each hit's damage that splashes to nearby enemies.</summary>
         Tag = 70,
+        /// <summary>No effect (a hit without a payload).</summary>
+        None = 255,
     }
 
     /// <summary>Who a player accepts buffs from.</summary>
@@ -116,6 +120,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 case PayloadKind.Vigor: return EffectKind.Shield;
                 case PayloadKind.Haste: return EffectKind.Hasted;
                 case PayloadKind.Relay: return EffectKind.Relayed;
+                case PayloadKind.None: return EffectKind.None;
                 default: return EffectKind.Empower;
             }
         }
@@ -128,6 +133,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 case PayloadKind.Vigor: return EffectKind.Wither;
                 case PayloadKind.Haste: return EffectKind.Slow;
                 case PayloadKind.Relay: return EffectKind.Tag;
+                case PayloadKind.None: return EffectKind.None;
                 default: return EffectKind.Expose;
             }
         }

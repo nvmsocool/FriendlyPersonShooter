@@ -139,7 +139,7 @@ namespace FriendlyPersonShooter.Arena
         }
     }
 
-    /// <summary>The human's input: mouse look, WASD, space to jump, left mouse to fire, Q to cycle payload.</summary>
+    /// <summary>The human's input: mouse look, WASD, space to jump, left mouse to fire, right mouse to zoom, Q to swap guns, R to reload, E to open or take loot.</summary>
     [UpdateInGroup(typeof(GhostInputSystemGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     public partial class ArenaLocalInputSystem : SystemBase
@@ -164,7 +164,7 @@ namespace FriendlyPersonShooter.Arena
             var mouse = Mouse.current;
             bool locked = Cursor.lockState == CursorLockMode.Locked;
             int h = 0, v = 0;
-            bool jump = false, swap = false, fire = false;
+            bool jump = false, swap = false, fire = false, reload = false, interact = false, zoom = false;
             if (keyboard != null)
             {
                 if (keyboard.aKey.isPressed) h -= 1;
@@ -173,23 +173,31 @@ namespace FriendlyPersonShooter.Arena
                 if (keyboard.wKey.isPressed) v += 1;
                 jump = keyboard.spaceKey.wasPressedThisFrame;
                 swap = keyboard.qKey.wasPressedThisFrame;
+                reload = keyboard.rKey.wasPressedThisFrame;
+                interact = keyboard.eKey.wasPressedThisFrame;
             }
             if (mouse != null && locked)
             {
                 var delta = mouse.delta.ReadValue();
-                _yaw = (_yaw + delta.x * Sensitivity) % 360f;
-                _pitch = math.clamp(_pitch + delta.y * Sensitivity, -85f, 85f);
+                zoom = mouse.rightButton.isPressed;
+                // Zoomed in, the mouse turns slower by the same factor, so aim feels the same on screen.
+                float sens = Sensitivity / (zoom ? math.max(1f, ZoomFactor) : 1f);
+                _yaw = (_yaw + delta.x * sens) % 360f;
+                _pitch = math.clamp(_pitch + delta.y * sens, -85f, 85f);
                 fire = mouse.leftButton.isPressed;
             }
             LocalLook = new float2(_yaw, _pitch);
+            Zooming = zoom;
             bool unstuck = RequestUnstuck;
             RequestUnstuck = false;
 
             foreach (var input in SystemAPI.Query<RefRW<ArenaInput>>().WithAll<GhostOwnerIsLocal, ArenaPlayer>())
             {
-                var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0 };
+                var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0, Zoom = zoom ? 1 : 0 };
                 if (jump) i.Jump.Set();
-                if (swap) i.SwapPayload.Set();
+                if (swap) i.SwapGun.Set();
+                if (reload) i.Reload.Set();
+                if (interact) i.Interact.Set();
                 if (unstuck) i.Unstuck.Set();
                 input.ValueRW = i;
             }
@@ -200,5 +208,9 @@ namespace FriendlyPersonShooter.Arena
 
         /// <summary>The human's latest look angles (yaw, pitch), for a camera that doesn't wait for a tick.</summary>
         public static float2 LocalLook;
+
+        /// <summary>True while the human holds right mouse; <see cref="ZoomFactor"/> is the gun in hand's zoom (set by the view).</summary>
+        public static bool Zooming;
+        public static float ZoomFactor = 1f;
     }
 }

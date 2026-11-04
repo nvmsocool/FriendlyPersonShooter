@@ -21,7 +21,7 @@ namespace FriendlyPersonShooter.Arena
 
         public Text Crosshair, Center;
 
-        private readonly Text _expedition, _chat, _buffs, _team, _stats, _health, _payloadName, _payloadInfo, _chain;
+        private readonly Text _expedition, _chat, _buffs, _team, _stats, _health, _payloadName, _payloadInfo, _chain, _prompt;
         private readonly GameObject _expeditionBox, _teamBox, _vitalsBox;
         private readonly RectTransform _healthFill, _shieldFill;
         private readonly Image _healthImage, _payloadStripe;
@@ -81,12 +81,13 @@ namespace FriendlyPersonShooter.Arena
             _xp = Text(vitals.transform, 18, tl, new Vector2(16, -84), new Vector2(BarWidth, 26), TextAnchor.MiddleCenter, FontStyle.Bold);
             _buffs = Text(canvas, 21, bl, new Vector2(24, 154), new Vector2(760, 150), TextAnchor.LowerLeft);
 
-            // Payload, bottom centre, with the chain status above it.
-            var pay = SessionUi.Box(canvas, "Payload", new Vector2(0.5f, 0f), new Vector2(0, 20), new Vector2(560, 92), panel);
-            _payloadStripe = SessionUi.Box(pay.transform, "Stripe", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(10, 92), Color.white);
-            _payloadName = Text(pay.transform, 32, new Vector2(0.5f, 1f), new Vector2(0, -6), new Vector2(520, 42), TextAnchor.MiddleCenter, FontStyle.Bold);
-            _payloadInfo = Text(pay.transform, 19, new Vector2(0.5f, 0f), new Vector2(0, 8), new Vector2(530, 40), TextAnchor.MiddleCenter);
-            _chain = Text(canvas, 24, new Vector2(0.5f, 0f), new Vector2(0, 118), new Vector2(900, 34), TextAnchor.MiddleCenter, FontStyle.Bold);
+            // The gun in hand, bottom centre (stripe in its payload's colour), with the chain status and the pickup prompt above it.
+            var pay = SessionUi.Box(canvas, "Payload", new Vector2(0.5f, 0f), new Vector2(0, 20), new Vector2(620, 112), panel);
+            _payloadStripe = SessionUi.Box(pay.transform, "Stripe", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(10, 112), Color.white);
+            _payloadName = Text(pay.transform, 28, new Vector2(0.5f, 1f), new Vector2(0, -4), new Vector2(590, 38), TextAnchor.MiddleCenter, FontStyle.Bold);
+            _payloadInfo = Text(pay.transform, 18, new Vector2(0.5f, 0f), new Vector2(0, 6), new Vector2(590, 66), TextAnchor.MiddleCenter);
+            _chain = Text(canvas, 24, new Vector2(0.5f, 0f), new Vector2(0, 138), new Vector2(900, 34), TextAnchor.MiddleCenter, FontStyle.Bold);
+            _prompt = Text(canvas, 22, new Vector2(0.5f, 0f), new Vector2(0, 176), new Vector2(1100, 100), TextAnchor.LowerCenter, FontStyle.Bold);
 
             // Team, right side (under the join code), and totals, bottom right.
             var team = SessionUi.Box(canvas, "Team", tr, new Vector2(-20, -130), new Vector2(380, 250), panel);
@@ -256,13 +257,17 @@ namespace FriendlyPersonShooter.Arena
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         }
 
-        public void SetPayload(PayloadKind payload, string chain)
+        /// <summary>The gun panel: a title line (gun, payload, ammo), a detail block (mods, other gun) and the chain line.</summary>
+        public void SetGun(PayloadKind payload, string title, string info, string chain)
         {
             _payloadStripe.color = PayloadColor(payload);
-            _payloadName.text = $"<color=#{ColorUtility.ToHtmlStringRGB(PayloadColor(payload))}>{payload.ToString().ToUpperInvariant()}</color>   <size=18>Q to switch</size>";
-            _payloadInfo.text = PayloadShort(payload);
+            _payloadName.text = title;
+            _payloadInfo.text = info;
             _chain.text = chain ?? "";
         }
+
+        /// <summary>What E would do here (open a box, take an item); empty for nothing.</summary>
+        public void SetPrompt(string prompt) => _prompt.text = prompt ?? "";
 
         public void Apply()
         {
@@ -296,6 +301,7 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return new Color(0.4f, 1f, 0.55f);
                 case PayloadKind.Haste: return new Color(0.4f, 0.85f, 1f);
                 case PayloadKind.Relay: return new Color(0.85f, 0.55f, 1f);
+                case PayloadKind.None: return new Color(0.75f, 0.75f, 0.75f);
                 default: return new Color(1f, 0.6f, 0.3f);
             }
         }
@@ -307,7 +313,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 case PayloadKind.Vigor: return "Allies: heal + shield     Enemies: wither";
                 case PayloadKind.Haste: return "Allies: +30% speed, +20% jump     Enemies: slow";
-                case PayloadKind.Relay: return "Allies: next 5 hits carry Might + chain     Enemies: tag (splash)";
+                case PayloadKind.Relay: return "Allies: next 5 hits carry your other gun's payload + chain     Enemies: tag (splash)";
+                case PayloadKind.None: return "No payload: damages enemies, heals allies a tiny bit. Find a payload mod to add one.";
                 default: return "Allies: +damage     Enemies: expose";
             }
         }

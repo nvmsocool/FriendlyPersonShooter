@@ -9,6 +9,8 @@ namespace FriendlyPersonShooter.Core.Combat
         // Vigor.
         /// <summary>Health restored by one Vigor hit on an ally.</summary>
         public float VigorHeal { get; set; } = 12f;
+        /// <summary>Health restored by an ally hit from a gun with no payload (times the frame's heal scale): a tiny amount.</summary>
+        public float PlainHeal { get; set; } = 0.6f;
         /// <summary>Most shield a player can hold from Vigor overflow.</summary>
         public float ShieldCap { get; set; } = 25f;
         public float ShieldDuration { get; set; } = 4f;

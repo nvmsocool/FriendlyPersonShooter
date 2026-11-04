@@ -233,7 +233,10 @@ namespace FriendlyPersonShooter.Arena
                 }
                 float a = 2f * math.PI * i / math.max(1, _raidScratch.Count);
                 var spot = ExpeditionWorld.ToFloat3(door) + new float3(math.sin(a) * 4f, 0f, math.cos(a) * 4f);
-                TeleportPlayer(id, ExpeditionTerrain.OnGround(ExpeditionWorld.Wrap(spot)));
+                var landed = ExpeditionTerrain.OnGround(ExpeditionWorld.Wrap(spot));
+                TeleportPlayer(id, landed);
+                // A clear also pays each raider a rare-or-better item, waiting at their feet.
+                if (outcome == RaidOutcome.Cleared) GiveBossLoot(id, landed, ecb);
             }
 
             if (outcome == RaidOutcome.Cleared)

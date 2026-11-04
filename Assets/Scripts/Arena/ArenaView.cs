@@ -76,6 +76,7 @@ namespace FriendlyPersonShooter.Arena
             CreateExpeditionMaterials();
             CreateFeedbackMaterials();
             CreateRaidMaterials();
+            CreateLootMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();
@@ -163,13 +164,18 @@ namespace FriendlyPersonShooter.Arena
 
             DrawPlayers(world, local);
             DrawCombat(world, local);
+            DrawLoot(world, local);
             DrawFeedback(world, local);
 
             if (eye.HasValue && viewCamera != null)
             {
                 var look = ArenaLocalInputSystem.LocalLook;
                 viewCamera.orthographic = false;
-                viewCamera.fieldOfView = 80f;
+                // Right mouse zooms by the gun's zoom (Scope mods add more).
+                float zoom = ArenaLocalInputSystem.Zooming && _localZoom > 1f ? _localZoom : 1f;
+                ArenaLocalInputSystem.ZoomFactor = zoom;
+                float fov = 2f * Mathf.Atan(Mathf.Tan(40f * Mathf.Deg2Rad) / zoom) * Mathf.Rad2Deg;
+                viewCamera.fieldOfView = Mathf.Lerp(viewCamera.fieldOfView, fov, 1f - Mathf.Exp(-Time.unscaledDeltaTime * 18f));
                 viewCamera.nearClipPlane = 0.05f;
                 viewCamera.transform.SetPositionAndRotation(eye.Value, Quaternion.Euler(-look.y, look.x, 0f));
             }

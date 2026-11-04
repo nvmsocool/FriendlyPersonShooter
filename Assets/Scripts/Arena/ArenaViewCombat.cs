@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
+using FriendlyPersonShooter.Core.Progression;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -27,10 +29,13 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Matrix4x4> _d = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _e = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _f = new List<Matrix4x4>();
-        private readonly List<(Vector3 From, Vector3 To, PayloadKind Payload, float Time)> _localTracers =
-            new List<(Vector3, Vector3, PayloadKind, float)>();
-        private float _nextLocalShot;
+        private readonly List<(Vector3 From, Vector3 To, PayloadKind Payload, float Time, byte Frame)> _localTracers =
+            new List<(Vector3, Vector3, PayloadKind, float, byte)>();
+        private readonly List<Matrix4x4> _plainTracers = new List<Matrix4x4>();
         private float _shotsHeardUpTo;
+        /// <summary>Our own gun's fire timing, mirrored from the server's rules so our tracers don't wait for it.</summary>
+        private GunState _localGun;
+        private CombatRandom _localRng = new CombatRandom(97);
 
         private void CreateCombatMaterials()
         {
@@ -64,12 +69,14 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return _vigorMat;
                 case PayloadKind.Haste: return _hasteMat;
                 case PayloadKind.Relay: return _relayMat;
+                case PayloadKind.None: return _plainMat;
                 default: return _mightMat;
             }
         }
 
         private void CreateCombatQueries(EntityManager em)
         {
+            _itemQuery = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaGroundItem>(), ComponentType.ReadOnly<LocalTransform>());
             _enemies = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaEnemy>(), ComponentType.ReadOnly<LocalTransform>());
             _vitals = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaPlayer>(), ComponentType.ReadOnly<LocalTransform>(),
                 ComponentType.ReadOnly<ArenaVitals>(), ComponentType.ReadOnly<GhostOwner>(), ComponentType.ReadOnly<ArenaLoadout>(),
@@ -240,65 +247,99 @@ namespace FriendlyPersonShooter.Arena
             float now = Time.unscaledTime;
             var em = world.EntityManager;
             int myId = -1;
-            PayloadKind myPayload = PayloadKind.Vigor;
             bool alive = false;
             int ranks = 0;
             Vector3 eye = Vector3.zero;
+            ArenaLoadout lo = default;
             if (local != Entity.Null)
             {
                 myId = em.GetComponentData<GhostOwner>(local).NetworkId;
-                myPayload = em.GetComponentData<ArenaLoadout>(local).Payload;
+                lo = em.GetComponentData<ArenaLoadout>(local);
                 alive = em.GetComponentData<ArenaVitals>(local).Health > 0f;
                 if (em.HasComponent<ArenaProgress>(local)) ranks = em.GetComponentData<ArenaProgress>(local).Ranks;
                 eye = (Vector3)em.GetComponentData<LocalTransform>(local).Position + Vector3.up * ArenaSettings.EyeHeight;
             }
+            var stats = LocalGunStats(lo, now);
+            _localZoom = stats != null ? stats.Zoom : 1f;
 
-            // Draw our own tracers straight away, at the gun's rate, rather than waiting for the server.
+            // Draw our own shots straight away, at the gun's rate, rather than waiting for the server.
+            // The server has the final say on ammo, spread and hits; launcher shells are drawn from its reply.
             bool firing = Cursor.lockState == CursorLockMode.Locked && UnityEngine.InputSystem.Mouse.current != null &&
                           UnityEngine.InputSystem.Mouse.current.leftButton.isPressed;
-            if (firing && alive && now >= _nextLocalShot)
+            if (stats != null && alive && local != Entity.Null)
             {
-                _nextLocalShot = now + ArenaWeapon.FireInterval / FriendlyPersonShooter.Core.Progression.PlayerProgress.FireRateFor(ranks);
-                var look = ArenaLocalInputSystem.LocalLook;
-                float3 dir = math.normalize(ArenaSettings.Forward(look.x, look.y));
-                float reach = ArenaWeapon.Range * FriendlyPersonShooter.Core.Progression.PlayerProgress.RangeFor(ranks);
-                float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
-                var gun = eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
-                _localTracers.Add((gun, eye + (Vector3)dir * range, myPayload, now));
-                ArenaAudio.Shot(myPayload, gun, own: true);
+                bool loaded = lo.Reload >= 0.999f && lo.Ammo > 0;
+                _localGun.Ammo = 999;
+                _localGun.ReloadEnds = 0;
+                if (!loaded) _localGun.BurstLeft = 0;
+                int shots = loaded ? FireControl.Step(ref _localGun, stats, now, firing, false, PlayerProgress.FireRateFor(ranks)) : 0;
+                for (int n = 0; n < shots; n++)
+                {
+                    var look = ArenaLocalInputSystem.LocalLook;
+                    var aim = ArenaSettings.Forward(look.x, look.y);
+                    var d = FireControl.Spread(new System.Numerics.Vector3(aim.x, aim.y, aim.z), stats.SpreadFor(ArenaLocalInputSystem.Zooming), ref _localRng);
+                    var dir = new float3(d.X, d.Y, d.Z);
+                    float reach = stats.Range * PlayerProgress.RangeFor(ranks);
+                    float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
+                    var gun = eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
+                    if (stats.Mode != FireMode.Projectile) _localTracers.Add((gun, eye + (Vector3)dir * range, lo.Payload, now, (byte)stats.Frame.Kind));
+                    if (n == 0) ArenaAudio.Shot(lo.Payload, gun, own: true);
+                }
             }
 
-            // Everyone else's shots (players and bots), heard once each from where they were fired.
+            // Everyone else's shots (players and bots), heard once each from where they were fired; shells start flying.
             float heardUpTo = _shotsHeardUpTo;
             for (int i = 0; i < ArenaFx.Shots.Count; i++)
             {
                 var s = ArenaFx.Shots[i];
-                if (s.Time <= _shotsHeardUpTo || s.Shot.ShooterNetworkId == myId) continue;
-                ArenaAudio.Shot(s.Shot.Payload, Near(s.Shot.From), own: false);
+                if (s.Time <= _shotsHeardUpTo) continue;
                 heardUpTo = Mathf.Max(heardUpTo, s.Time);
+                Vector3 from = Near(s.Shot.From);
+                if (s.Shot.Frame == (byte)FrameKind.Launcher)
+                {
+                    AddShell(from, from + (Vector3)(s.Shot.To - s.Shot.From), s.Shot.Payload, s.Time);
+                }
+                if (s.Shot.ShooterNetworkId != myId) ArenaAudio.Shot(s.Shot.Payload, from, own: false);
             }
             _shotsHeardUpTo = heardUpTo;
 
-            _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear();
+            _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear(); _plainTracers.Clear();
             for (int i = _localTracers.Count - 1; i >= 0; i--)
             {
                 var t = _localTracers[i];
-                if (now - t.Time > TracerSeconds) { _localTracers.RemoveAt(i); continue; }
-                AddLine(t.From, t.To, TracerList(t.Payload));
+                if (now - t.Time > TracerLife(t.Frame)) { _localTracers.RemoveAt(i); continue; }
+                AddLine(t.From, t.To, TracerList(t.Payload), TracerWidth(t.Frame));
             }
             for (int i = ArenaFx.Shots.Count - 1; i >= 0; i--)
             {
                 var s = ArenaFx.Shots[i];
-                if (now - s.Time > TracerSeconds) { ArenaFx.Shots.RemoveAt(i); continue; }
-                if (s.Shot.ShooterNetworkId == myId) continue;
+                if (now - s.Time > TracerLife(s.Shot.Frame)) { ArenaFx.Shots.RemoveAt(i); continue; }
+                if (s.Shot.ShooterNetworkId == myId || s.Shot.Frame == (byte)FrameKind.Launcher) continue;
                 // Move the whole tracer by the same offset as its start, so it isn't stretched across the wrap.
                 Vector3 from = Near(s.Shot.From);
-                AddLine(from, from + (Vector3)(s.Shot.To - s.Shot.From), TracerList(s.Shot.Payload));
+                AddLine(from, from + (Vector3)(s.Shot.To - s.Shot.From), TracerList(s.Shot.Payload), TracerWidth(s.Shot.Frame));
             }
+            DrawShells(now);
             DrawList(_a, _vigorMat);
             DrawList(_b, _mightMat);
             DrawList(_g, _hasteMat);
             DrawList(_h, _relayMat);
+            DrawList(_plainTracers, _plainMat);
+        }
+
+        /// <summary>The beam's pulses overlap into a steady line; a marksman's shot lingers a moment.</summary>
+        private static float TracerLife(byte frame) =>
+            frame == (byte)FrameKind.Beam ? 0.13f : frame == (byte)FrameKind.Marksman ? 0.18f : TracerSeconds;
+
+        private static float TracerWidth(byte frame)
+        {
+            switch ((FrameKind)frame)
+            {
+                case FrameKind.Beam: return 0.09f;
+                case FrameKind.Marksman: return 0.07f;
+                case FrameKind.Smg: return 0.03f;
+                default: return 0.04f;
+            }
         }
 
         private List<Matrix4x4> TracerList(PayloadKind p)
@@ -308,15 +349,16 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return _a;
                 case PayloadKind.Haste: return _g;
                 case PayloadKind.Relay: return _h;
+                case PayloadKind.None: return _plainTracers;
                 default: return _b;
             }
         }
 
-        private static void AddLine(Vector3 from, Vector3 to, List<Matrix4x4> list)
+        private static void AddLine(Vector3 from, Vector3 to, List<Matrix4x4> list, float width = 0.04f)
         {
             var d = to - from;
             if (d.sqrMagnitude < 0.01f) return;
-            list.Add(Matrix4x4.TRS(from + d * 0.5f, Quaternion.LookRotation(d), new Vector3(0.04f, 0.04f, d.magnitude)));
+            list.Add(Matrix4x4.TRS(from + d * 0.5f, Quaternion.LookRotation(d), new Vector3(width, width, d.magnitude)));
         }
 
         private void WriteCombatHud(World world, Entity local)
@@ -329,7 +371,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 var v = em.GetComponentData<ArenaVitals>(local);
                 var b = em.GetComponentData<ArenaBuffs>(local);
-                var payload = em.GetComponentData<ArenaLoadout>(local).Payload;
+                var loadout = em.GetComponentData<ArenaLoadout>(local);
+                var payload = loadout.Payload;
                 localId = em.GetComponentData<GhostOwner>(local).NetworkId;
                 hud.SetVitals(true, v.Health, v.MaxHealth, v.Shield);
 
@@ -345,7 +388,8 @@ namespace FriendlyPersonShooter.Arena
                         ? $"<color=#FFD84D>CHAIN x{b.ChainLinks}</color>  {b.ChainTimeLeft:0.0}s   hit an enemy to cash it, or buff someone new to grow it"
                         : $"<color=#FFD84D>Chain started</color>  {b.ChainTimeLeft:0.0}s   buff someone new to grow it";
                 }
-                hud.SetPayload(payload, chain);
+                hud.SetGun(payload, GunTitle(loadout), GunInfo(loadout), chain);
+                hud.SetPrompt(_prompt);
                 if (v.Health <= 0f)
                 {
                     _center.text = $"DOWN!  Allies: shoot your soul fragments to revive you   {v.ReviveProgress * 100f:0}%   bleed-out {v.RespawnIn:0.0}s";
@@ -373,7 +417,9 @@ namespace FriendlyPersonShooter.Arena
                 if (entities[i] == local) continue;
                 var v = vitals[i];
                 var pc = ArenaHud.PayloadColor(loadouts[i].Payload);
-                hud.Team.Append($"{PlayerColors.Tag(owners[i].NetworkId)}  <color=#{ColorUtility.ToHtmlStringRGB(pc)}>{loadouts[i].Payload}</color>  " +
+                var allyGun = Gun.Unpack(loadouts[i].Active == 0 ? loadouts[i].GunA : loadouts[i].GunB);
+                string allyPayload = loadouts[i].Payload == PayloadKind.None ? "plain" : loadouts[i].Payload.ToString();
+                hud.Team.Append($"{PlayerColors.Tag(owners[i].NetworkId)}  <color=#{ColorUtility.ToHtmlStringRGB(pc)}>{allyPayload} {GunFrames.Name(allyGun.Frame)}</color>  " +
                                 (v.Health <= 0f ? $"<color=#FF6B6B>DOWN</color> {v.ReviveProgress * 100f:0}%, {v.RespawnIn:0}s"
                                     : $"{v.Health:0} hp{(v.Shield > 0f ? $" +{v.Shield:0}" : "")}") +
                                 (allyBuffs[i].ChainLinks > 0 ? $"  <color=#FFD84D>x{allyBuffs[i].ChainLinks}</color>" : "") + "\n");

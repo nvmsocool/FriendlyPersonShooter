@@ -52,41 +52,52 @@ namespace FriendlyPersonShooter.Core.Progression
         }
     }
 
-    /// <summary>The skill tree's shape and numbers.</summary>
+    /// <summary>
+    /// The skill tree's shape and numbers. Levels get about +20% of the game's +40% power budget
+    /// (the rest is gear): a maxed branch is roughly +20% in its area. Max level gives
+    /// <see cref="MaxPoints"/> points for <see cref="TotalRanks"/> ranks, so players choose.
+    /// </summary>
     public static class SkillTree
     {
         public const int Count = 9;
         public const int PerBranch = 3;
         public const int MaxRank = 3;
-        public const int MaxLevel = 30;
+        public const int TotalRanks = Count * MaxRank;
+        public const int MaxLevel = 16;
+        /// <summary>One point per level after the first.</summary>
+        public const int MaxPoints = MaxLevel - 1;
+        /// <summary>Every level costs the same XP, so levels come at a steady pace all session.</summary>
+        public const int XpPerLevel = 300;
 
-        public const float DamagePerRank = 0.10f;
-        public const float FireRatePerRank = 0.10f;
-        public const float RangePerRank = 0.20f;
-        public const float PotencyPerRank = 0.15f;
-        public const float DurationPerRank = 0.20f;
+        public const float DamagePerRank = 0.04f;
+        public const float FireRatePerRank = 0.03f;
+        public const float RangePerRank = 0.10f;
+        public const float PotencyPerRank = 0.07f;
+        public const float DurationPerRank = 0.10f;
         /// <summary>Health per second per rank of Second Wind, after <see cref="RegenDelay"/> seconds unhurt.</summary>
-        public const float RegenPerRank = 1.5f;
+        public const float RegenPerRank = 1f;
         public const float RegenDelay = 4f;
-        public const float HealthPerRank = 15f;
-        public const float MovePerRank = 0.06f;
-        public const float JumpPerRank = 0.15f;
+        public const float HealthPerRank = 7f;
+        public const float MovePerRank = 0.03f;
+        public const float JumpPerRank = 0.07f;
+
+        private static string Pct(float f) => $"+{f * 100f:0}%";
 
         public static readonly SkillInfo[] All =
         {
-            new SkillInfo(SkillId.Sharpshooter, SkillBranch.Offense, "Sharpshooter", "+10% damage"),
-            new SkillInfo(SkillId.RapidFire, SkillBranch.Offense, "Rapid Fire", "+10% fire rate"),
-            new SkillInfo(SkillId.LongBarrel, SkillBranch.Offense, "Long Barrel", "+20% range"),
-            new SkillInfo(SkillId.Potency, SkillBranch.Support, "Potency", "+15% heal and buff strength"),
-            new SkillInfo(SkillId.Lingering, SkillBranch.Support, "Lingering", "+20% buff duration"),
-            new SkillInfo(SkillId.SecondWind, SkillBranch.Support, "Second Wind", "+1.5 health/s after 4 s unhurt"),
-            new SkillInfo(SkillId.Toughness, SkillBranch.Survival, "Toughness", "+15 max health"),
-            new SkillInfo(SkillId.FleetFoot, SkillBranch.Survival, "Fleet Foot", "+6% move speed"),
-            new SkillInfo(SkillId.Spring, SkillBranch.Survival, "Spring", "+15% jump"),
+            new SkillInfo(SkillId.Sharpshooter, SkillBranch.Offense, "Sharpshooter", Pct(DamagePerRank) + " damage"),
+            new SkillInfo(SkillId.RapidFire, SkillBranch.Offense, "Rapid Fire", Pct(FireRatePerRank) + " fire rate"),
+            new SkillInfo(SkillId.LongBarrel, SkillBranch.Offense, "Long Barrel", Pct(RangePerRank) + " range"),
+            new SkillInfo(SkillId.Potency, SkillBranch.Support, "Potency", Pct(PotencyPerRank) + " heal and buff strength"),
+            new SkillInfo(SkillId.Lingering, SkillBranch.Support, "Lingering", Pct(DurationPerRank) + " buff duration"),
+            new SkillInfo(SkillId.SecondWind, SkillBranch.Support, "Second Wind", $"+{RegenPerRank:0.#} health/s after {RegenDelay:0} s unhurt"),
+            new SkillInfo(SkillId.Toughness, SkillBranch.Survival, "Toughness", $"+{HealthPerRank:0} max health"),
+            new SkillInfo(SkillId.FleetFoot, SkillBranch.Survival, "Fleet Foot", Pct(MovePerRank) + " move speed"),
+            new SkillInfo(SkillId.Spring, SkillBranch.Survival, "Spring", Pct(JumpPerRank) + " jump"),
         };
 
-        /// <summary>XP from the current level to the next: 100, 150, 200, ...</summary>
-        public static int XpToNext(int level) => 100 + 50 * Math.Max(0, level - 1);
+        /// <summary>XP from the current level to the next. Flat, so the 15th level comes as fast as the 2nd.</summary>
+        public static int XpToNext(int level) => XpPerLevel;
     }
 
     /// <summary>XP for things worth rewarding.</summary>

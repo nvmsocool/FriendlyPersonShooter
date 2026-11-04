@@ -10,16 +10,42 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void XpLevelsUpAndGivesPoints()
         {
+            const int L = SkillTree.XpPerLevel;
             var p = new PlayerProgress();
-            Assert.That(p.AddXp(99), Is.EqualTo(0));
+            Assert.That(p.AddXp(L - 1), Is.EqualTo(0));
             Assert.That(p.AddXp(1), Is.EqualTo(1));
             Assert.That(p.Level, Is.EqualTo(2));
             Assert.That(p.Points, Is.EqualTo(1));
             Assert.That(p.Xp, Is.EqualTo(0));
-            // 150 to level 3 and 200 to level 4 in one go.
-            Assert.That(p.AddXp(360), Is.EqualTo(2));
+            // Two more levels in one go.
+            Assert.That(p.AddXp(2 * L + 10), Is.EqualTo(2));
             Assert.That(p.Level, Is.EqualTo(4));
             Assert.That(p.Xp, Is.EqualTo(10));
+        }
+
+        [Test]
+        public void XpGainIsLinearUpToMaxLevel()
+        {
+            var p = new PlayerProgress();
+            for (int level = 1; level < SkillTree.MaxLevel; level++)
+                Assert.That(SkillTree.XpToNext(level), Is.EqualTo(SkillTree.XpPerLevel), $"level {level}");
+            p.AddXp(SkillTree.XpPerLevel * (SkillTree.MaxLevel - 1));
+            Assert.That(p.Level, Is.EqualTo(SkillTree.MaxLevel));
+            Assert.That(p.Points, Is.EqualTo(SkillTree.MaxPoints));
+            Assert.That(p.AddXp(100000), Is.EqualTo(0), "capped");
+        }
+
+        [Test]
+        public void TreeStaysInsideThePowerBudget()
+        {
+            // Max level can't buy everything, so builds differ.
+            Assert.That(SkillTree.MaxPoints, Is.LessThan(SkillTree.TotalRanks));
+            // Even a full branch keeps levels near their +20% share of the +40% budget.
+            float dps = (1f + SkillTree.MaxRank * SkillTree.DamagePerRank) * (1f + SkillTree.MaxRank * SkillTree.FireRatePerRank);
+            Assert.That(dps, Is.LessThanOrEqualTo(1.25f), "maxed offense damage per second");
+            Assert.That(SkillTree.MaxRank * SkillTree.PotencyPerRank, Is.LessThanOrEqualTo(0.25f), "maxed potency");
+            Assert.That(SkillTree.MaxRank * SkillTree.HealthPerRank / new CombatSettings().PlayerMaxHealth, Is.LessThanOrEqualTo(0.25f), "maxed toughness");
+            Assert.That(SkillTree.MaxRank * SkillTree.MovePerRank, Is.LessThanOrEqualTo(0.10f), "maxed move speed");
         }
 
         [Test]
@@ -27,7 +53,7 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var p = new PlayerProgress();
             Assert.That(p.TryBuy(SkillId.Sharpshooter), Is.False, "no points yet");
-            p.AddXp(100 + 150 + 200 + 250);
+            p.AddXp(4 * SkillTree.XpPerLevel);
             Assert.That(p.Points, Is.EqualTo(4));
             Assert.That(p.TryBuy(SkillId.RapidFire), Is.False, "needs Sharpshooter first");
             Assert.That(p.TryBuy(SkillId.Sharpshooter), Is.True);
@@ -35,10 +61,10 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(p.TryBuy(SkillId.Sharpshooter), Is.True);
             Assert.That(p.TryBuy(SkillId.Sharpshooter), Is.True);
             Assert.That(p.Rank(SkillId.Sharpshooter), Is.EqualTo(3));
-            p.AddXp(1000);
+            p.AddXp(5 * SkillTree.XpPerLevel);
             Assert.That(p.TryBuy(SkillId.Sharpshooter), Is.False, "max rank");
             Assert.That(PlayerProgress.RankIn(p.PackedRanks, SkillId.RapidFire), Is.EqualTo(1));
-            Assert.That(p.FireRateMultiplier, Is.EqualTo(1.1f).Within(1e-5f));
+            Assert.That(p.FireRateMultiplier, Is.EqualTo(1f + SkillTree.FireRatePerRank).Within(1e-5f));
         }
 
         [Test]
@@ -47,7 +73,7 @@ namespace FriendlyPersonShooter.Core.Tests
             var settings = new CombatSettings();
             var v = new PlayerVitals(1, settings);
             var p = new PlayerProgress();
-            p.AddXp(100 + 150 + 200);
+            p.AddXp(3 * SkillTree.XpPerLevel);
             p.TryBuy(SkillId.Toughness);
             p.TryBuy(SkillId.FleetFoot);
             p.TryBuy(SkillId.Sharpshooter);

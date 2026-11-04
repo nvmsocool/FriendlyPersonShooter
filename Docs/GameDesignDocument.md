@@ -12,7 +12,7 @@ Friendly Person Shooter is a co-op PvE FPS where every bullet is a tool: hit an 
 
 1. **Every bullet helps someone.** No shot is wasted. Missed enemies are practice; hit allies are gifts. Supporting a moving teammate is itself an aim challenge.
 2. **Strangers are good news.** Information, buffs and shared kills all make other players worth meeting. Nothing a stranger can do makes your run worse.
-3. **Hard, honest aim.** Difficulty comes from hitting targets, not from unfair damage or hidden stats. Gear helps, but skill decides.
+3. **Hard, honest aim.** Difficulty comes from hitting targets, not from unfair damage or hidden stats. Gear and levels help a little, but skill decides.
 4. **Nothing to win against others.** No PvP, no market, no ranked ladder. With no one to beat, cheating has little to gain (see Anti-cheat by design).
 
 **Scope decisions**
@@ -56,12 +56,16 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 | Sentinel | Long-range precision | Stands far off, opens a head-sized eye briefly before firing | Eye | Blue |
 | Bulwark | Timing and patience | Armored shell; the weak plate rotates or opens on a rhythm | Rotating plate | Purple |
 | Diver | Vertical tracking | Circles overhead, then dives at you | Wings | Orange |
+| Glimmer | Quick flicks | Small, short-lived target that pops up near players; never attacks; dies to one shot | Whole body, small | A little Yellow |
+
+**Glimmers** keep you shooting between fights. They appear often, die to any single hit and drop about 1 Yellow each, so their yield stays small next to real Yellow hunting.
 
 **Difficulty tiers.** Each family has tiers that scale hitbox size, speed, pattern randomness and how long the weak point stays open. Elites combine two families (a Skitter that blinks, a Bulwark guarded by Mites), so higher regions test mixed skills.
 
 **Enemy design rules**
 
 - Every attack is telegraphed by sound and light. Damage to players is moderate; the challenge is landing hits, not surviving surprises.
+- Damage you take is always readable: a screen-edge marker points to the attacker, the screen flashes, a hurt sound plays, and an attacker you can't see is named. (First playtest: players couldn't tell what was hurting them.)
 - Hitboxes match the visible model. No hidden hit zones.
 - Enemies don't belong to whoever hit first. Everyone who lands a hit gets the full drop, so there is no kill stealing.
 - Each family has a distinct silhouette and sound, so players can describe them to each other ("lots of Wisps by the river").
@@ -79,15 +83,16 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 **Carried vs. banked**
 
 - Essence you pick up is *carried* until you bank it at a shrine (a few in every zone).
+- Banked essence goes into your **party's shared bank** (a party is a group you've teamed up with): everyone in the party banks into it and spends from it. Carried essence and caches stay personal. A solo player's bank is their own.
 - When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Any player who picks up your cache sends it back to you and gets a small kudos reward. Returning a stranger's lost essence becomes a common good deed.
 
 **What it's for**
 
-- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow).
+- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access.
 - **Raid keys** cost several colors at once (for example 30 Blue + 30 Purple + 20 Green). One player rarely has the mix, so groups pool essence.
 - **Attunement** (small, optional): spend essence to reroll a mod's secondary stat.
 
-**Gifting, not trading.** Players can give essence to anyone nearby, for free. There's no market, no currency and no way to ask for something in return inside the game. This keeps the economy social and gives bots and sellers nothing to sell.
+**Gifting, not trading.** Players can give essence to anyone nearby, for free, including strangers outside their party. There's no market, no currency and no way to ask for something in return inside the game. This keeps the economy social and gives bots and sellers nothing to sell.
 
 ## Bullet effects
 
@@ -110,7 +115,9 @@ Every gun carries one **payload**, and each payload has two sides: a buff when i
 - **Same buff from two sources** refreshes the duration and adds 50% of the second source's strength, capped at 2x a single source.
 - **Short durations** (around 4–8 seconds) so support is an ongoing job, not a one-time cast.
 - **Opt-out.** Players can set buffs to accept from Everyone, Party only, or No one, so an unwanted Haste can't throw anyone off a ledge.
-- **Readability.** Essence already uses color, so payloads are identified by bullet shape, trail pattern and sound, with color as a secondary cue.
+- **Readability.** Essence already uses color, so payloads are identified by bullet shape, trail pattern and sound, with color as a secondary cue. Each payload has its own shot sound, varied in pitch and volume on every shot so it never grates.
+- **Player colors.** Each player has a color for their body and their name in the team list, chat and minimap. Player colors avoid the six essence hues where possible.
+- **Damage numbers.** Every hit on an enemy shows its damage; weak-point hits look different.
 
 ## Chains and combos
 
@@ -208,7 +215,7 @@ The world is a set of huge grids of zones that wrap around at the edges, one gri
 2. **Layer 2 (tier 2).** Denser elites and mixed enemy families. Built for duos and small groups.
 3. **Layer 3 (tier 3).** Hardest families, rarer blooms. Launch ships these 3 layers; the MVP proves only layer 1.
 
-- **Gates** sit in specific zones and lead down one layer. Access is personal, paid in essence, and resets with each reseed. A group can only pass once every member has access, so gifting essence to a friend is the natural fix. Going back up is always free, so experienced players can return and help newer ones.
+- **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
 - **Raids** are doors in the world. Whoever is standing at the door when its key is fully pooled goes in together, strangers included. Raids take 4–8 players, the boss scales to the group size, and everyone returns to the door's zone afterward.
 
 **Zones and generation**
@@ -217,6 +224,9 @@ The world is a set of huge grids of zones that wrap around at the edges, one gri
 - Zones are stitched from hand-built tiles (ruins, rivers, towers, canyons) using the seed. Hand-built pieces keep the shooting spaces good; the seed changes their layout and color bias.
 - Every zone has a few named **landmarks** ("the Broken Tower", "Twin Falls") so players can give directions: "purple's past the Broken Tower." The compass and quick-chat use these names.
 - Every zone has a few **shrines** for banking essence and respawning.
+- **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown).
+- **No visible edge.** Fog and draw distance end inside the loaded neighbor zones, so players never see past what's loaded.
+- Crossing into a new zone blends the sky's colors only, never its cloud pattern.
 - Terrain, the spawn schedule and blooms all follow from the seed and the clock. A lobby tracks only short-lived things: live enemies and dropped caches.
 - Enemies in the open world don't scale with player count, so every extra player nearby is pure help.
 
@@ -260,13 +270,15 @@ The game makes every encounter between strangers either useful or harmless, neve
 
 **Talking without typing**
 
-- **Quick-chat wheel** with essence and landmark words: "Seen any [Yellow]?", "[Purple] → past [Broken Tower]", "Need buffs", "Bloom here!". Messages reach every player nearby, grouped or not, and show in the reader's language.
+- **Quick-chat wheel** with essence and landmark words: "Seen any [Yellow]?", "[Purple] → past [Broken Tower]", "Need buffs", "Bloom here!". Messages reach every player nearby, grouped or not, and show in the reader's language. Your own lines show in your chat feed too.
+- **Minimap.** A simple top-down map in the corner shows only player positions, in their player colors.
 - **Sightings.** Seeing a cluster of enemies or a bloom drops a private map pin. Looking at another player and pressing *share* swaps pins with them.
 - **Proximity voice** is optional and off by default for strangers.
 
 **Teaming up**
 
 - **Teaming up is opt-in:** players invite each other to a group; nothing forms automatically. Quick-chat already reaches everyone nearby, so strangers can coordinate without grouping.
+- A party shares one essence bank and pays for gates together (see Resources: essence).
 - Several players can pledge essence toward a raid key at a raid door, so a group of strangers can open a raid together.
 
 **Kudos**
@@ -290,7 +302,7 @@ Cheating is pointless here because there is no one to beat and nothing to sell, 
 | Beat other players | No PvP, no ranked ladder, no kill competition |
 | Sell items or accounts | No market, no currency, gear and essence are account-bound (gifting only) |
 | Show off status | The main status symbol is kudos, which only comes from helping people. Aimbots can't fake gratitude |
-| Skip a grind | Rewards are mostly access and sideways gear; the grind *is* the aim practice |
+| Skip a grind | Rewards are mostly access; gear and levels add only a small, capped power bonus; the grind *is* the aim practice |
 | Feel skilled | Personal drill stats show your real improvement over time; cheating makes them meaningless to you |
 
 **What a cheater actually does to others:** very little, and some of it helps. An aimbotting medic lands every heal. The main harm is trivializing a shared raid, which only matters to that group.
@@ -301,16 +313,19 @@ Cheating is pointless here because there is no one to beat and nothing to sell, 
 
 ## Progression and economy
 
-Players progress on four tracks, and only one of them (Arsenal) adds power, kept small on purpose.
+Players progress on five tracks. Two of them (Arsenal and Level) add power, and they share one small cap.
 
 | Track | What grows | Persists | Earned by |
 | --- | --- | --- | --- |
 | Access | Gates and raids opened | Resets each weekly seed | Spending essence |
-| Arsenal | Frames and mods (about 30% max power gain over starter gear) | Permanent | Elites, bosses, raids |
+| Arsenal | Frames and mods | Permanent | Elites, bosses, raids |
+| Level | Level and skill points for a skill tree with three branches: Offense, Support, Survival | Per session for now; permanent once accounts are saved | XP from kills, buffs and heals on allies, banking essence, revives |
 | Skill | Per-drill stats: flick time, tracking accuracy, switch speed, weak-point rate | Permanent | Playing |
 | Social | Kudos, titles, cosmetics | Permanent | Helping other players |
 
-**Essence flow.** Essence enters from enemies and blooms and leaves mainly through gates and raid keys. Because Access resets weekly, essence never piles up into a permanent surplus.
+**Power budget.** Gear and levels together give at most about +40% over a new player's stats, so skill stays the main factor. Max level grants fewer skill points than the tree has ranks, so players choose and builds differ. Levels get about +20% and gear about +20%: a fully ranked skill adds 9–30% in its area (for example +12% damage, +9% fire rate, +21 health), and maxing all of Offense adds about +22% damage per second. Max level is 16, which gives 15 points for the tree's 27 ranks. Every level costs the same 300 XP, so levels come at a steady pace (about one every 3–4 minutes) and a player can reach the top skills of a branch in one session.
+
+**Essence flow.** Essence enters from enemies and blooms and leaves mainly through gates and raid keys. The party bank pools essence but doesn't change these totals. Because Access resets weekly, essence never piles up into a permanent surplus.
 
 **Mastery badges.** Each enemy family has mastery ranks based on Skill stats (for example "Wisp III: hit 500 Wisps within 0.3 seconds of a blink"). They're cosmetic and show what you're good at, which helps strangers pick roles fast.
 
@@ -327,6 +342,7 @@ The biggest risk is population: the social design only works if players keep run
 | Chains become mandatory | Solo players feel shut out | Wilds tuned for solo; chains needed only for Deeps and raids; Self-share mod |
 | Visual noise | Buffs, debuffs and essence colors compete for attention | Three buff slots; payloads use shape and sound; essence owns color |
 | Strangers ignore each other | Pillar 2 fails | Make information scarce (weekly seed, blooms), match complementary needs, reward kudos |
+| Levels turn into a power grind | Undercuts "skill decides" and adds a reason to cheat | Levels and gear share a capped power budget; the tree offers choices, not everything |
 | Unwanted buffs as griefing | Haste near ledges, visual spam | Acceptance toggle; no knockback on buffs |
 | Seamless lobby merging is hard to build | The whole social design depends on it | Networking and matchmaking are MVP step 1, run with test bots before any gameplay: cube players on a 3x3 wrapping grid, splitting and merging lobbies live |
 
@@ -340,6 +356,10 @@ The biggest risk is population: the social design only works if players keep run
 - [ ] Business model. Deferred.
 - [ ] Which netcode library? Picked after the networking test.
 - [ ] Working title: keep "Friendly Person Shooter"?
+- [x] Banked essence is shared within a party, and one gate payment covers the party (decided after the first playtest).
+- [x] The party bank stays with the party when someone leaves; the leaver takes nothing (decided).
+- [x] Levels and gear each get about +20% of the power budget (decided).
+- [ ] Do Glimmers' Yellow drops weaken "knowing where your color is"? Keep their yield small and watch it.
 
 ## Test bots
 
@@ -408,6 +428,8 @@ Steps 1–4 are built and pass their bot-only checks; step 5 is built. Each step
 | 3. Chains and revives | Haste and Relay, chains with the bonus, Plague and Blitz combos, soul-fragment revive, Medic bot | Bots cash 2-link chains, form combos and revive downed allies (8 fragment hits in about 20 s), also on a 150 ms link |
 | 4. First layer and gate | Expedition mode: generated wrapping 4x4 layer of 250 m zones, landmarks, shrines, seeded spawns and blooms, essence, caches, one 40-Yellow gate, objective HUD with a light beam | A Might bot hunted 40 Yellow, banked it and passed the gate in 14:21; a Haste bot that mostly buffed earned only 9 |
 | 5. Strangers | Quick-chat (fixed lines with color and landmark slots, 60 m earshot, rate limits), sightings and shared map knowledge, kudos with anti-farming rules, encounter-exchange measurement, matchmaker weights for complementary essence needs and past kudos (in the core logic; not yet fed from the game) | Wired into the expedition: number keys say lines, K gives kudos, bots call for a res and say thanks. The real check needs several humans |
+
+**First human playtest (Nov 3, 2026).** Friends played a hosted build over Relay. Fixed right after: a HUD in place of the debug text (help moved to the Esc menu), Reset position, player colors, per-payload shot sounds, and the sky that seemed to spin when crossing zones. Added next: party-shared bank, clearer damage taken, your own quick-chat in the feed, a player-only minimap, levels with a skill tree, damage numbers, Glimmers, filled pits, and no view past the loaded zones.
 
 **Open questions from the prototype**
 

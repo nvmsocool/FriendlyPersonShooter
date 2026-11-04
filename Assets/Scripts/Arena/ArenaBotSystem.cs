@@ -37,7 +37,7 @@ namespace FriendlyPersonShooter.Arena
         private BotMover _mover;
         private readonly BotPath _path = new BotPath();
         private readonly BotMoveSettings _moveSettings = new BotMoveSettings { MinDistance = 6f, MaxDistance = 14f };
-        /// <summary>Expedition travel: walk right up to the objective (shrine pad, gate).</summary>
+        /// <summary>Expedition travel: walk right up to the objective (gate, raid door).</summary>
         private readonly BotMoveSettings _travelSettings = new BotMoveSettings { MinDistance = 0.3f, MaxDistance = 1.2f };
         private readonly CombatSettings _combat = new CombatSettings();
         private readonly MedicSettings _medic = new MedicSettings { Range = AllyRange };
@@ -172,7 +172,7 @@ namespace FriendlyPersonShooter.Arena
             }
 
             // Expedition: the Medic sticks with the leader; the others play their own expedition
-            // (hunt Wisps, bank at a shrine, pay and walk through the gate), fighting on the way.
+            // (hunt Wisps, bank and pay at the gate, walk through), fighting on the way.
             var moveSettings = _moveSettings;
             if (ExpeditionWorld.Active)
             {

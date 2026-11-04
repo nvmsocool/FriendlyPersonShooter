@@ -197,10 +197,13 @@ namespace FriendlyPersonShooter.Arena
                 if (input.ValueRO.SwapPayload.IsSet) loadout.ValueRW.Payload = NextPayload(loadout.ValueRO.Payload);
                 if (input.ValueRO.Unstuck.IsSet && state.Revive == null && _time >= state.NextUnstuck)
                 {
-                    // Stuck somewhere: back to the nearest shrine (the arena's spawn ring), no penalty.
+                    // Stuck somewhere: back to the nearest shrine (the arena's spawn ring). You keep your essence,
+                    // but can't bank for a minute, so a reset is never a shortcut to a bank.
                     state.NextUnstuck = _time + UnstuckCooldown;
                     var random = new Unity.Mathematics.Random(NextSeed() | 1u);
-                    float3 spot = InsideRaid(id) ? RaidArena.SpawnSpot(random.NextInt(8), 8)
+                    bool inRaid = InsideRaid(id);
+                    if (!inRaid && _banking != null) _banking.PositionReset(id, _time);
+                    float3 spot = inRaid ? RaidArena.SpawnSpot(random.NextInt(8), 8)
                         : ExpeditionWorld.Active ? ExpeditionWorld.ShrineSpawn(transform.ValueRO.Position, ref random)
                         : ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
                     transform.ValueRW.Position = spot;

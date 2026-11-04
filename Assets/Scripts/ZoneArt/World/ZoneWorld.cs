@@ -90,6 +90,30 @@ namespace FriendlyPersonShooter.ZoneArt
 
         private enum SlotState { Empty, Building, Ready }
 
+
+        /// <summary>
+        /// Sky blends fade colors and brightness only. Layout values (noise seeds and scales, swirl centres, moon,
+        /// planet and ring directions) jump straight to the new zone's: blending a noise seed that differs by tens
+        /// of units scrolls the clouds through dozens of patterns in a couple of seconds, which looks like the
+        /// whole sky spinning.
+        /// </summary>
+        private static void KeepSkyLayout(Material blend, Material to)
+        {
+            var shader = to.shader;
+            for (int i = 0, n = shader.GetPropertyCount(); i < n; i++)
+            {
+                var type = shader.GetPropertyType(i);
+                int id = shader.GetPropertyNameId(i);
+                string name = shader.GetPropertyName(i);
+                if (type == UnityEngine.Rendering.ShaderPropertyType.Vector) blend.SetVector(id, to.GetVector(id));
+                else if ((type == UnityEngine.Rendering.ShaderPropertyType.Float || type == UnityEngine.Rendering.ShaderPropertyType.Range) &&
+                         (name.Contains("Seed") || name.Contains("Scale")))
+                {
+                    blend.SetFloat(id, to.GetFloat(id));
+                }
+            }
+        }
+
         private sealed class Slot
         {
             public ZoneCoord Coord;
@@ -543,6 +567,7 @@ namespace FriendlyPersonShooter.ZoneArt
             {
                 if (_skyBlend == null || _skyBlend.shader != to.Skybox.shader) _skyBlend = new Material(to.Skybox) { name = "Sky blend" };
                 _skyBlend.Lerp(a.Skybox, to.Skybox, t);
+                KeepSkyLayout(_skyBlend, to.Skybox);
                 RenderSettings.skybox = _skyBlend;
             }
 

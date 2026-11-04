@@ -22,12 +22,14 @@ namespace FriendlyPersonShooter.Arena
         [SerializeField] private Camera viewCamera;
 
         private Mesh _cube;
-        private Material _floorMat, _wallMat, _pillarMat, _allyMat, _allyHeadMat;
+        private Material _floorMat, _wallMat, _pillarMat;
+        private Material[] _bodyMats, _headMats;
+        private List<Matrix4x4>[] _bodies, _heads;
         private readonly List<Matrix4x4> _batch = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _static = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _walls = new List<Matrix4x4>();
-        private readonly StringBuilder _text = new StringBuilder();
-        private Text _hud, _crosshair, _center;
+        private ArenaHud _hud;
+        private Text _crosshair, _center;
         private World _queryWorld;
         private EntityQuery _players, _localPlayer;
         private Material _baseMat;
@@ -58,8 +60,18 @@ namespace FriendlyPersonShooter.Arena
             _floorMat = MakeMat(new Color(0.35f, 0.37f, 0.33f));
             _wallMat = MakeMat(new Color(0.25f, 0.26f, 0.3f));
             _pillarMat = MakeMat(new Color(0.45f, 0.42f, 0.38f));
-            _allyMat = MakeMat(new Color(0.25f, 0.6f, 1f));
-            _allyHeadMat = MakeMat(new Color(0.85f, 0.9f, 1f));
+            int colors = PlayerColors.Palette.Length;
+            _bodyMats = new Material[colors];
+            _headMats = new Material[colors];
+            _bodies = new List<Matrix4x4>[colors];
+            _heads = new List<Matrix4x4>[colors];
+            for (int i = 0; i < colors; i++)
+            {
+                _bodyMats[i] = MakeMat(PlayerColors.Palette[i]);
+                _headMats[i] = MakeMat(Color.Lerp(PlayerColors.Palette[i], Color.white, 0.6f));
+                _bodies[i] = new List<Matrix4x4>();
+                _heads[i] = new List<Matrix4x4>();
+            }
             CreateCombatMaterials();
             CreateExpeditionMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = 1500f;
@@ -86,32 +98,9 @@ namespace FriendlyPersonShooter.Arena
 
         private void BuildUi()
         {
-            var canvasGo = new GameObject("ArenaHud", typeof(Canvas), typeof(CanvasScaler));
-            canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
-            _hud = MakeText(canvasGo.transform, font, 16, TextAnchor.UpperLeft, new Vector2(0, 1), new Vector2(12, -10));
-            _crosshair = MakeText(canvasGo.transform, font, 26, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero);
-            _crosshair.text = "+";
-            _center = MakeText(canvasGo.transform, font, 20, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), new Vector2(0, -60));
-        }
-
-        private static Text MakeText(Transform parent, Font font, int size, TextAnchor anchor, Vector2 pivot, Vector2 offset)
-        {
-            var go = new GameObject("Text", typeof(Text), typeof(Shadow));
-            go.transform.SetParent(parent, false);
-            var text = go.GetComponent<Text>();
-            text.font = font;
-            text.fontSize = size;
-            text.alignment = anchor;
-            text.color = Color.white;
-            text.horizontalOverflow = HorizontalWrapMode.Overflow;
-            text.verticalOverflow = VerticalWrapMode.Overflow;
-            var rt = text.rectTransform;
-            rt.anchorMin = rt.anchorMax = rt.pivot = pivot;
-            rt.anchoredPosition = offset;
-            rt.sizeDelta = new Vector2(700, 400);
-            return text;
+            _hud = new ArenaHud(transform);
+            _crosshair = _hud.Crosshair;
+            _center = _hud.Center;
         }
 
         private void Update()
@@ -136,10 +125,10 @@ namespace FriendlyPersonShooter.Arena
             }
 
             var world = ClientServerBootstrap.ClientWorld;
-            _text.Clear();
+            _hud.Clear();
             if (world == null || !world.IsCreated)
             {
-                _hud.text = "No client world.";
+                _hud.Apply();
                 return;
             }
             if (_queryWorld != world)
@@ -178,11 +167,10 @@ namespace FriendlyPersonShooter.Arena
                 viewCamera.transform.SetPositionAndRotation(eye.Value, Quaternion.Euler(-look.y, look.x, 0f));
             }
 
-            _text.Append(_wrap ? "Expedition   (click: capture mouse, Esc: release)\n" : "Arena   (click: capture mouse, Esc: release)\n");
-            _text.Append("WASD move, Space jump, LMB fire, Q cycle payload (Vigor, Might, Haste, Relay)\n");
+            _center.text = "";
             if (_wrap) WriteExpeditionHud();
             WriteCombatHud(world, local);
-            _hud.text = _text.ToString();
+            _hud.Apply();
         }
 
         private Light[] _sceneLights;
@@ -228,21 +216,29 @@ namespace FriendlyPersonShooter.Arena
             using var entities = _players.ToEntityArray(Allocator.Temp);
             using var transforms = _players.ToComponentDataArray<LocalTransform>(Allocator.Temp);
             using var looks = _players.ToComponentDataArray<ArenaLook>(Allocator.Temp);
-            _batch.Clear();
-            var heads = new List<Matrix4x4>();
+            using var owners = _players.ToComponentDataArray<GhostOwner>(Allocator.Temp);
+            for (int c = 0; c < _bodies.Length; c++)
+            {
+                _bodies[c].Clear();
+                _heads[c].Clear();
+            }
+            var em = world.EntityManager;
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
                 // Downed players are drawn lying down by the combat view.
-                var em = world.EntityManager;
                 if (em.HasComponent<ArenaVitals>(entities[i]) && em.GetComponentData<ArenaVitals>(entities[i]).Health <= 0f) continue;
+                int c = PlayerColors.Index(owners[i].NetworkId);
                 Vector3 p = Near(transforms[i].Position);
                 var yaw = Quaternion.Euler(0f, looks[i].Yaw, 0f);
-                _batch.Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));
-                heads.Add(Matrix4x4.TRS(p + Vector3.up * 1.6f + yaw * Vector3.forward * 0.3f, yaw, new Vector3(0.5f, 0.3f, 0.3f)));
+                _bodies[c].Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));
+                _heads[c].Add(Matrix4x4.TRS(p + Vector3.up * 1.6f + yaw * Vector3.forward * 0.3f, yaw, new Vector3(0.5f, 0.3f, 0.3f)));
             }
-            DrawList(_batch, _allyMat);
-            DrawList(heads, _allyHeadMat);
+            for (int c = 0; c < _bodies.Length; c++)
+            {
+                DrawList(_bodies[c], _bodyMats[c]);
+                DrawList(_heads[c], _headMats[c]);
+            }
         }
 
         private void DrawList(List<Matrix4x4> list, Material mat)

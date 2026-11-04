@@ -45,6 +45,8 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>1 while the fire button is held.</summary>
         public int Fire;
         public InputEvent SwapPayload;
+        /// <summary>"Reset position" from the Esc menu: the server moves the player to the nearest shrine.</summary>
+        public InputEvent Unstuck;
     }
 
     /// <summary>Where a player looks, replicated so others can see it.</summary>

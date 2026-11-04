@@ -6,7 +6,8 @@ The playtest build starts at a main menu:
 - **Join game**: type a friend's join code.
 - **Play solo**: you and your bot allies, no internet needed.
 
-In the game, **Esc** frees the mouse and shows **Copy join code** and **Leave game** / **End game**.
+In the game, **Esc** frees the mouse and shows the controls, a payload guide, **Reset position** (back to the nearest
+shrine, for when you get stuck), **Copy join code** and **Leave game** / **End game**.
 When the host ends the game, everyone else goes back to the menu.
 
 Players connect through **Unity Relay**, so nobody needs to know an IP address or open a port.

@@ -63,7 +63,8 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>A game on this computer only (you and your bots): no sign-in, no relay, no internet needed.</summary>
         public static void PlaySolo(int bots)
         {
-            NetworkStreamReceiveSystem.DriverConstructor = null;
+            // In-process only: no relay, and the client and bots use IPC whatever the Editor's play mode type.
+            NetworkStreamReceiveSystem.DriverConstructor = new RelayDriverConstructor(default, default);
             StartLocalGame(bots);
             JoinCode = null;
             IsHost = true;

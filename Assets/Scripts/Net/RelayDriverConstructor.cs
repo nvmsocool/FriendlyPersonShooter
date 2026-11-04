@@ -28,7 +28,11 @@ namespace FriendlyPersonShooter.Net
             else DefaultDriverBuilder.RegisterClientIpcDriver(world, ref driver, netDebug, DefaultDriverBuilder.GetNetworkClientSettings());
         }
 
-        public void CreateServerDriver(World world, ref NetworkDriverStore driver, NetDebug netDebug) =>
-            DefaultDriverBuilder.RegisterServerDriver(world, ref driver, netDebug, ref _server);
+        public void CreateServerDriver(World world, ref NetworkDriverStore driver, NetDebug netDebug)
+        {
+            // Without relay data (a solo game) the server only takes its in-process client and bots.
+            if (_server.Endpoint.IsValid) DefaultDriverBuilder.RegisterServerDriver(world, ref driver, netDebug, ref _server);
+            else DefaultDriverBuilder.RegisterServerIpcDriver(world, ref driver, netDebug, DefaultDriverBuilder.GetNetworkServerSettings());
+        }
     }
 }

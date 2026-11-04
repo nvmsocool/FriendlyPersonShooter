@@ -163,20 +163,21 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!TryGetStatus(out var s)) return;
             int minutes = (int)(s.Elapsed / 60f), seconds = (int)(s.Elapsed % 60f);
-            _text.Append($"\nEXPEDITION  {minutes:00}:{seconds:00} / 20:00   Yellow: carried {s.Carried}, banked {s.Banked} / {s.Goal}");
-            if (s.Kudos > 0) _text.Append($"   kudos {s.Kudos}");
-            _text.Append($"\n{s.Objective}\n");
+            var e = _hud.Expedition;
+            e.Append($"<b>EXPEDITION</b>   {minutes:00}:{seconds:00} / 20:00\n");
+            e.Append($"<color=#FFE14D>Yellow</color>  carried <b>{s.Carried}</b>   banked <b>{s.Banked} / {s.Goal}</b>");
+            if (s.Kudos > 0) e.Append($"   kudos {s.Kudos}");
+            e.Append($"\n{s.Objective}\n");
             if (s.HasTarget && !s.Complete)
             {
                 var delta = ExpeditionWorld.Near(new float3(s.Target.x, 0f, s.Target.y), _camRef) - _camRef;
                 float distance = math.length(delta.xz);
                 float bearing = math.degrees(math.atan2(delta.x, delta.z));
                 float relative = Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing);
-                _text.Append($"Objective {distance:0} m {Direction(relative)}  (follow the light beam)\n");
+                e.Append($"<color=#FFE14D>{distance:0} m {Direction(relative)}</color>  (follow the light beam)\n");
             }
-            if (s.BloomNear) _text.Append("A Yellow BLOOM is running nearby: lots of Wisps!\n");
-            _text.Append($"You are {s.Location}\n");
-            _text.Append("Quick-chat: 1 Thanks  2 Need a res  3 Seen any Yellow?  4 Yellow here  5 Follow me  6 Group up?  7 Gate at...  K kudos\n");
+            if (s.BloomNear) e.Append("<color=#FFE14D>A Yellow BLOOM is running nearby: lots of Wisps!</color>\n");
+            e.Append($"<color=#B8B0D8>You are {s.Location}</color>");
             WriteSocial();
             if (s.Complete)
             {
@@ -196,7 +197,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 var (sender, message, time) = lines[i];
                 if (now - time > ChatSeconds) continue;
-                _text.Append($"  player {sender}: {Core.Social.QuickChatCatalog.Render(message, map, id => $"player {id}")}\n");
+                _hud.Chat.Append($"{PlayerColors.Tag(sender)}: {Core.Social.QuickChatCatalog.Render(message, map, id => PlayerColors.Tag(id))}\n");
             }
             var kudos = ExpeditionSocialClientSystem.Kudos;
             for (int i = kudos.Count - 1; i >= 0; i--)
@@ -207,9 +208,9 @@ namespace FriendlyPersonShooter.Arena
                     kudos.RemoveAt(i);
                     continue;
                 }
-                _text.Append(n.Outcome == Core.Social.KudosOutcome.Given
-                    ? $"  * player {n.GiverId} gave kudos to player {n.ReceiverId}\n"
-                    : $"  * kudos not sent ({n.Outcome})\n");
+                _hud.Chat.Append(n.Outcome == Core.Social.KudosOutcome.Given
+                    ? $"* {PlayerColors.Tag(n.GiverId)} gave kudos to {PlayerColors.Tag(n.ReceiverId)}\n"
+                    : $"* kudos not sent ({n.Outcome})\n");
             }
         }
 

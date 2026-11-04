@@ -182,15 +182,21 @@ namespace FriendlyPersonShooter.Arena
                 fire = mouse.leftButton.isPressed;
             }
             LocalLook = new float2(_yaw, _pitch);
+            bool unstuck = RequestUnstuck;
+            RequestUnstuck = false;
 
             foreach (var input in SystemAPI.Query<RefRW<ArenaInput>>().WithAll<GhostOwnerIsLocal, ArenaPlayer>())
             {
                 var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0 };
                 if (jump) i.Jump.Set();
                 if (swap) i.SwapPayload.Set();
+                if (unstuck) i.Unstuck.Set();
                 input.ValueRW = i;
             }
         }
+
+        /// <summary>Set by the Esc menu's "Reset position" button; sent with the next input.</summary>
+        public static bool RequestUnstuck;
 
         /// <summary>The human's latest look angles (yaw, pitch), for a camera that doesn't wait for a tick.</summary>
         public static float2 LocalLook;

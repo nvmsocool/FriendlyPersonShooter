@@ -30,6 +30,7 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<(Vector3 From, Vector3 To, PayloadKind Payload, float Time)> _localTracers =
             new List<(Vector3, Vector3, PayloadKind, float)>();
         private float _nextLocalShot;
+        private float _shotsHeardUpTo;
 
         private void CreateCombatMaterials()
         {
@@ -64,17 +65,6 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Haste: return _hasteMat;
                 case PayloadKind.Relay: return _relayMat;
                 default: return _mightMat;
-            }
-        }
-
-        private static string PayloadHelp(PayloadKind p)
-        {
-            switch (p)
-            {
-                case PayloadKind.Vigor: return "VIGOR  (allies: heal + shield, enemies: wither)";
-                case PayloadKind.Haste: return "HASTE  (allies: +30% speed, +20% jump, enemies: slow)";
-                case PayloadKind.Relay: return "RELAY  (allies: their next 5 hits also carry Might and add a chain link, enemies: tag = splash)";
-                default: return "MIGHT  (allies: +damage, enemies: expose)";
             }
         }
 
@@ -257,7 +247,19 @@ namespace FriendlyPersonShooter.Arena
                 float range = math.min(ArenaWeapon.Range, ArenaLayout.RaycastCover(eye, dir, ArenaWeapon.Range));
                 var gun = eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
                 _localTracers.Add((gun, eye + (Vector3)dir * range, myPayload, now));
+                ArenaAudio.Shot(myPayload, gun, own: true);
             }
+
+            // Everyone else's shots (players and bots), heard once each from where they were fired.
+            float heardUpTo = _shotsHeardUpTo;
+            for (int i = 0; i < ArenaFx.Shots.Count; i++)
+            {
+                var s = ArenaFx.Shots[i];
+                if (s.Time <= _shotsHeardUpTo || s.Shot.ShooterNetworkId == myId) continue;
+                ArenaAudio.Shot(s.Shot.Payload, Near(s.Shot.From), own: false);
+                heardUpTo = Mathf.Max(heardUpTo, s.Time);
+            }
+            _shotsHeardUpTo = heardUpTo;
 
             _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear();
             for (int i = _localTracers.Count - 1; i >= 0; i--)
@@ -303,48 +305,61 @@ namespace FriendlyPersonShooter.Arena
         {
             float now = Time.unscaledTime;
             var em = world.EntityManager;
+            var hud = _hud;
+            int localId = 0;
             if (local != Entity.Null)
             {
                 var v = em.GetComponentData<ArenaVitals>(local);
                 var b = em.GetComponentData<ArenaBuffs>(local);
                 var payload = em.GetComponentData<ArenaLoadout>(local).Payload;
-                _text.Append($"\nHealth {v.Health:0}/{v.MaxHealth:0}   Shield {v.Shield:0}\n");
-                _text.Append($"Payload: {PayloadHelp(payload)}\n");
-                if (b.EmpowerRemaining > 0f) _text.Append($"Buff: Might +{b.Empower * 100f:0}% ({b.EmpowerRemaining:0.0}s){(b.Blitz ? "  BLITZ (Haste + Might: double damage bonus)" : "")}\n");
-                if (b.ShieldRemaining > 0f) _text.Append($"Buff: Shield ({b.ShieldRemaining:0.0}s)\n");
-                if (b.HasteRemaining > 0f) _text.Append($"Buff: Haste x{b.MoveMultiplier:0.00} speed ({b.HasteRemaining:0.0}s)\n");
-                if (b.RelayHits > 0) _text.Append($"Buff: Relay - next {b.RelayHits} hits also carry {b.RelayPayload}\n");
+                localId = em.GetComponentData<GhostOwner>(local).NetworkId;
+                hud.SetVitals(true, v.Health, v.MaxHealth, v.Shield);
+
+                if (b.EmpowerRemaining > 0f) hud.Buffs.Append($"<color=#FF9A4D>MIGHT</color> +{b.Empower * 100f:0}% damage  {b.EmpowerRemaining:0.0}s{(b.Blitz ? "   <color=#FFD84D>BLITZ</color> (Haste + Might: double damage bonus)" : "")}\n");
+                if (b.ShieldRemaining > 0f) hud.Buffs.Append($"<color=#7FDBFF>SHIELD</color>  {b.ShieldRemaining:0.0}s\n");
+                if (b.HasteRemaining > 0f) hud.Buffs.Append($"<color=#66D9FF>HASTE</color> x{b.MoveMultiplier:0.00} speed  {b.HasteRemaining:0.0}s\n");
+                if (b.RelayHits > 0) hud.Buffs.Append($"<color=#D98CFF>RELAY</color>  next {b.RelayHits} hits also carry {b.RelayPayload}\n");
+
+                string chain = null;
                 if (b.ChainLinks > 0)
                 {
-                    _text.Append(b.ChainLinks >= 2
-                        ? $"CHAIN x{b.ChainLinks} held ({b.ChainTimeLeft:0.0}s): hit an enemy to cash it, or buff someone new to grow it\n"
-                        : $"Chain started ({b.ChainTimeLeft:0.0}s): buff someone new to grow it\n");
+                    chain = b.ChainLinks >= 2
+                        ? $"<color=#FFD84D>CHAIN x{b.ChainLinks}</color>  {b.ChainTimeLeft:0.0}s   hit an enemy to cash it, or buff someone new to grow it"
+                        : $"<color=#FFD84D>Chain started</color>  {b.ChainTimeLeft:0.0}s   buff someone new to grow it";
                 }
-                _center.text = v.Health <= 0f
-                    ? $"DOWN!  Allies: shoot your soul fragments to revive you   {v.ReviveProgress * 100f:0}%   bleed-out {v.RespawnIn:0.0}s"
-                    : "";
+                hud.SetPayload(payload, chain);
+                if (v.Health <= 0f)
+                {
+                    _center.text = $"DOWN!  Allies: shoot your soul fragments to revive you   {v.ReviveProgress * 100f:0}%   bleed-out {v.RespawnIn:0.0}s";
+                }
+            }
+            else
+            {
+                hud.SetVitals(false, 0f, 0f, 0f);
             }
             WriteAnnouncements(now);
 
-            _text.Append($"\nDamage {ArenaFx.DamageDealt:0}   Healing {ArenaFx.HealingGiven:0}   Kills {ArenaFx.Kills}\n");
-            _text.Append($"Ally hits {ArenaFx.AllyHits}" + (ArenaFx.AllyHitsRefused > 0 ? $" ({ArenaFx.AllyHitsRefused} had no effect)" : "") + "\n");
-            _text.Append($"Chains cashed {ArenaFx.ChainsCashed} (best x{ArenaFx.BestChain})   Fragments shot {ArenaFx.FragmentHits}\n");
+            hud.Stats.Append($"Damage {ArenaFx.DamageDealt:0}   Healing {ArenaFx.HealingGiven:0}   Kills {ArenaFx.Kills}\n");
+            hud.Stats.Append($"Ally hits {ArenaFx.AllyHits}" + (ArenaFx.AllyHitsRefused > 0 ? $" ({ArenaFx.AllyHitsRefused} had no effect)" : "") +
+                             $"   Chains {ArenaFx.ChainsCashed} (best x{ArenaFx.BestChain})   Fragments {ArenaFx.FragmentHits}");
 
             using var entities = _vitals.ToEntityArray(Allocator.Temp);
             using var vitals = _vitals.ToComponentDataArray<ArenaVitals>(Allocator.Temp);
             using var owners = _vitals.ToComponentDataArray<GhostOwner>(Allocator.Temp);
             using var loadouts = _vitals.ToComponentDataArray<ArenaLoadout>(Allocator.Temp);
             using var allyBuffs = _vitals.ToComponentDataArray<ArenaBuffs>(Allocator.Temp);
-            _text.Append("\nAllies:\n");
+            if (localId != 0) hud.Team.Append($"<b>You: {PlayerColors.Tag(localId)}</b>\n");
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
                 var v = vitals[i];
-                _text.Append($"  player {owners[i].NetworkId} ({loadouts[i].Payload}): " +
-                             (v.Health <= 0f ? $"DOWN - revive {v.ReviveProgress * 100f:0}%, {v.RespawnIn:0}s left"
-                                 : $"{v.Health:0} hp{(v.Shield > 0f ? $" +{v.Shield:0} shield" : "")}") +
-                             (allyBuffs[i].ChainLinks > 0 ? $"  [chain x{allyBuffs[i].ChainLinks}]" : "") + "\n");
+                var pc = ArenaHud.PayloadColor(loadouts[i].Payload);
+                hud.Team.Append($"{PlayerColors.Tag(owners[i].NetworkId)}  <color=#{ColorUtility.ToHtmlStringRGB(pc)}>{loadouts[i].Payload}</color>  " +
+                                (v.Health <= 0f ? $"<color=#FF6B6B>DOWN</color> {v.ReviveProgress * 100f:0}%, {v.RespawnIn:0}s"
+                                    : $"{v.Health:0} hp{(v.Shield > 0f ? $" +{v.Shield:0}" : "")}") +
+                                (allyBuffs[i].ChainLinks > 0 ? $"  <color=#FFD84D>x{allyBuffs[i].ChainLinks}</color>" : "") + "\n");
             }
+            if (entities.Length <= 1 && localId != 0) hud.Team.Append("<color=#B8B0D8>No one else here yet.</color>\n");
 
             // Hit marker on the crosshair.
             _crosshair.color = Color.white;
@@ -404,13 +419,13 @@ namespace FriendlyPersonShooter.Arena
                             : "COMBO DISCOVERED: BLITZ  (Haste + Might on one ally: damage bonus doubled)\n");
                         break;
                     case AnnounceKind.Revived:
-                        lines.Append($"player {m.PlayerNetworkId} revived by player {m.OtherNetworkId}\n");
+                        lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} revived by {PlayerColors.Tag(m.OtherNetworkId)}\n");
                         break;
                     case AnnounceKind.BledOut:
-                        lines.Append($"player {m.PlayerNetworkId} bled out\n");
+                        lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} bled out\n");
                         break;
                     case AnnounceKind.ChainCashed:
-                        if (m.Value >= 3) lines.Append($"player {m.PlayerNetworkId} cashed a x{m.Value} chain!\n");
+                        if (m.Value >= 3) lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} cashed a x{m.Value} chain!\n");
                         break;
                 }
             }

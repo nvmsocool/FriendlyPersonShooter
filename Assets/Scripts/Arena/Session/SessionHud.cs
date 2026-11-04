@@ -41,19 +41,60 @@ namespace FriendlyPersonShooter.Arena
             _center = SessionUi.Label(canvas, "", 34, new Vector2(0.5f, 0.5f), new Vector2(0, 120), new Vector2(1200, 60), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
             _center.gameObject.AddComponent<Shadow>();
 
-            var pause = SessionUi.Box(canvas, "Options", new Vector2(0.5f, 0.5f), new Vector2(0, -40), new Vector2(460, hasCode ? 340 : 250), SessionUi.Panel);
+            var pause = SessionUi.Box(canvas, "Options", new Vector2(0.5f, 0.5f), new Vector2(0, -20), new Vector2(1100, 640), SessionUi.Panel);
             _pause = pause.gameObject;
             var p = pause.transform;
-            SessionUi.Label(p, "The game keeps running while this is open.\nClick outside this box to play.", 22, new Vector2(0.5f, 1f), new Vector2(0, -55), new Vector2(420, 70), TextAnchor.MiddleCenter, SessionUi.Muted);
+            var top = new Vector2(0.5f, 1f);
+            SessionUi.Label(p, "The game keeps running while this is open. Click outside this box to play.", 22, top, new Vector2(0, -24), new Vector2(1040, 34), TextAnchor.MiddleCenter, SessionUi.Muted);
+
+            var help = new Vector2(0f, 1f);
+            var controls = SessionUi.Label(p, Controls, 21, help, new Vector2(40, -78), new Vector2(480, 400), TextAnchor.UpperLeft);
+            controls.supportRichText = true;
+            var payloads = SessionUi.Label(p, PayloadGuide, 21, help, new Vector2(560, -78), new Vector2(510, 400), TextAnchor.UpperLeft);
+            payloads.supportRichText = true;
+
+            var bottom = new Vector2(0.5f, 0f);
+            SessionUi.Button(p, "Reset position", bottom, new Vector2(hasCode ? -350 : -175, 34), new Vector2(320, 74), SessionUi.Quiet, ResetPosition, 26);
             if (hasCode)
             {
-                SessionUi.Button(p, "Copy join code", new Vector2(0.5f, 0f), new Vector2(0, 124), new Vector2(380, 74), SessionUi.Secondary,
-                    () => GUIUtility.systemCopyBuffer = PlaySession.JoinCode, 28);
+                SessionUi.Button(p, "Copy join code", bottom, new Vector2(0, 34), new Vector2(320, 74), SessionUi.Secondary,
+                    () => GUIUtility.systemCopyBuffer = PlaySession.JoinCode, 26);
             }
-            SessionUi.Button(p, hasCode ? "End game" : "Leave game", new Vector2(0.5f, 0f), new Vector2(0, 34), new Vector2(380, 74), SessionUi.Primary,
-                () => PlaySession.Leave(), 28);
+            SessionUi.Button(p, hasCode ? "End game" : "Leave game", bottom, new Vector2(hasCode ? 350 : 175, 34), new Vector2(320, 74), SessionUi.Primary,
+                () => PlaySession.Leave(), 26);
             _pause.SetActive(false);
             // Straight into play: the mouse is captured from the start (Esc frees it and shows the options).
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
+        private const string Controls =
+            "<b><size=26>Controls</size></b>\n" +
+            "WASD  move          Space  jump\n" +
+            "Left mouse  fire    Q  switch payload\n" +
+            "Esc  free the mouse (this menu)\n" +
+            "Click the game  capture the mouse\n\n" +
+            "<b>Quick-chat</b>\n" +
+            "1 Thanks      2 Need a res\n" +
+            "3 Seen any Yellow?      4 Yellow here\n" +
+            "5 Follow me      6 Group up?\n" +
+            "7 Gate at...      K give kudos\n\n" +
+            "<color=#B8B0D8>Stuck? Reset position takes you to the nearest shrine.</color>";
+
+        private const string PayloadGuide =
+            "<b><size=26>Payloads</size></b>   shoot allies to buff them, enemies to weaken them\n\n" +
+            "<color=#66FF8C><b>VIGOR</b></color>  allies: heal + shield.  enemies: wither\n" +
+            "<color=#FF9A4D><b>MIGHT</b></color>  allies: +damage.  enemies: expose\n" +
+            "<color=#66D9FF><b>HASTE</b></color>  allies: +30% speed, +20% jump.  enemies: slow\n" +
+            "<color=#D98CFF><b>RELAY</b></color>  allies: their next 5 hits also carry Might and add a chain link.  enemies: tag (hits splash)\n\n" +
+            "<b>Chains</b>  buffing different allies in a row builds a chain; an enemy hit cashes it for bonus damage.\n" +
+            "<b>Down?</b>  allies shoot your soul fragments to revive you.\n\n" +
+            "<b>Expedition</b>  gather Yellow, bank it at shrines, pay the gate with banked Yellow and walk through (aim for under 20:00). Follow the light beam.";
+
+        /// <summary>Asks the server to move this player to the nearest shrine, then goes back to playing.</summary>
+        private static void ResetPosition()
+        {
+            ArenaLocalInputSystem.RequestUnstuck = true;
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }

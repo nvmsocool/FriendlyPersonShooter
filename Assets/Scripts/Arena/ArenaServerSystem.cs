@@ -29,6 +29,8 @@ namespace FriendlyPersonShooter.Arena
         private const int WispCount = 3;
         private const int SkitterCount = 3;
         private const float EnemyRespawnDelay = 4f;
+        /// <summary>Seconds between "Reset position" uses.</summary>
+        private const float UnstuckCooldown = 3f;
         /// <summary>Fragment hit-target ids start here so they never clash with enemy ids.</summary>
         private const int FragmentIdBase = 1 << 28;
         private const int FragmentIdsPerPlayer = 1 << 16;
@@ -38,6 +40,7 @@ namespace FriendlyPersonShooter.Arena
             public PlayerVitals Vitals;
             public PositionHistory History = new PositionHistory(64);
             public double NextFire;
+            public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
         }
@@ -176,6 +179,18 @@ namespace FriendlyPersonShooter.Arena
                 _playerById[id] = entity;
 
                 if (input.ValueRO.SwapPayload.IsSet) loadout.ValueRW.Payload = NextPayload(loadout.ValueRO.Payload);
+                if (input.ValueRO.Unstuck.IsSet && state.Revive == null && _time >= state.NextUnstuck)
+                {
+                    // Stuck somewhere: back to the nearest shrine (the arena's spawn ring), no penalty.
+                    state.NextUnstuck = _time + UnstuckCooldown;
+                    var random = new Unity.Mathematics.Random(NextSeed() | 1u);
+                    float3 spot = ExpeditionWorld.Active
+                        ? ExpeditionWorld.ShrineSpawn(transform.ValueRO.Position, ref random)
+                        : ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
+                    transform.ValueRW.Position = spot;
+                    if (SystemAPI.HasComponent<ArenaMotion>(entity)) SystemAPI.SetComponent(entity, new ArenaMotion { Grounded = true });
+                    state.History.Record(tick, ToVec(spot), true, teleported: true);
+                }
 
                 state.Vitals.Tick(dt);
                 state.Position = ToVec(transform.ValueRO.Position);

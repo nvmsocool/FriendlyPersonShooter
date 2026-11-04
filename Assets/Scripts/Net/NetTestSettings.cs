@@ -53,6 +53,9 @@ namespace FriendlyPersonShooter.Net
         /// <summary>Join code from -fps-join CODE: the menu joins that game straight away (for testing host and join).</summary>
         public static string JoinCode;
 
+        /// <summary>-fps-start host|solo: the menu hosts or starts a solo game straight away (for testing).</summary>
+        public static string Start;
+
         /// <summary>Bot allies in the arena. Each is a full client, so it receives the game state and can aim.</summary>
         public static int ArenaBots = 3;
 
@@ -159,6 +162,9 @@ namespace FriendlyPersonShooter.Net
                             Game = game;
                             GameGiven = true;
                         }
+                        break;
+                    case "-fps-start":
+                        Start = value?.ToLowerInvariant();
                         break;
                     case "-fps-join":
                         JoinCode = value;

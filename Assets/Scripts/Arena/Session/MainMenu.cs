@@ -23,6 +23,13 @@ namespace FriendlyPersonShooter.Arena
 
         private void Awake()
         {
+            // Started with -fps-game (no menu): the game's worlds already exist, so go straight to its scene.
+            if (!NetTestBootstrap.StartsAtMenu)
+            {
+                enabled = false;
+                UnityEngine.SceneManagement.SceneManager.LoadScene(NetTestSettings.Game == GameMode.Arena ? "Arena" : PlaySession.GameScene);
+                return;
+            }
             // Coming back from a game: its overlay goes, and its worlds close now that its views are gone.
             foreach (var hud in FindObjectsByType<SessionHud>(FindObjectsInactive.Include)) Destroy(hud.gameObject);
             PlaySession.Shutdown();
@@ -30,6 +37,7 @@ namespace FriendlyPersonShooter.Arena
 
         private void Start()
         {
+            if (!NetTestBootstrap.StartsAtMenu) return;
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
             _botCount = Mathf.Clamp(PlayerPrefs.GetInt(BotsPref, 2), 0, 3);
@@ -42,7 +50,10 @@ namespace FriendlyPersonShooter.Arena
                 NetTestSettings.JoinCode = null;
                 OnJoin();
             }
-            if (!NetTestBootstrap.StartsAtMenu) Show("This copy started without the menu, so hosting and joining won't work here. Play the Menu scene.", true);
+            var start = NetTestSettings.Start;
+            NetTestSettings.Start = null;
+            if (start == "host") OnHost();
+            else if (start == "solo") OnSolo();
         }
 
         private void Build()

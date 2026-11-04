@@ -47,6 +47,8 @@ namespace FriendlyPersonShooter.Arena
             _baseMat = GraphicsSettings.currentRenderPipeline != null
                 ? GraphicsSettings.currentRenderPipeline.defaultMaterial
                 : null;
+            // The pipeline's default material only exists in the Editor; builds use this copy (Arena/Resources).
+            if (_baseMat == null) _baseMat = Resources.Load<Material>("ArenaBase");
             if (_baseMat == null)
             {
                 Debug.LogError("[Arena] No render pipeline default material found.");

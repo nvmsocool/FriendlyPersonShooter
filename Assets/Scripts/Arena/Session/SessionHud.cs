@@ -33,8 +33,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 GUIUtility.systemCopyBuffer = PlaySession.JoinCode;
                 var box = SessionUi.Box(canvas, "Code", tr, new Vector2(-20, -20), new Vector2(380, 92), SessionUi.Panel).transform;
-                _code = SessionUi.Label(box, "", 36, new Vector2(0.5f, 1f), new Vector2(0, -32), new Vector2(360, 46), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
-                SessionUi.Label(box, "Join code (copied). Esc for options", 18, new Vector2(0.5f, 0f), new Vector2(0, 20), new Vector2(360, 26), TextAnchor.MiddleCenter, SessionUi.Muted);
+                _code = SessionUi.Label(box, "", 36, new Vector2(0.5f, 1f), new Vector2(0, -6), new Vector2(360, 48), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
+                SessionUi.Label(box, "Join code (copied). Esc for options", 18, new Vector2(0.5f, 0f), new Vector2(0, 8), new Vector2(360, 26), TextAnchor.MiddleCenter, SessionUi.Muted);
                 _code.text = PlaySession.JoinCode;
             }
 
@@ -53,6 +53,9 @@ namespace FriendlyPersonShooter.Arena
             SessionUi.Button(p, hasCode ? "End game" : "Leave game", new Vector2(0.5f, 0f), new Vector2(0, 34), new Vector2(380, 74), SessionUi.Primary,
                 () => PlaySession.Leave(), 28);
             _pause.SetActive(false);
+            // Straight into play: the mouse is captured from the start (Esc frees it and shows the options).
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
 
         private void Update()

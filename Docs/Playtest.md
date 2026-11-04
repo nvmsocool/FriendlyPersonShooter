@@ -43,7 +43,8 @@ FriendlyPersonShooter.exe -fps-profile guest
 ```
 
 `-fps-join CODE` makes a copy join that game straight from the menu, e.g.
-`FriendlyPersonShooter.exe -fps-profile guest -fps-join GHRDRR`.
+`FriendlyPersonShooter.exe -fps-profile guest -fps-join GHRDRR`. `-fps-start host` or `-fps-start solo` hosts or
+starts a solo game straight from the menu.
 
 ## In the Editor
 

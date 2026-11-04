@@ -29,7 +29,7 @@ namespace FriendlyPersonShooter.ZoneArt
         Landmark,
         /// <summary>Respawns players (and Reset position lands there); needs flat open ground within <see cref="ZoneRequest.ShrineClearRadius"/>.</summary>
         Shrine,
-        /// <summary>The gate to the next layer; needs flat open ground within <see cref="ZoneRequest.GateClearRadius"/>.</summary>
+        /// <summary>The gate to the next layer, or the raid door; needs flat open ground within <see cref="ZoneRequest.GateClearRadius"/>.</summary>
         Gate,
         /// <summary>Where enemies appear; needs to be reachable on foot.</summary>
         Spawn,
@@ -113,6 +113,9 @@ namespace FriendlyPersonShooter.ZoneArt
             foreach (var l in zone.Landmarks) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Landmark, l.Name, ToWorld(l.Point.World)));
             foreach (var s in zone.Shrines) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Shrine, $"Shrine {s.Id}", ToWorld(s.Point.World)));
             if (zone.HasGate) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Gate, "Gate", ToWorld(zone.Gate.Point.World)));
+            // The raid door needs the same flat, open ground as a gate (its posts and the ring players stand in).
+            var door = RaidSite.DoorFor(map);
+            if (map.Grid.ZoneAt(door.X, door.Y).Equals(coord)) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Gate, "Raid door", ToWorld(door)));
             foreach (var p in zone.SpawnPoints) anchors.Add(new ZoneAnchor(ZoneAnchorKind.Spawn, $"{p.Family} spawn {p.Id}", ToWorld(p.Point.World)));
             uint seed = ZoneRandom.Hash(map.Seed, 0x2A7E, coord.X, coord.Y);
             return new ZoneRequest(seed, map.Seed, coord, size, zone.Tile, zone.Bias.Primary, anchors) { WorldSize = map.Grid.Width * size };

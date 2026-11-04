@@ -30,7 +30,8 @@ Hard rules:
 - Seams: within `ZoneEdges.BorderWidth` of the zone edge, walkable ground eases to
   `ZoneEdges.BorderHeight` (use `ZoneEdges.Apply`), so any two zones connect.
 - Anchors: every anchor must be reachable on foot. Shrines and the gate need flat, open
-  ground within `ZoneRequest.ShrineClearRadius` / `GateClearRadius`. Landmarks deserve something memorable.
+  ground within `ZoneRequest.ShrineClearRadius` / `GateClearRadius`. The raid door comes as a second
+  `Gate` anchor named "Raid door" and needs the same. Landmarks deserve something memorable.
 - Everything players can stand on or bump into needs a collider (MeshCollider is fine).
 - Budget per zone: build under 15 s, under 3 million triangles.
 - Targets from the walkability report: two-way walkable at least 70%, every edge at least 60%,

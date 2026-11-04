@@ -1,0 +1,30 @@
+name: Bug
+description: Something is broken or feels wrong. Claude will reply with a plan to fix it.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: Steps, which mode (solo / host / join), and how often it happens. Screenshots or clips help a lot.
+  - type: input
+    id: build
+    attributes:
+      label: Which build?
+      description: The zip name or release you were playing, e.g. FriendlyPersonShooter-issue-3-a1b2c3d.zip
+  - type: markdown
+    attributes:
+      value: |
+        After you submit, Claude posts a plan here. Reply `@claude go` to approve it, or `@claude <changes>` to adjust it.

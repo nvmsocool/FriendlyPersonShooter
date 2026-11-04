@@ -1,0 +1,27 @@
+name: Idea / feature
+description: Something new or different in the game. Claude will reply with a plan.
+labels: [feature]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want?
+      description: Describe it like you'd explain it to a friend. What should players see or be able to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why? (optional)
+      description: What problem does it solve, or what would make it fun?
+  - type: textarea
+    id: done
+    attributes:
+      label: How will we know it's done?
+      description: e.g. "When I shoot a teammate, they glow green for 2 seconds."
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        After you submit, Claude posts a plan here. Reply `@claude go` to approve it, or `@claude <changes>` to adjust it.

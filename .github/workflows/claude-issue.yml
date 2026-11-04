@@ -1,0 +1,149 @@
+# Issue-driven development: Claude plans on new issues, and builds when someone says "@claude go".
+#
+# Runs on the owner's PC (self-hosted runner labeled "unity"). Only people listed in the repo
+# variable ALLOWED_USERS (a JSON array, e.g. ["nvmsocool","friend1"]) can trigger it; for anyone
+# else no job starts at all. It never runs on pull_request events, so forks can't run code here.
+#
+# Comments:
+#   (new issue)                 -> Claude posts a plan / questions
+#   @claude <anything>          -> Claude revises the plan or answers
+#   @claude go | approved | lgtm | ship it  -> Claude implements, builds, opens a PR, posts the build
+name: Claude issue bot
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+defaults:
+  run:
+    # Git Bash on the runner PC. (Plain "bash" on Windows can resolve to WSL.)
+    shell: '"D:\Program Files\Git\bin\bash.exe" --noprofile --norc -eo pipefail {0}'
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  ISSUE: ${{ github.event.issue.number }}
+  BRANCH: claude/issue-${{ github.event.issue.number }}
+  CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+jobs:
+  plan:
+    if: >-
+      (github.event_name == 'issues'
+        && contains(fromJSON(vars.ALLOWED_USERS || '[]'), github.event.issue.user.login))
+      || (github.event_name == 'issue_comment'
+        && !github.event.issue.pull_request
+        && contains(github.event.comment.body, '@claude')
+        && contains(fromJSON(vars.ALLOWED_USERS || '[]'), github.event.comment.user.login)
+        && !contains(github.event.comment.body, '@claude go')
+        && !contains(github.event.comment.body, '@claude approved')
+        && !contains(github.event.comment.body, '@claude lgtm')
+        && !contains(github.event.comment.body, '@claude ship it'))
+    runs-on: [self-hosted, unity]
+    timeout-minutes: 30
+    concurrency: issue-${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { clean: false, lfs: true, fetch-depth: 0, ref: main }
+
+      - name: Prepare workspace
+        run: bash Tools/ci/prepare-workspace.sh
+
+      - name: Ask Claude for a plan
+        run: |
+          gh issue edit "$ISSUE" --add-label planning --remove-label awaiting-approval,needs-info,build-ready 2>/dev/null || true
+          bash Tools/ci/issue-thread.sh "$ISSUE" > "$RUNNER_TEMP/thread.md"
+          cat .github/claude/plan-prompt.md "$RUNNER_TEMP/thread.md" > "$RUNNER_TEMP/prompt.md"
+          claude -p --output-format text \
+            --allowedTools "Read,Glob,Grep" \
+            --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch" \
+            < "$RUNNER_TEMP/prompt.md" > "$RUNNER_TEMP/plan.md"
+
+      - name: Post the plan
+        run: |
+          status=$(grep -oE '^STATUS: *(awaiting-approval|needs-info)' "$RUNNER_TEMP/plan.md" | tail -1 | sed 's/STATUS: *//')
+          status=${status:-awaiting-approval}
+          {
+            echo "### 🤖 Claude's plan"
+            echo
+            grep -vE '^STATUS:' "$RUNNER_TEMP/plan.md"
+            echo
+            echo "---"
+            if [ "$status" = needs-info ]; then
+              echo "_Answer the questions above in a comment that mentions \`@claude\`, and I'll update the plan._"
+            else
+              echo "_Reply \`@claude go\` to start building, or \`@claude <changes>\` to adjust the plan._"
+            fi
+          } > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/comment.md"
+          gh issue edit "$ISSUE" --add-label "$status" --remove-label planning
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh issue comment "$ISSUE" --body "🤖 Planning failed. Run log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          gh issue edit "$ISSUE" --remove-label planning || true
+
+  implement:
+    if: >-
+      github.event_name == 'issue_comment'
+      && !github.event.issue.pull_request
+      && contains(fromJSON(vars.ALLOWED_USERS || '[]'), github.event.comment.user.login)
+      && (contains(github.event.comment.body, '@claude go')
+        || contains(github.event.comment.body, '@claude approved')
+        || contains(github.event.comment.body, '@claude lgtm')
+        || contains(github.event.comment.body, '@claude ship it'))
+    runs-on: [self-hosted, unity]
+    timeout-minutes: 180
+    concurrency: issue-${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { clean: false, lfs: true, fetch-depth: 0, ref: main }
+
+      - name: Prepare workspace
+        run: bash Tools/ci/prepare-workspace.sh
+
+      - name: Announce
+        run: |
+          gh issue comment "$ISSUE" --body "🤖 On it! I'll post a build here when it's ready. [Watch progress]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)"
+          gh issue edit "$ISSUE" --add-label in-progress --remove-label awaiting-approval,needs-info,build-ready || true
+
+      - name: Claude implements the plan
+        run: |
+          bash Tools/ci/issue-thread.sh "$ISSUE" > "$RUNNER_TEMP/thread.md"
+          cat .github/claude/implement-prompt.md "$RUNNER_TEMP/thread.md" > "$RUNNER_TEMP/prompt.md"
+          claude -p --output-format text --permission-mode acceptEdits \
+            --allowedTools "Read,Glob,Grep,Edit,Write,Bash(powershell -ExecutionPolicy Bypass -File Tools/ci/test.ps1),Bash(powershell -ExecutionPolicy Bypass -File Tools/ci/build.ps1),Bash(dotnet test:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(ls:*)" \
+            --disallowedTools "WebFetch,WebSearch" \
+            < "$RUNNER_TEMP/prompt.md" > "$RUNNER_TEMP/result.md"
+          msg=$(grep -m1 -oE '^COMMIT: .*' "$RUNNER_TEMP/result.md" | sed 's/^COMMIT: *//')
+          grep -vE '^COMMIT:' "$RUNNER_TEMP/result.md" > "$RUNNER_TEMP/summary.md"
+          if [ -z "$msg" ] || [ "$msg" = NONE ]; then
+            { echo "### 🤖 I couldn't finish this one"; echo; cat "$RUNNER_TEMP/summary.md"; } > "$RUNNER_TEMP/comment.md"
+            gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/comment.md"
+            gh issue edit "$ISSUE" --add-label needs-info --remove-label in-progress || true
+            echo "SKIP_PUBLISH=1" >> "$GITHUB_ENV"
+          fi
+          echo "$msg" > "$RUNNER_TEMP/commit-msg.txt"
+
+      - name: Test and build
+        if: env.SKIP_PUBLISH != '1'
+        run: |
+          powershell -ExecutionPolicy Bypass -File Tools/ci/test.ps1
+          powershell -ExecutionPolicy Bypass -File Tools/ci/build.ps1 -ZipPath "Builds/FriendlyPersonShooter-issue-$ISSUE.zip"
+
+      - name: Commit, push, PR, release
+        if: env.SKIP_PUBLISH != '1'
+        run: bash Tools/ci/publish.sh
+
+      - name: Report failure
+        if: failure()
+        run: |
+          gh issue comment "$ISSUE" --body "🤖 Something went wrong while building this. Run log: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID — reply \`@claude go\` to retry."
+          gh issue edit "$ISSUE" --add-label needs-info --remove-label in-progress || true

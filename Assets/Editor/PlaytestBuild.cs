@@ -30,5 +30,12 @@ namespace FriendlyPersonShooter.EditorTools
             Debug.Log($"[PlaytestBuild] {summary}");
             return summary;
         }
+
+        /// <summary>Batch-mode entry point for CI: same build, but exits with code 1 if it fails.</summary>
+        public static void BuildWindowsCI()
+        {
+            string summary = BuildWindows();
+            EditorApplication.Exit(summary.StartsWith(nameof(BuildResult.Succeeded)) ? 0 : 1);
+        }
     }
 }

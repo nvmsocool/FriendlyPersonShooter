@@ -96,7 +96,7 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 
 ## Bullet effects
 
-Every gun carries one **payload**, and each payload has two sides: a buff when it hits a player and a debuff when it hits an enemy. Bullets never damage players. A healer is still shooting, and keeping a dodging teammate topped up is a tracking drill of its own.
+Every gun has a **payload slot**. A payload mod in that slot gives the gun one payload, and each payload has two sides: a buff when it hits a player and a debuff when it hits an enemy. Bullets never damage players: without a payload, a hit on an ally heals a tiny amount and still counts toward reviving them. A healer is still shooting, and keeping a dodging teammate topped up is a tracking drill of its own.
 
 | Payload | On an ally (buff) | On an enemy (debuff) |
 | --- | --- | --- |
@@ -171,38 +171,48 @@ Exact counts, timers and speeds get tuned in playtests.
 
 ## Guns, mods and builds
 
-A gun is a **frame** (how it fires) plus a **payload** (what it does) plus up to three **mods** (how it does it). Players carry a primary and a sidearm, so anyone can bring a second, smaller effect.
+Guns are found, not chosen: each gun is a **frame** (how it fires) with three **mod slots** (how well it does it) and one **payload slot** (what its hits do to allies and enemies). Every gun damages enemies. Players carry two guns and swap with Q.
 
 **Frames**
 
 | Frame | Fires | Best against | Support use |
 | --- | --- | --- | --- |
-| Pistol (sidearm) | Accurate semi-auto | Wisps, Sentinels up close | Quick top-ups |
-| Rifle | Accurate bursts | All-rounder | Reliable buffs at mid range |
+| Pistol | Accurate semi-auto | Wisps, Sentinels up close | Quick top-ups |
+| Rifle | Accurate three-round bursts | All-rounder | Reliable buffs at mid range |
 | SMG | Fast spray, falls off with range | Mites, Skitters | Keeps buffs up on a nearby ally |
-| Marksman | Slow, high-damage single shots | Sentinels, Bulwarks | Big buff per hit, hard to land on a moving ally |
+| Marksman | Slow, high-damage single shots; zooms | Sentinels, Bulwarks | Big buff per hit, hard to land on a moving ally |
 | Beam | Continuous; effect builds while on target | Skitters, Divers | Steady healing or shielding; pure tracking |
 | Launcher | Slow projectile with small splash | Mite swarms | Buffs a cluster of allies at once |
 
-**Mod examples**
+Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mouse zooms, by an amount set by the frame and its scope mod.
 
-- **Potency / Duration** — stronger or longer payload.
-- **Split** — carries two payloads at 60% strength each.
-- **Ricochet** — hits on an ally bounce once to the nearest other ally.
-- **Conductor** — adds one extra chain link when you start a chain (see Chains and combos).
-- **Self-share** — you get 20% of the buffs you give. Exists for solo play; worse than having a partner.
-- **Hunter's eye** — your debuffs last longer on elites.
+**Mods**
 
-**Loot.** Mods drop from elites, bosses and raids. Frames come from region bosses. Gear is account-bound and mostly sideways: a top mod is about 30% better than a starter one, so skill stays the main factor.
+- **Stat mods** go in the three mod slots and improve one thing: damage, spread, range, scope, magazine size, reload speed or fire rate.
+- **Payload mods** (Vigor, Might, Haste, Relay, and later Frenzy, Ward and Focus) go only in the payload slot and give the gun that payload.
+- **Special mods** are rare stat mods with an unusual effect:
+    - **Split**: the payload slot holds two payload mods, each at 60% strength.
+    - **Ricochet**: hits on an ally bounce once to the nearest other ally.
+    - **Conductor**: adds one extra chain link when you start a chain (see Chains and combos).
+    - **Self-share**: you get 20% of the buffs you give. Exists for solo play; worse than having a partner.
+- Mods come in three tiers (common, rare, epic). An epic mod is about 30% better than a common one, so skill stays the main factor.
+
+**Finding gear**
+
+- **Loot boxes** stand around every zone. Each player who opens a box gets their own roll (a gun or a mod), so nobody competes for loot.
+- **Bosses** drop gear for everyone who fought them; a raid clear gives each player a guaranteed rare or better item.
+- **Equip on the spot.** There is no inventory: picking up a gun replaces the gun in your hand, and picking up a mod puts it on your current gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it, strangers included.
+- **Starting kit:** one random gun with one random payload mod. The second gun slot starts empty.
+- Gear lasts one session for now, like levels; it becomes account-bound once accounts are saved.
 
 **Example builds**
 
 | Build | Loadout | Job |
 | --- | --- | --- |
 | Medic | Vigor Beam + Ward pistol | Keeps the group alive; lives on tracking |
-| Conductor | Relay rifle with Conductor mod + Haste pistol | Starts chains and sets up the damage player |
-| Striker | Might Marksman (Expose on enemies) + Frenzy pistol | Receives buffs and turns them into weak-point damage |
-| Controller | Slow + Mark Split SMG | Makes enemies easier for everyone to hit; good for weaker aimers |
+| Conductor | Relay rifle with Conductor + Haste pistol | Starts chains and sets up the damage player |
+| Striker | Might Marksman with a scope and damage mods + Frenzy pistol | Receives buffs and turns them into weak-point damage |
+| Controller | Split SMG with Haste and Relay | Spreads two buffs at once; good for weaker aimers |
 | Scout | Haste SMG + Focus pistol | Moves fast, finds blooms, buffs whoever they meet |
 
 ## World and lobbies
@@ -318,7 +328,7 @@ Players progress on five tracks. Two of them (Arsenal and Level) add power, and 
 | Track | What grows | Persists | Earned by |
 | --- | --- | --- | --- |
 | Access | Gates and raids opened | Resets each weekly seed | Spending essence |
-| Arsenal | Frames and mods | Permanent | Elites, bosses, raids |
+| Arsenal | Guns and mods | Per session for now; permanent once accounts are saved | Loot boxes, bosses, raids |
 | Level | Level and skill points for a skill tree with three branches: Offense, Support, Survival | Per session for now; permanent once accounts are saved | XP from kills, buffs and heals on allies, banking essence, revives |
 | Skill | Per-drill stats: flick time, tracking accuracy, switch speed, weak-point rate | Permanent | Playing |
 | Social | Kudos, titles, cosmetics | Permanent | Helping other players |

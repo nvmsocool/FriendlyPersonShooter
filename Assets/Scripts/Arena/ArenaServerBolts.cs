@@ -115,6 +115,7 @@ namespace FriendlyPersonShooter.Arena
         private void HurtPlayer(EntityCommandBuffer ecb, int id, EnemyFamily family, float damage, Vector3 from, int boltId)
         {
             if (!_playerById.TryGetValue(id, out var e) || !_players.TryGetValue(e, out var victim) || victim.Vitals.IsDown) return;
+            if (_run != null && InsideRaid(id)) damage *= _run.DamageTakenMultiplier;
             _damageTaken += victim.Vitals.TakeEnemyDamage(damage, out bool wentDown);
             victim.LastHurt = _time;
             SendAttackFx(ecb, family, damage, from, victim, boltId);

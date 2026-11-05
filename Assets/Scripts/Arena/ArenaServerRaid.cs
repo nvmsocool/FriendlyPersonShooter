@@ -13,9 +13,10 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>
     /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Red and Green
     /// toward its key (carried first, then the party bank), strangers into the same key. A full key starts
-    /// a countdown; whoever stands at the door when it ends goes up to the raid arena together (see
-    /// <see cref="RaidArena"/>) to fight a Bulwark scaled to the group. Clearing it gives everyone inside
-    /// a level's worth of XP and some Yellow; a wipe or the time limit sends them back down.
+    /// a countdown; whoever stands at the door when it ends goes up together for a run (see
+    /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
+    /// group on the raid arena (<see cref="RaidArena"/>). Clearing it gives everyone inside a level's
+    /// worth of XP and some Yellow; a wipe or the time limit sends them back down.
     /// </summary>
     public partial class ArenaServerSystem
     {
@@ -75,7 +76,7 @@ namespace FriendlyPersonShooter.Arena
                 int id = st.Vitals.Id;
                 if (st.Vitals.IsDown || _raid.IsInside(id)) continue;
                 var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
-                bool atDoor = _map.Distance(ExpeditionWorld.Ground(pos), door) <= _raid.Settings.UseRadius && !RaidArena.Contains(pos);
+                bool atDoor = _map.Distance(ExpeditionWorld.Ground(pos), door) <= _raid.Settings.UseRadius && !RaidArena.InRaidSpace(pos);
                 if (!atDoor && !_raidTakeEveryone) continue;
                 _atDoor.Add(id);
                 if (!atDoor) continue;
@@ -109,19 +110,27 @@ namespace FriendlyPersonShooter.Arena
         {
             var inside = _raid.Participants;
             int n = inside.Count;
-            float health = BulwarkSettings.HealthFor(n, _combat);
+            _run = new RaidRun(NextSeed(), n, null, DebugRaidRoom, DebugRaidModifier);
+            _run.Begin(_time);
+            _raidWaveDue = 0;
+            _raidBossDead = false;
+            _raidsStarted++;
+            _announce.Add((AnnounceKind.RaidStarted, n, 0, 0));
+            Debug.Log($"[Raid] started with {n} player(s): [{string.Join(",", inside)}], rooms {string.Join(" > ", _run.Rooms)} > Bulwark, modifier {_run.Modifier}");
+            EnterStage();
+        }
+
+        /// <summary>The run's last stage: the Bulwark, scaled to the group, on the raid arena.</summary>
+        private void SpawnRaidBoss(int players)
+        {
+            float health = BulwarkSettings.HealthFor(players, _combat);
             var random = new Unity.Mathematics.Random(NextSeed() | 1u);
             var state = new EnemyState { Family = EnemyFamily.Bulwark, MaxHealth = health, Raid = true };
             state.Boss = BulwarkBehavior.Create(ToVec(RaidArena.Center), random.NextFloat(0f, 360f), _bulwark);
             _spawned.Clear();
             SpawnEnemy(state, state.Boss.Position);
             _spawned.Clear();
-            _raidWaveDue = 0;
-            _raidBossDead = false;
-            for (int i = 0; i < n; i++) TeleportPlayer(inside[i], RaidArena.SpawnSpot(i, n));
-            _raidsStarted++;
-            _announce.Add((AnnounceKind.RaidStarted, n, 0, 0));
-            Debug.Log($"[Raid] started with {n} player(s): [{string.Join(",", inside)}], Bulwark health {health:0}");
+            Debug.Log($"[Raid] the Bulwark arrives with {health:0} health");
         }
 
         private void StepRaidRun(EntityCommandBuffer ecb)
@@ -134,6 +143,8 @@ namespace FriendlyPersonShooter.Arena
             }
             _raidScratch.Clear();
             _raidScratch.AddRange(_raid.Participants);
+            _roomPlayers.Clear();
+            var room = _run.Room;
             int up = 0;
             for (int i = 0; i < _raidScratch.Count; i++)
             {
@@ -145,15 +156,23 @@ namespace FriendlyPersonShooter.Arena
                 }
                 var pos = EntityManager.GetComponentData<LocalTransform>(e).Position;
                 // Far below: they bled out to a shrine or reset their position down there.
-                if (!RaidArena.Contains(pos, 120f))
+                if (!RaidArena.InRaidSpace(pos))
                 {
                     _raid.Leave(id);
                     continue;
                 }
-                // Fell off the edge: back onto the platform.
-                if (pos.y < RaidArena.FloorY - 8f) TeleportPlayer(id, RaidArena.SpawnSpot(i, _raidScratch.Count));
+                // Fell off the edge, or somehow outside the current room: back onto its platform
+                // (the gauntlet handles its own falls).
+                bool fell = room != RaidRoomKind.Gauntlet && pos.y < RaidArena.RoomCenter(room).y - 8f;
+                if (fell || !RaidArena.InRoom(room, pos, 60f, 60f))
+                {
+                    pos = RaidArena.RoomSpawn(room, i, _raidScratch.Count);
+                    TeleportPlayer(id, pos);
+                }
                 if (!st.Vitals.IsDown) up++;
+                _roomPlayers.Add((id, RaidArena.ToRoom(room, pos), !st.Vitals.IsDown));
             }
+            if (!_run.AtBoss) StepRoom(ecb);
 
             if (_raidWaveDue > 0)
             {
@@ -176,12 +195,12 @@ namespace FriendlyPersonShooter.Arena
             for (int i = 0; i < skitters; i++)
             {
                 var o = random.NextFloat2Direction() * random.NextFloat(8f, RaidArena.HalfSize - 4f);
-                SpawnSkitter(new Vector3(c.x + o.x, c.y + _skitter.BodyRadius, c.z + o.y));
+                for (int k = 0; k < _run.AddsMultiplier; k++) SpawnSkitter(new Vector3(c.x + o.x, c.y + _skitter.BodyRadius, c.z + o.y));
             }
             if (wave >= 2)
             {
                 var o = random.NextFloat2Direction() * 12f;
-                SpawnSwarm(new Vector3(c.x + o.x, c.y + 1.5f, c.z + o.y));
+                for (int k = 0; k < _run.AddsMultiplier; k++) SpawnSwarm(new Vector3(c.x + o.x, c.y + 1.5f, c.z + o.y));
             }
             foreach (var s in _spawned) s.Raid = true;
             _spawned.Clear();
@@ -191,7 +210,7 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>The boss died (called from KillEnemy, mid-shot): the run ends on the raid's next step.</summary>
         private void RaidBossKilled()
         {
-            if (_raid != null && _raid.Phase == RaidPhase.Running) _raidBossDead = true;
+            if (_raid != null && _raid.Phase == RaidPhase.Running && _run != null && _run.AtBoss) _raidBossDead = true;
         }
 
         private void EndRaid(RaidOutcome outcome, EntityCommandBuffer ecb)
@@ -202,17 +221,9 @@ namespace FriendlyPersonShooter.Arena
             _raid.Finish(_time, outcome);
 
             // Whatever is left of the fight goes away (no drops).
-            _scratch.Clear();
-            foreach (var kv in _enemies) if (kv.Value.Raid) _scratch.Add(kv.Key);
-            foreach (var e in _scratch)
-            {
-                var s = _enemies[e];
-                _enemies.Remove(e);
-                _enemyById.Remove(s.Vitals.Id);
-                _lobby.Combos.Forget(s.Vitals.Id, false);
-                _ledger.Forget(s.Vitals.Id);
-                ecb.DestroyEntity(e);
-            }
+            ClearRaidEnemies(ecb);
+            string reached = _run == null ? "" : $" at stage {_run.Stage + 1}/{_run.StageCount} ({RaidRoomLayout.NameOf(_run.Room)})";
+            _run = null;
 
             // Everyone inside comes back down by the door. On a clear the downed get back up and everyone
             // is paid; otherwise the downed keep bleeding out by the door, where others can revive them.
@@ -250,7 +261,7 @@ namespace FriendlyPersonShooter.Arena
                 _announce.Add((AnnounceKind.RaidFailed, (int)outcome, 0, 0));
             }
             _raidResults += $"{outcome}:{_raidScratch.Count}p/{took:0}s ";
-            Debug.Log($"[Raid] {outcome} after {took:0}s with {_raidScratch.Count} player(s) inside");
+            Debug.Log($"[Raid] {outcome} after {took:0}s with {_raidScratch.Count} player(s) inside{reached}");
         }
 
         /// <summary>Moves a player (server-side, like Reset position) and tells movement and lag compensation it was a jump.</summary>
@@ -265,16 +276,6 @@ namespace FriendlyPersonShooter.Arena
             st.History.Record(_tick, ToVec(spot), true, teleported: true);
         }
 
-        /// <summary>Keeps a raid Skitter on the platform: a step past the walls turns it back.</summary>
-        private static void KeepInArena(ref SkitterBehavior k, Vector3 before)
-        {
-            var c = RaidArena.Center;
-            float limit = RaidArena.HalfSize - 1.2f;
-            if (math.abs(k.Position.X - c.x) <= limit && math.abs(k.Position.Z - c.z) <= limit) return;
-            k.Position = before;
-            k.Heading = -k.Heading;
-        }
-
         /// <summary>The HUD objective while a player is inside the raid, at the door, or called to it.</summary>
         private bool TryRaidObjective(int id, Vector2 pos, ExpeditionPhase phase, out ExpeditionObjective objective)
         {
@@ -283,10 +284,10 @@ namespace FriendlyPersonShooter.Arena
             var door = RaidDoorPoint;
             float toDoor = _map.Distance(pos, door);
             int left = (int)_raid.TimeLeft(_time);
-            if (_raid.IsInside(id))
+            if (_raid.IsInside(id) && _run != null)
             {
-                objective = new ExpeditionObjective(phase,
-                    $"RAID: break the Bulwark. Shoot its plate while it's open (gold). {left / 60}:{left % 60:00} left", false, default, "raid");
+                string text = RoomObjective(out bool hasTarget, out var target);
+                objective = new ExpeditionObjective(phase, text, hasTarget, target, "portal");
                 return true;
             }
             if (_raid.Phase == RaidPhase.Gathering && toDoor <= RaidCallRadius)
@@ -313,16 +314,17 @@ namespace FriendlyPersonShooter.Arena
             status.KeyRed = _raid.Pledged(EssenceColor.Red);
             status.KeyGreen = _raid.Pledged(EssenceColor.Green);
             status.RaidTimer = (float)_raid.TimeLeft(_time);
+            WriteRoomStatus(id, ref status);
         }
 
         private string RaidLog()
         {
             if (_raid == null) return "";
             float bossHealth = -1f;
-            foreach (var s in _enemies.Values) if (s.Family == EnemyFamily.Bulwark) bossHealth = s.Vitals.Health;
+            foreach (var s in _enemies.Values) if (s.Family == EnemyFamily.Bulwark && s.Raid) bossHealth = s.Vitals.Health;
             return $"phase={_raid.Phase} key=R{_raid.Pledged(EssenceColor.Red)}/G{_raid.Pledged(EssenceColor.Green)} pledged={_raidPledged} " +
                    $"inside=[{(_raid.Phase == RaidPhase.Running ? string.Join(",", _raid.Participants) : "")}] boss={bossHealth:0} started={_raidsStarted} cleared={_raidsCleared} " +
-                   $"failed={_raidsFailed} results=[{_raidResults}]";
+                   $"failed={_raidsFailed} results=[{_raidResults}] {RunLog()}";
         }
     }
 }

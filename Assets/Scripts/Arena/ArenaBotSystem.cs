@@ -135,8 +135,16 @@ namespace FriendlyPersonShooter.Arena
             }
 
             var eye = pos + new float3(0f, ArenaSettings.EyeHeight, 0f);
+            bool hasStatus = ExpeditionWorld.Active && EntityManager.HasComponent<ExpeditionStatus>(me);
+            var raidStatus = hasStatus ? EntityManager.GetComponentData<ExpeditionStatus>(me) : default;
+            bool grounded = EntityManager.GetComponentData<ArenaMotion>(me).Grounded;
             float3 anchor;
-            if (_target != Entity.Null && EntityManager.Exists(_target))
+            // Raid Color Locks: when it's this bot's turn, the next crystal comes before any enemy.
+            if (hasStatus && CrystalAim(dt, eye, raidStatus, ref input))
+            {
+                anchor = pos;
+            }
+            else if (_target != Entity.Null && EntityManager.Exists(_target))
             {
                 var tpos = ExpeditionWorld.Near(EntityManager.GetComponentData<LocalTransform>(_target).Position, pos);
                 float radius;
@@ -197,7 +205,6 @@ namespace FriendlyPersonShooter.Arena
                 input.Pitch = 0f;
                 anchor = new float3(0f, 0f, 8f);
             }
-
             // Expedition: the Medic sticks with the leader; the others play their own expedition
             // (hunt Wisps, bank and pay at the gate, walk through), fighting on the way.
             var moveSettings = _moveSettings;
@@ -222,13 +229,15 @@ namespace FriendlyPersonShooter.Arena
                     }
                 }
                 if (!travelling && _hasLeader) anchor = ExpeditionWorld.Near(_leader, pos);
-                // In the raid arena: stay on the platform, near the fight (the leader may be down on the ground).
-                if (RaidArena.Contains(pos) && !RaidArena.Contains(anchor)) anchor = RaidArena.Center;
+                // In the raid: stay in the room, near the fight (the leader may be down on the ground).
+                if (RaidArena.RoomAt(pos, out var raidRoom) && !RaidArena.InRoom(raidRoom, anchor)) anchor = RaidArena.RoomCenter(raidRoom);
             }
+            bool straight = false, roomJump = false;
+            if (hasStatus && RoomAnchor(pos, grounded, raidStatus, ref anchor, out straight, out roomJump)) moveSettings = _travelSettings;
 
             // On generated ground, far anchors are reached along a path (ramps, bridges, around cliffs).
             bool climb = false;
-            bool onPlatform = ExpeditionWorld.Active && RaidArena.Contains(pos);
+            bool onPlatform = ExpeditionWorld.Active && RaidArena.InRaidSpace(pos);
             if (ExpeditionTerrain.Active && !onPlatform &&
                 (math.distance(pos.xz, anchor.xz) > moveSettings.MaxDistance + 2f || math.abs(anchor.y - pos.y) > 3f))
             {
@@ -239,6 +248,19 @@ namespace FriendlyPersonShooter.Arena
             var move = _mover.Step(dt, ToVec(pos), input.Yaw, ToVec(anchor), moveSettings);
             input.Horizontal = move.Horizontal;
             input.Vertical = move.Vertical;
+            if (straight)
+            {
+                // Gauntlet stones and portals: face it and walk straight in, no dodging.
+                var to = anchor - pos;
+                input.Yaw = math.degrees(math.atan2(to.x, to.z));
+                input.Pitch = 0f;
+                input.Fire = 0;
+                input.Horizontal = 0;
+                input.Vertical = math.length(to.xz) > 0.35f ? 1 : 0;
+                move.Jump = false;
+                climb = false;
+            }
+            if (roomJump && grounded) input.Jump.Set();
             if (climb && EntityManager.GetComponentData<ArenaMotion>(me).Grounded) input.Jump.Set();
             else if (move.Jump && !ExpeditionTerrain.Active) input.Jump.Set();
             SetInput(me, input);

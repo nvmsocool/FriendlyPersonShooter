@@ -40,6 +40,25 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public int KeyGreen;
         [GhostField(Quantization = 10)] public float RaidTimer;
 
+        /// <summary>
+        /// Inside a raid run: the stage (0-based; StageCount - 1 is the boss), the room, the run's modifier,
+        /// the room's state packed per kind (Color Locks: <see cref="Core.Expedition.ColorLocks.Pack"/>;
+        /// plates: count | held mask &lt;&lt; 4; gauntlet: furthest stone; storm: kills | target &lt;&lt; 8),
+        /// its progress, its clock (gauntlet sweepers turn on it), a room timer (storm), and the portal:
+        /// -2 shut, -1 open, else seconds until everyone moves on.
+        /// </summary>
+        [GhostField] public int RaidStage;
+        [GhostField] public int RaidStageCount;
+        [GhostField] public Core.Expedition.RaidRoomKind RaidRoom;
+        [GhostField] public Core.Expedition.RaidModifier RaidModifier;
+        [GhostField] public int RaidRoomData;
+        [GhostField(Quantization = 100)] public float RaidRoomProgress;
+        [GhostField(Quantization = 100)] public float RaidRoomClock;
+        [GhostField(Quantization = 10)] public float RaidRoomTimer;
+        [GhostField(Quantization = 10)] public float RaidPortal;
+        /// <summary>Color Locks: you lit the last crystal, so someone else must take the next.</summary>
+        [GhostField] public bool RaidYouHitLast;
+
         /// <summary>The Colossus (world boss) is up: where it hovers (world x, z) and its health share.</summary>
         [GhostField] public bool WorldBoss;
         [GhostField(Quantization = 10)] public float2 WorldBossAt;

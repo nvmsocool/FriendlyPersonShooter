@@ -168,9 +168,13 @@ namespace FriendlyPersonShooter.Arena
                     var d = FireControl.Spread(ToVec(aim), stats.SpreadFor(zoomed), ref rng);
                     var dir = ToFloat3(d);
                     float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
+                    // Raid Color Locks: a crystal in front stops the shot.
+                    int crystal = CrystalOnShot(shooter.Vitals.Id, eye, dir, range, out float crystalAt);
+                    if (crystal >= 0) range = crystalAt;
                     var end = eye + dir * range;
                     bool landed = HitScan.Cast(ToVec(eye), d, range, _targets, out var hit, shooter.Vitals.Id);
                     if (landed) end = ToFloat3(hit.Point);
+                    else if (crystal >= 0) CrystalHit(crystal, shooter.Vitals.Id);
 
                     if (stats.Mode == FireMode.Projectile)
                     {

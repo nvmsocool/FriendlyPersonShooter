@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Expedition;
 using Unity.Mathematics;
 using UnityEngine;
@@ -9,6 +10,9 @@ namespace FriendlyPersonShooter.Arena
     /// ground (fog hides everything past ~235 m). It is ordinary collision on the zones' layer, so player
     /// movement, shots, bots and Skitters all treat it as ground. The server and every client build the
     /// same colliders from the layer map; clients also draw it (see ArenaView).
+    /// Each room kind a raid run can pick (<see cref="RaidRoomLayout"/>) has its own platform, stacked
+    /// <see cref="RoomSpacing"/> apart above the boss arena, so every platform exists all the time and a
+    /// run just moves its players from one to the next.
     /// </summary>
     public static class RaidArena
     {
@@ -20,6 +24,8 @@ namespace FriendlyPersonShooter.Arena
         public const float PillarHeight = 4f;
         /// <summary>Players spawn on a ring this far from the boss.</summary>
         public const float SpawnRing = 17f;
+        /// <summary>Room platforms sit this far apart, straight up (well past the fog, so each looks alone).</summary>
+        public const float RoomSpacing = 300f;
 
         /// <summary>One box of the arena, in world space (centre and full size).</summary>
         public readonly struct Box
@@ -74,6 +80,55 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>The centre (floor top) of a room's platform; the boss arena for <see cref="RaidRoomKind.Boss"/>.</summary>
+        public static float3 RoomCenter(RaidRoomKind kind) => Center + new float3(0f, RoomSpacing * (int)kind, 0f);
+
+        /// <summary>A world point in a room's own coordinates (as <see cref="RaidRoomLayout"/> uses them).</summary>
+        public static System.Numerics.Vector3 ToRoom(RaidRoomKind kind, float3 world)
+        {
+            var c = RoomCenter(kind);
+            var d = ExpeditionWorld.Near(world, c) - c;
+            return new System.Numerics.Vector3(d.x, d.y, d.z);
+        }
+
+        public static float3 FromRoom(RaidRoomKind kind, System.Numerics.Vector3 local) => RoomCenter(kind) + new float3(local.X, local.Y, local.Z);
+
+        /// <summary>True for a point in a room's space (the boss arena's for Boss).</summary>
+        public static bool InRoom(RaidRoomKind kind, float3 p, float below = 40f, float above = 40f) =>
+            kind == RaidRoomKind.Boss ? Contains(p, below, above) : RaidRoomLayout.For(kind).Contains(ToRoom(kind, p), below, above);
+
+        /// <summary>True anywhere up among the raid platforms (far above any ground).</summary>
+        public static bool InRaidSpace(float3 p) => p.y > FloorY - 150f;
+
+        /// <summary>The room whose space holds a point (Boss for the arena), or false.</summary>
+        public static bool RoomAt(float3 p, out RaidRoomKind kind)
+        {
+            kind = RaidRoomKind.Boss;
+            if (!InRaidSpace(p)) return false;
+            int k = (int)math.round((p.y - FloorY) / RoomSpacing);
+            if (k < 0 || k > (int)RaidRoomKind.WispStorm) return false;
+            kind = (RaidRoomKind)k;
+            return true;
+        }
+
+        /// <summary>The i-th arrival spot in a room (the boss ring for Boss).</summary>
+        public static float3 RoomSpawn(RaidRoomKind kind, int i, int n)
+        {
+            if (kind == RaidRoomKind.Boss) return SpawnSpot(i, n);
+            var spawns = RaidRoomLayout.For(kind).Spawns;
+            return FromRoom(kind, spawns[((i % spawns.Count) + spawns.Count) % spawns.Count]) + new float3(0f, 0.05f, 0f);
+        }
+
+        /// <summary>Every room's boxes in world space (the boss arena's are in <see cref="Boxes"/>).</summary>
+        public static IEnumerable<(RaidRoomKind Kind, RaidBox Box, Vector3 Center)> RoomBoxes()
+        {
+            foreach (var kind in RaidRoomLayout.Pool)
+            {
+                var c = (Vector3)RoomCenter(kind);
+                foreach (var b in RaidRoomLayout.For(kind).Boxes) yield return (kind, b, c + new Vector3(b.Center.X, b.Center.Y, b.Center.Z));
+            }
+        }
+
         /// <summary>Builds the arena's colliders once per scene (server and clients in one process share them).</summary>
         public static void Ensure()
         {
@@ -89,6 +144,14 @@ namespace FriendlyPersonShooter.Arena
                 go.transform.SetParent(_root.transform, false);
                 go.transform.position = b.Center;
                 go.AddComponent<BoxCollider>().size = b.Size;
+            }
+            foreach (var (kind, b, center) in RoomBoxes())
+            {
+                var go = new GameObject($"{kind} {b.Kind}");
+                go.layer = 0;
+                go.transform.SetParent(_root.transform, false);
+                go.transform.position = center;
+                go.AddComponent<BoxCollider>().size = new Vector3(b.Size.X, b.Size.Y, b.Size.Z);
             }
             Physics.SyncTransforms();
         }

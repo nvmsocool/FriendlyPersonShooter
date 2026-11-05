@@ -179,6 +179,15 @@ namespace FriendlyPersonShooter.Arena
         WorldBossLanded = 16,
         /// <summary>The Colossus fell. Value = how many players hit it.</summary>
         WorldBossDown = 17,
+        /// <summary>Raid run: a stage began. Value = (int)RaidRoomKind, Player = stage index, Other = (int)RaidModifier.</summary>
+        RaidStage = 18,
+        /// <summary>Raid run: a room was solved. Value = (int)RaidRoomKind, Player = XP paid, Other = Yellow paid.</summary>
+        RaidRoomSolved = 19,
+        /// <summary>
+        /// Raid run: a room set the group back. Value = (int)RaidRoomKind, Other = why (0 wrong crystal,
+        /// 1 too slow, 2 storm timer), Player = who hit the wrong crystal.
+        /// </summary>
+        RaidSetback = 20,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

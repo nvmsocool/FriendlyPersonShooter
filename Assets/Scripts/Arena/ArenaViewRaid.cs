@@ -145,6 +145,7 @@ namespace FriendlyPersonShooter.Arena
 
             // Hidden in the fog from the ground anyway, so only drawn when the camera is near.
             if (RaidArena.Contains(_camRef, 200f, 200f)) DrawArena();
+            if (RaidArena.InRaidSpace(_camRef)) DrawRooms(status);
             DrawDoor(status);
         }
 
@@ -586,7 +587,8 @@ namespace FriendlyPersonShooter.Arena
             int t = (int)s.RaidTimer;
             if (s.InRaid)
             {
-                if (_bossSeen && _bossMax > 0f)
+                if (s.RaidStageCount > 0) WriteRoomHud(s, e);
+                if (_bossSeen && _bossMax > 0f && s.RaidRoom == RaidRoomKind.Boss)
                 {
                     float f = math.saturate(_bossHealth / _bossMax);
                     int bars = Mathf.RoundToInt(f * 24f);
@@ -594,7 +596,7 @@ namespace FriendlyPersonShooter.Arena
                         : _bossWarn ? "<color=#FF9A40>plate opening...</color>" : "<color=#B8B0D8>plate shut (hits do 1/5)</color>";
                     e.Append($"<color=#D9B3FF><b>BULWARK</b></color>  [{new string('|', bars)}{new string('.', 24 - bars)}]  {f * 100f:0}%   {plate}\n");
                 }
-                e.Append($"<color=#D9B3FF>Raid time left {t / 60}:{t % 60:00}</color>\n");
+                if (s.RaidStageCount == 0) e.Append($"<color=#D9B3FF>Raid time left {t / 60}:{t % 60:00}</color>\n");
                 return;
             }
             var door = RaidArena.Door;
@@ -620,8 +622,10 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        private static string RaidAnnouncement(ArenaAnnounce m)
+        private string RaidAnnouncement(ArenaAnnounce m)
         {
+            var room = RoomAnnouncement(m);
+            if (room != null) return room;
             switch (m.Kind)
             {
                 case AnnounceKind.RaidGathering:

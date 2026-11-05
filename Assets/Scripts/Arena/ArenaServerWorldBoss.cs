@@ -95,7 +95,7 @@ namespace FriendlyPersonShooter.Arena
             foreach (var kv in _players)
             {
                 var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
-                if (RaidArena.Contains(pos)) continue;
+                if (RaidArena.InRaidSpace(pos)) continue;
                 _worldPlayers.Add(ExpeditionWorld.Ground(pos));
             }
             var site = _world.PickSite(_map, _worldPlayers, NextSeed());

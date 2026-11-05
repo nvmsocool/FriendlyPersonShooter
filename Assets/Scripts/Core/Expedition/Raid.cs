@@ -17,8 +17,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float UseRadius { get; set; } = 7f;
         /// <summary>Once the key is full: seconds everyone has to reach the door before it takes them in.</summary>
         public float GatherSeconds { get; set; } = 20f;
-        /// <summary>A run ends as a loss after this long.</summary>
-        public float TimeLimit { get; set; } = 480f;
+        /// <summary>A run (three rooms and the boss) ends as a loss after this long.</summary>
+        public float TimeLimit { get; set; } = 720f;
         /// <summary>Seconds after a run before the door takes pledges again.</summary>
         public float ResetSeconds { get; set; } = 20f;
         public int MaxPlayers { get; set; } = 8;

@@ -229,6 +229,7 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
 - **Raids** are doors in the world. Whoever is standing at the door when its key is fully pooled goes in together, party or not. Raids take 4–8 players, the boss scales to the group size, and everyone returns to the door's zone afterward.
+- **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. The build order lives in `Docs/RaidDevPlan.md`.
 - **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it. A world boss fights differently from raid bosses: raid bosses test aim under pressure in a closed room, world bosses test movement in the open (dodging, jumping, using cover).
 
 **Zones and generation**
@@ -435,6 +436,15 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
   - After the slam it is stunned for 5 s: the petals open, it takes full damage and the gold core is a weak point. The HUD says when to dodge, jump and shoot.
 - **Loot boxes:** 9 per zone instead of 3 (since the tiling switch: 9 per hexagon, fewer in smaller zones).
 - **Red and Green enemies:** they were spawning, but the dark red Skitters and tiny Mites were hard to spot. Both now glow, Mites are bigger, and the minimap shows enemies as dots in their essence color.
+
+**Raid runs, phase 1 (built Nov 5, 2026; not yet playtested).** A raid is now 3 random rooms from a pool of 4, then the Bulwark, in 12 minutes (was 8).
+- **Color Locks** (puzzle): an altar shows an order of Yellow, Red and Green crystals (3, 4, then 5 long; one longer for 6+ players). Shoot them in order, each hit by a different player than the last, at most 6 s apart. A wrong crystal or a pause starts the round over. Skitters climb on every 30 s.
+- **Hold the Plates** (puzzle): about half the group (1–4 plates) stands on every lit plate at once for 25 s. The bar drains slowly while any plate is empty, and Skitters and Mites come every 14 s.
+- **Sweeper Gauntlet** (skill): 12 stepping stones about 2 m apart over the void, with low turning arms on four of them. Jump the arms (6 damage) and the gaps (a fall sends you back to the start, 5 damage). Gauntlet damage never takes anyone below 10 health. Everyone up must stand on the far pad.
+- **Wisp Storm** (skill): kill 8 + 2 per player Wisps in 90 s. The storm's Wisps don't shoot back; running out of time starts the count over.
+- **Portals:** a solved room pays everyone inside 75 XP and 3 Yellow and opens a portal. When someone steps in, everyone moves on 5 s later, the downed get up, and everyone is healed.
+- **Modifiers** (one per run): Swarming (twice the adds; the storm needs 4 more kills), Swift Bolts (enemy bolts 40% faster), Brittle (players take 30% more damage; rooms pay 50% more).
+- Checked in the Editor with 3 bots, which solve every room on their own (gauntlet 25 s, plates 27 s, Color Locks 13 s, storm 67 s) and reach the Bulwark; they wiped at about 25% boss health, so the boss clear waits for the playtest. The storm was made easier (and its Wisps passive) after bots kept failing it while being shot. Standing on a sweeper's pivot always gets you hit, so cross beside it.
 
 **Zone tiling (built Nov 5, 2026; not yet playtested).** The square 4x4 grid of 250 m zones is replaced by a wrapping rhombitrihexagonal tiling of 54 zones: 9 hexagons (250 m tall), 27 squares and 18 triangles, about 1 km across. Zones are named like "2.1" (a hexagon) and "2.1a" to "2.1e" (its squares and triangles). Features and loot boxes scale with zone area, players start in a hexagon, and the gate stands in a far hexagon. The generated ground follows each zone's outline and meets its neighbors exactly at the border height. Zones load around you by distance instead of by grid neighbor, and bot pathfinding follows paths across the wrap.
 

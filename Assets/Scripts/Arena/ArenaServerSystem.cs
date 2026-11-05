@@ -88,6 +88,8 @@ namespace FriendlyPersonShooter.Arena
             public float MaxHealth;
             /// <summary>Part of the raid fight: removed (without drops) when the run ends.</summary>
             public bool Raid;
+            /// <summary>Never attacks (Wisp Storm targets: the room tests aim, the timer is the pressure).</summary>
+            public bool Passive;
             /// <summary>The Colossus, the open-world boss (Family Bulwark, but its own behavior).</summary>
             public bool WorldBoss;
             public ColossusBehavior Colossus;
@@ -228,7 +230,7 @@ namespace FriendlyPersonShooter.Arena
                     var random = new Unity.Mathematics.Random(NextSeed() | 1u);
                     bool inRaid = InsideRaid(id);
                     if (!inRaid && _banking != null) _banking.PositionReset(id, _time);
-                    float3 spot = inRaid ? RaidArena.SpawnSpot(random.NextInt(8), 8)
+                    float3 spot = inRaid ? RaidArena.RoomSpawn(_run != null ? _run.Room : RaidRoomKind.Boss, random.NextInt(8), 8)
                         : ExpeditionWorld.Active ? ExpeditionWorld.ShrineSpawn(transform.ValueRO.Position, ref random)
                         : ServerAccounts.SpawnOverride != null ? ServerAccounts.SpawnOverride() : float3.zero;
                     transform.ValueRW.Position = spot;
@@ -469,7 +471,7 @@ namespace FriendlyPersonShooter.Arena
                         var before = s.Skitter.Position;
                         s.Skitter.Step(moveDt, _skitter);
                         if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
-                        if (s.Raid) KeepInArena(ref s.Skitter, before);
+                        if (s.Raid) KeepInRoom(ref s.Skitter, before);
                         position = s.Skitter.Position;
                         break;
                     case EnemyFamily.Glimmer:
@@ -497,7 +499,7 @@ namespace FriendlyPersonShooter.Arena
                 }
 
                 float wither = s.Vitals.Tick(dt);
-                if (s.Family != EnemyFamily.Glimmer && !s.WorldBoss)
+                if (s.Family != EnemyFamily.Glimmer && !s.WorldBoss && !s.Passive)
                 {
                     if (ExpeditionWorld.Active) NearCandidates(position);
                     // Enemies look from a little above their centre (a Skitter's centre is close to the ground).
@@ -508,7 +510,8 @@ namespace FriendlyPersonShooter.Arena
                     if (attack.Kind == AttackEventKind.Fired)
                     {
                         var a = s.AttackSettings;
-                        FireBolt(ecb, s.Family, eye, attack.Aim, a.BoltSpeed, a.BoltRadius, attack.Damage, a.Range);
+                        float boltSpeed = a.BoltSpeed * (s.Raid && _run != null ? _run.BoltSpeedMultiplier : 1f);
+                        FireBolt(ecb, s.Family, eye, attack.Aim, boltSpeed, a.BoltRadius, attack.Damage, a.Range);
                     }
                     else if (attack.Kind == AttackEventKind.Hit) HurtPlayer(ecb, attack.TargetId, s.Family, attack.Damage, position, 0);
                 }
@@ -560,6 +563,7 @@ namespace FriendlyPersonShooter.Arena
                     if (s.WorldBoss) WorldBossKilled(s, ecb);
                     else RaidBossKilled();
                 }
+                if (s.Raid && s.Family == EnemyFamily.Wisp && _run != null && _run.Room == RaidRoomKind.WispStorm) _run.Storm.Kill();
                 ExpeditionKill(s);
                 return;
             }

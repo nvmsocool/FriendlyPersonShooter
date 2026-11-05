@@ -277,7 +277,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     // At the raid door this runs after the key took its Red and Green (StepRaid goes first);
                     // at a gate it runs before paying, so freshly banked Yellow can open it straight away.
-                    if (!RaidArena.Contains(transform.ValueRO.Position))
+                    if (!RaidArena.InRaidSpace(transform.ValueRO.Position))
                     {
                         int banked = _banking.TryBank(wallet, pos, _time).Total;
                         if (banked > 0)

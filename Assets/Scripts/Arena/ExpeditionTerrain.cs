@@ -88,6 +88,14 @@ namespace FriendlyPersonShooter.Arena
             return true;
         }
 
+        /// <summary>Distance along a ray to the ground, a zone structure or foliage, or float.MaxValue.</summary>
+        public static float SightRaycast(float3 origin, float3 direction, float maxDistance)
+        {
+            var w = World;
+            if (w == null) return float.MaxValue;
+            return w.SightRaycast(origin, direction, maxDistance, out var hit) ? hit.distance : float.MaxValue;
+        }
+
         /// <summary>Distance along a ray to the ground or a zone structure, or float.MaxValue.</summary>
         public static float Raycast(float3 origin, float3 direction, float maxDistance)
         {

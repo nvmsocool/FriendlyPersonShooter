@@ -41,9 +41,9 @@ namespace FriendlyPersonShooter.Arena
         {
             _wispMat = MakeMat(new Color(1f, 0.9f, 0.2f));
             _wispDimMat = MakeMat(new Color(0.45f, 0.42f, 0.3f));
-            _skitterMat = MakeMat(new Color(0.85f, 0.15f, 0.12f));
+            _skitterMat = MakeGlow(new Color(1f, 0.15f, 0.1f), 1.1f);
             _coreMat = MakeMat(new Color(1f, 0.95f, 0.8f));
-            _miteMat = MakeMat(new Color(0.3f, 0.9f, 0.3f));
+            _miteMat = MakeGlow(new Color(0.3f, 1f, 0.35f), 1.6f);
             _telegraphMat = MakeMat(new Color(1f, 0.55f, 0.1f));
             _vigorMat = MakeMat(new Color(0.55f, 1f, 0.6f));
             _mightMat = MakeMat(new Color(1f, 0.4f, 0.2f));
@@ -126,6 +126,7 @@ namespace FriendlyPersonShooter.Arena
             var tagged = new List<Matrix4x4>();
             var glimmers = new List<Matrix4x4>();
             _bossSeen = false;
+            _colossusSeen = false;
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
@@ -151,12 +152,13 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case EnemyFamily.Bulwark:
                         // The raid boss: a big shell with a plate on one side (its health bar is on the HUD).
-                        size = en.World ? 4.2f * 1.8f : 4.2f;
+                        size = en.World ? 12f : 4.2f;
                         AddBoss(en, p);
                         break;
                     default:
-                        size = 0.3f;
-                        (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * size));
+                        // A bright green spinning chip, a little bigger than its hit sphere so swarms read from afar.
+                        size = 0.4f;
+                        (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 180f + i * 37f, 45f), Vector3.one * size));
                         break;
                 }
 

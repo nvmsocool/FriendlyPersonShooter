@@ -316,9 +316,15 @@ namespace FriendlyPersonShooter.Arena
             }
             // The raid boss's shell shrugs off most damage; only its open plate takes full hits.
             float baseDamage = damage;
-            if (enemy.Family == EnemyFamily.Bulwark)
+            if (enemy.Family == EnemyFamily.Bulwark && enemy.WorldBoss)
             {
-                enemy.Boss.HitOutcome(weakPoint, ShapeOf(enemy), out float armor, out weakPoint);
+                // The Colossus: armored everywhere until a slam stuns it; then its core is a weak point.
+                baseDamage *= enemy.Colossus.DamageMultiplier(_colossus);
+                weakPoint = weakPoint && enemy.Colossus.Exposed;
+            }
+            else if (enemy.Family == EnemyFamily.Bulwark)
+            {
+                enemy.Boss.HitOutcome(weakPoint, _bulwark, out float armor, out weakPoint);
                 baseDamage *= armor;
             }
             var hitResult = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, fx, baseDamage, weakPoint, _time, _combos);

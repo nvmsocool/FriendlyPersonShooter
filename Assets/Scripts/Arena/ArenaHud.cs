@@ -39,6 +39,8 @@ namespace FriendlyPersonShooter.Arena
         private readonly Image[] _hurtArrowParts;
         private readonly GameObject _mapBox;
         private readonly Image[] _mapDots = new Image[MapDots];
+        private const int EnemyDots = 48;
+        private readonly Image[] _enemyDots = new Image[EnemyDots];
         private readonly Text[] _numbers = new Text[Numbers];
 
         public ArenaHud(Transform parent)
@@ -95,12 +97,19 @@ namespace FriendlyPersonShooter.Arena
             _team = Text(team.transform, 21, tl, new Vector2(14, -10), new Vector2(356, 236), TextAnchor.UpperLeft);
             _stats = Text(canvas, 19, br, new Vector2(-24, 20), new Vector2(560, 90), TextAnchor.LowerRight);
 
-            // Minimap above the totals: players only, turning with you (up is where you face).
+            // Minimap above the totals: players and enemies, turning with you (up is where you face).
             var map = SessionUi.Box(canvas, "Minimap", br, new Vector2(-24, 118), new Vector2(MapSize, MapSize), panel);
             _mapBox = map.gameObject;
             SessionUi.Box(map.transform, "Cross", c, Vector2.zero, new Vector2(2, MapSize - 16), new Color(1f, 1f, 1f, 0.12f));
             SessionUi.Box(map.transform, "Cross", c, Vector2.zero, new Vector2(MapSize - 16, 2), new Color(1f, 1f, 1f, 0.12f));
             Text(map.transform, 14, new Vector2(1f, 0f), new Vector2(-6, 4), new Vector2(120, 20), TextAnchor.LowerRight).text = $"<color=#B8B0D8>{MapRange:0} m</color>";
+            // Enemies first, so player dots draw on top.
+            for (int i = 0; i < EnemyDots; i++)
+            {
+                _enemyDots[i] = SessionUi.Box(map.transform, "Enemy", c, Vector2.zero, new Vector2(6, 6), Color.white);
+                _enemyDots[i].rectTransform.localRotation = Quaternion.Euler(0, 0, 45);
+                _enemyDots[i].gameObject.SetActive(false);
+            }
             for (int i = 0; i < MapDots; i++)
             {
                 _mapDots[i] = SessionUi.Box(map.transform, "Dot", c, Vector2.zero, new Vector2(12, 12), Color.white);
@@ -199,6 +208,23 @@ namespace FriendlyPersonShooter.Arena
         }
 
         public static int MapDotSlots => MapDots;
+        public static int EnemyDotSlots => EnemyDots;
+
+        /// <summary>A small enemy diamond on the minimap (hidden past the map's edge). <paramref name="size"/> in pixels.</summary>
+        public bool SetEnemyDot(int index, bool show, Vector2 offset = default, Color color = default, float size = 6f)
+        {
+            if (index >= EnemyDots) return false;
+            var dot = _enemyDots[index];
+            float radius = MapSize * 0.5f - 6f;
+            var p = offset / MapRange * radius;
+            show &= p.magnitude <= radius;
+            dot.gameObject.SetActive(show);
+            if (!show) return false;
+            dot.rectTransform.anchoredPosition = p;
+            dot.rectTransform.sizeDelta = new Vector2(size, size);
+            dot.color = color;
+            return true;
+        }
 
         public void ShowMap(bool show) => _mapBox.SetActive(show);
 

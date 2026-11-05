@@ -169,7 +169,7 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Attack_TelegraphsThenHitsNearestPlayerInRange()
+        public void Attack_TelegraphsThenFiresAtNearestPlayerInRange()
         {
             var s = EnemyAttackSettings.ForSkitter();
             var attack = EnemyAttack.Create(11, s);
@@ -191,12 +191,13 @@ namespace FriendlyPersonShooter.Core.Tests
                     telegraphAt = t;
                     Assert.That(e.TargetId, Is.EqualTo(2));
                 }
-                if (e.Kind == AttackEventKind.Hit)
+                if (e.Kind == AttackEventKind.Fired)
                 {
                     hitAt = t;
                     hit = e;
                 }
             }
+            Assert.That(hit.Aim, Is.EqualTo(new Vector3(0, 0, 6)), "a Skitter fires a bolt where the target stood");
             Assert.That(telegraphAt, Is.InRange(s.MinCooldown, s.MaxCooldown + Dt));
             Assert.That(hitAt - telegraphAt, Is.EqualTo(s.TelegraphTime).Within(Dt * 1.5));
             Assert.That(hit.TargetId, Is.EqualTo(2));

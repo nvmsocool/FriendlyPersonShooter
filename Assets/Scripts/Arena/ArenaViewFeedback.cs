@@ -60,7 +60,9 @@ namespace FriendlyPersonShooter.Arena
                     _lastAttacker = Near(attack.From);
                 }
                 seen = Mathf.Max(seen, time);
-                if (now - time > BoltSeconds)
+                if (attack.BoltId != 0) _boltsEnded.Add(attack.BoltId);
+                // Bolts and shockwaves were drawn on their way; only melee hits get the quick line.
+                if (now - time > BoltSeconds || attack.BoltId != 0 || attack.Family == EnemyFamily.Bulwark)
                 {
                     ArenaFx.EnemyAttacks.RemoveAt(i);
                     continue;
@@ -74,6 +76,8 @@ namespace FriendlyPersonShooter.Arena
             }
             _attacksSeenUpTo = seen;
             DrawList(_a, _boltMat);
+            DrawBolts(now);
+            DrawShockwaves(now);
 
             if (damage > 0f)
             {
@@ -104,6 +108,81 @@ namespace FriendlyPersonShooter.Arena
             _hitsSeenUpTo = hitsSeen;
         }
 
+        private readonly HashSet<int> _boltsEnded = new HashSet<int>();
+        private readonly List<Matrix4x4> _boltOrbs = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _boltTrails = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _waveSegs = new List<Matrix4x4>();
+        private Material _boltOrbMat, _boltTrailMat, _waveMat;
+        private const int WaveSegments = 56;
+
+        /// <summary>
+        /// Enemy bolts in flight: a glowing orb with a short trail, flown along the server's line until it
+        /// ends or hits someone. They're slow enough to sidestep.
+        /// </summary>
+        private void DrawBolts(float now)
+        {
+            if (_boltOrbMat == null)
+            {
+                _boltOrbMat = MakeGlow(new Color(1f, 0.3f, 0.15f), 2.4f);
+                _boltTrailMat = MakeGlow(new Color(1f, 0.55f, 0.2f), 1.2f);
+            }
+            _boltOrbs.Clear();
+            _boltTrails.Clear();
+            for (int i = ArenaFx.Bolts.Count - 1; i >= 0; i--)
+            {
+                var (b, time) = ArenaFx.Bolts[i];
+                float age = now - time;
+                if (age > b.Life || _boltsEnded.Contains(b.Id))
+                {
+                    ArenaFx.Bolts.RemoveAt(i);
+                    _boltsEnded.Remove(b.Id);
+                    continue;
+                }
+                Vector3 v = b.Velocity;
+                Vector3 p = Near(b.From) + v * age;
+                float size = Mathf.Max(0.35f, b.Radius * 1.6f) * (1f + 0.15f * Mathf.Sin(now * 30f + b.Id));
+                _boltOrbs.Add(Matrix4x4.TRS(p, Quaternion.Euler(now * 400f, now * 300f, 0f), Vector3.one * size));
+                float trail = Mathf.Min(age * v.magnitude, 2.5f);
+                if (trail > 0.1f && v.sqrMagnitude > 0.01f)
+                {
+                    var dir = v.normalized;
+                    _boltTrails.Add(Matrix4x4.TRS(p - dir * (trail * 0.5f), Quaternion.LookRotation(dir), new Vector3(size * 0.35f, size * 0.35f, trail)));
+                }
+            }
+            if (_boltsEnded.Count > 200) _boltsEnded.Clear();
+            DrawList(_boltOrbs, _boltOrbMat);
+            DrawList(_boltTrails, _boltTrailMat);
+        }
+
+        /// <summary>Shockwave rings: a glowing band hugging the ground as it runs out. Jump it.</summary>
+        private void DrawShockwaves(float now)
+        {
+            if (_waveMat == null) _waveMat = MakeGlow(new Color(1f, 0.5f, 0.1f), 2.2f);
+            _waveSegs.Clear();
+            for (int i = ArenaFx.Waves.Count - 1; i >= 0; i--)
+            {
+                var (w, time) = ArenaFx.Waves[i];
+                float r = (now - time) * w.Speed;
+                if (r > w.Range)
+                {
+                    ArenaFx.Waves.RemoveAt(i);
+                    continue;
+                }
+                Vector3 c = Near(w.Center);
+                float seg = 2f * Mathf.PI * Mathf.Max(r, 0.5f) / WaveSegments * 1.15f;
+                for (int k = 0; k < WaveSegments; k++)
+                {
+                    float a = k * 2f * Mathf.PI / WaveSegments;
+                    var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                    var p = c + dir * r;
+                    float y = ExpeditionTerrain.Active && ExpeditionTerrain.SurfaceNear(p.x, p.z, c.y, 4f, 4f, out float g) ? g : c.y;
+                    _waveSegs.Add(Matrix4x4.TRS(new Vector3(p.x, y + 0.35f, p.z), Quaternion.LookRotation(Vector3.Cross(dir, Vector3.up)),
+                        new Vector3(w.Width * 0.6f, 0.7f, seg)));
+                }
+            }
+            DrawList(_waveSegs, _waveMat);
+        }
+
         private static string FamilyName(EnemyFamily f)
         {
             switch (f)
@@ -111,7 +190,7 @@ namespace FriendlyPersonShooter.Arena
                 case EnemyFamily.Wisp: return "A Wisp (yellow, flies)";
                 case EnemyFamily.Skitter: return "A Skitter (red, ground)";
                 case EnemyFamily.Mite: return "Mites (green swarm)";
-                case EnemyFamily.Bulwark: return "A Bulwark (boss)";
+                case EnemyFamily.Bulwark: return "A boss";
                 default: return f.ToString();
             }
         }
@@ -182,6 +261,28 @@ namespace FriendlyPersonShooter.Arena
                 }
             }
             for (; dot < ArenaHud.MapDotSlots; dot++) _hud.SetMapDot(dot, false);
+
+            // Enemies as small diamonds in their essence color (Glimmers left out; the Colossus is big).
+            int enemyDot = 0;
+            using (var enemies = _enemies.ToComponentDataArray<ArenaEnemy>(Allocator.Temp))
+            using (var enemyAt = _enemies.ToComponentDataArray<LocalTransform>(Allocator.Temp))
+            {
+                for (int i = 0; i < enemies.Length && enemyDot < ArenaHud.EnemyDotSlots; i++)
+                {
+                    var family = enemies[i].Family;
+                    if (family == EnemyFamily.Glimmer) continue;
+                    Vector3 p = Near(enemyAt[i].Position);
+                    var o = new Vector2(p.x - feet.x, p.z - feet.z);
+                    if (o.magnitude > ArenaHud.MapRange) continue;
+                    var color = family == EnemyFamily.Wisp ? new Color(1f, 0.88f, 0.3f)
+                        : family == EnemyFamily.Skitter ? new Color(1f, 0.35f, 0.3f)
+                        : family == EnemyFamily.Mite ? new Color(0.45f, 1f, 0.45f)
+                        : new Color(1f, 0.6f, 0.2f);
+                    float size = family == EnemyFamily.Bulwark ? 14f : family == EnemyFamily.Mite ? 5f : 8f;
+                    if (_hud.SetEnemyDot(enemyDot, true, new Vector2(Vector2.Dot(o, right), Vector2.Dot(o, forward)), color, size)) enemyDot++;
+                }
+            }
+            for (; enemyDot < ArenaHud.EnemyDotSlots; enemyDot++) _hud.SetEnemyDot(enemyDot, false);
 
             if (em.HasComponent<ArenaProgress>(local))
             {

@@ -680,7 +680,41 @@ namespace FriendlyPersonShooter.ZoneArt.C
             public PrismMesh[] Chunks;
             /// <summary>Trunk collider geometry (identical in full and headless builds).</summary>
             public MeshBuilder Trunks = new MeshBuilder();
+            /// <summary>
+            /// Boxes around tree canopies and big shrubs (identical in full and headless builds). They block sight
+            /// (enemy aim and enemy bolts), not movement or players' shots.
+            /// </summary>
+            public readonly List<Bounds> Foliage = new List<Bounds>();
             public string Summary;
+        }
+
+        /// <summary>Plants shorter than this don't block sight.</summary>
+        private const float FoliageMinHeight = 1.1f;
+
+        /// <summary>
+        /// A sight-blocking box for a tree canopy (its upper part) or a big shrub (most of it), a little inside the
+        /// plant's outline so shots past its edge aren't blocked by thin air.
+        /// </summary>
+        private static void AddFoliage(List<Bounds> list, Species sp, Candidate c)
+        {
+            if (sp.Layer != Layer.Tree && sp.Layer != Layer.Shrub) return;
+            var verts = sp.Variants[c.Variant].Vertices;
+            if (verts.Count == 0) return;
+            var min = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+            var max = new Vector3(float.MinValue, float.MinValue, float.MinValue);
+            foreach (var v in verts)
+            {
+                var w = c.M.MultiplyPoint3x4(v);
+                min = Vector3.Min(min, w);
+                max = Vector3.Max(max, w);
+            }
+            float height = max.y - min.y;
+            if (height < FoliageMinHeight) return;
+            var b = new Bounds((min + max) * 0.5f, max - min);
+            float bottom = sp.Layer == Layer.Tree ? min.y + Mathf.Max(sp.TrunkH * c.Scale * 0.8f, height * 0.35f) : min.y + height * 0.1f;
+            if (bottom >= max.y - 0.3f) return;
+            var size = new Vector3(b.size.x * 0.7f, max.y - bottom, b.size.z * 0.7f);
+            list.Add(new Bounds(new Vector3(b.center.x, (bottom + max.y) * 0.5f, b.center.z), size));
         }
 
         private struct Candidate
@@ -773,6 +807,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 sp.Placed++;
                 sp.Tris += tris;
                 if (sp.TrunkR > 0f) res.Trunks.Tube(c.Pos + Vector3.down * 0.5f, c.Pos + Vector3.up * sp.TrunkH * c.Scale, sp.TrunkR * c.Scale, sp.TrunkR * c.Scale * 0.7f, 6, Color.white, Color.white);
+                AddFoliage(res.Foliage, sp, c);
             }
 
             double tThin = clock.Elapsed.TotalMilliseconds;

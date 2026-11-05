@@ -89,7 +89,9 @@ namespace FriendlyPersonShooter.Core.Arsenal
     /// </summary>
     public static class LootBoxSites
     {
-        public const int PerZone = 3;
+        public const int PerZone = 9;
+        /// <summary>Box ids are zone index times this, plus the box's number in the zone.</summary>
+        public const int IdStride = 16;
         public const float Clearance = 14f;
         public const float EdgeMargin = 20f;
         private const int Salt = 0x10B7;
@@ -122,7 +124,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
                         if (Vector2.DistanceSquared(a, spot) < Clearance * Clearance) { clear = false; break; }
                     }
                     if (!clear) continue;
-                    boxes.Add(new LootBox(index * 8 + placed, zone.Coord, spot));
+                    boxes.Add(new LootBox(index * IdStride + placed, zone.Coord, spot));
                     avoid.Add(spot);
                     placed++;
                 }

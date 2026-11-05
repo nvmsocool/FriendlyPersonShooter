@@ -12,8 +12,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         public double FirstSpawn { get; set; } = 240.0;
         /// <summary>The next one lands this long after the last one fell.</summary>
         public double RespawnDelay { get; set; } = 480.0;
-        /// <summary>Size against the raid's Bulwark (shell, plate and hover height all scale).</summary>
-        public float Scale { get; set; } = 1.8f;
         /// <summary>Health is the raid Bulwark's for this many players at least, times <see cref="HealthMultiplier"/>.</summary>
         public int MinPlayers { get; set; } = 3;
         public float HealthMultiplier { get; set; } = 1.5f;
@@ -27,8 +25,8 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// The world boss: a giant Bulwark (the Colossus) that lands at a landmark near the players on a
-    /// timer. Anyone can join the fight, no key needed; everyone who hit it is paid in all three colors.
+    /// The world boss: the Colossus (see <see cref="ColossusBehavior"/>), which lands near a landmark close to the
+    /// players on a timer. Anyone can join the fight, no key needed; everyone who hit it is paid in all three colors.
     /// One at a time; the next lands a while after the last one falls.
     /// </summary>
     public sealed class WorldBoss
@@ -71,23 +69,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Health for <paramref name="players"/> players online.</summary>
         public float Health(int players, CombatSettings combat) =>
             BulwarkSettings.HealthFor(Math.Max(Settings.MinPlayers, players), combat) * Settings.HealthMultiplier;
-
-        /// <summary>The raid Bulwark's shape, scaled up.</summary>
-        public static BulwarkSettings Shape(BulwarkSettings raid, float scale) => new BulwarkSettings
-        {
-            BodyRadius = raid.BodyRadius * scale,
-            PlateRadius = raid.PlateRadius * scale,
-            PlateOut = raid.PlateOut * scale,
-            ArmorMultiplier = raid.ArmorMultiplier,
-            ClosedTime = raid.ClosedTime,
-            OpenTime = raid.OpenTime,
-            WarnTime = raid.WarnTime,
-            TurnSpeed = raid.TurnSpeed * 0.8f,
-            EnragedTurnSpeed = raid.EnragedTurnSpeed * 0.8f,
-            AddWaveAt = raid.AddWaveAt,
-            HoverHeight = raid.HoverHeight * scale,
-            BobHeight = raid.BobHeight * scale,
-        };
 
         /// <summary>What everyone who hit it gets: <see cref="WorldBossSettings.EssenceEach"/> of each color.</summary>
         public List<EssenceAward> Rewards(IEnumerable<int> hitters)

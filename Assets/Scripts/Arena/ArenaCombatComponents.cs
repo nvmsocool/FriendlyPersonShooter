@@ -204,10 +204,32 @@ namespace FriendlyPersonShooter.Arena
     public struct EnemyAttackFx : IRpcCommand
     {
         public int VictimNetworkId;
+        /// <summary>The bolt that hit (so clients stop drawing it), or 0 for a melee hit or a shockwave.</summary>
+        public int BoltId;
         public EnemyFamily Family;
         public float Damage;
         public float3 From;
         public float3 To;
+    }
+
+    /// <summary>Server-to-everyone: an enemy fired a bolt. Clients fly it along the same line for <see cref="Life"/> seconds.</summary>
+    public struct EnemyBoltFx : IRpcCommand
+    {
+        public int Id;
+        public EnemyFamily Family;
+        public float3 From;
+        public float3 Velocity;
+        public float Life;
+        public float Radius;
+    }
+
+    /// <summary>Server-to-everyone: the Colossus slammed; a ring runs out along the ground from Center.</summary>
+    public struct ShockwaveFx : IRpcCommand
+    {
+        public float3 Center;
+        public float Speed;
+        public float Range;
+        public float Width;
     }
 
     /// <summary>Server-to-everyone: something worth a message on screen (combo discovered, revive, big chain).</summary>

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
+using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.Progression;
 using FriendlyPersonShooter.Net;
 using Unity.Collections;
@@ -87,8 +88,9 @@ namespace FriendlyPersonShooter.Arena
             public float MaxHealth;
             /// <summary>Part of the raid fight: removed (without drops) when the run ends.</summary>
             public bool Raid;
-            /// <summary>The Colossus, the open-world boss (a big Bulwark).</summary>
+            /// <summary>The Colossus, the open-world boss (Family Bulwark, but its own behavior).</summary>
             public bool WorldBoss;
+            public ColossusBehavior Colossus;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -174,6 +176,7 @@ namespace FriendlyPersonShooter.Arena
             PickAvatars();
             SyncPlayers(dt, tickIndex);
             StepEnemies(dt, tickIndex, ecb);
+            StepBolts(dt, ecb);
             SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
             StepLoot(ecb);
@@ -480,15 +483,15 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case EnemyFamily.Bulwark:
                     {
-                        float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
-                        var shape = ShapeOf(s);
-                        s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, shape);
-                        int wave = s.Boss.TakeWaveDue(fraction, shape);
-                        if (wave > 0)
+                        if (s.WorldBoss)
                         {
-                            if (s.WorldBoss) _worldWaveDue = wave;
-                            else _raidWaveDue = wave;
+                            position = StepColossus(ecb, s, dt);
+                            break;
                         }
+                        float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
+                        s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, _bulwark);
+                        int wave = s.Boss.TakeWaveDue(fraction, _bulwark);
+                        if (wave > 0) _raidWaveDue = wave;
                         position = s.Boss.Position;
                         break;
                     }
@@ -499,20 +502,20 @@ namespace FriendlyPersonShooter.Arena
                 }
 
                 float wither = s.Vitals.Tick(dt);
-                if (s.Family != EnemyFamily.Glimmer)
+                if (s.Family != EnemyFamily.Glimmer && !s.WorldBoss)
                 {
                     if (ExpeditionWorld.Active) NearCandidates(position);
-                    var attack = s.Attack.Step(dt, position, _candidates, s.AttackSettings);
+                    // Enemies look from a little above their centre (a Skitter's centre is close to the ground).
+                    var eye = position + new Vector3(0f, 0.3f, 0f);
+                    var attack = s.Attack.Step(dt, eye, _candidates, s.AttackSettings, SightTest);
                     if (attack.Kind == AttackEventKind.TelegraphStarted) s.Telegraph = true;
                     else if (attack.Kind != AttackEventKind.None) s.Telegraph = false;
-                    if (attack.Kind == AttackEventKind.Hit && _playerById.TryGetValue(attack.TargetId, out var victim) &&
-                        _players.TryGetValue(victim, out var victimState))
+                    if (attack.Kind == AttackEventKind.Fired)
                     {
-                        _damageTaken += victimState.Vitals.TakeEnemyDamage(attack.Damage, out bool wentDown);
-                        victimState.LastHurt = _time;
-                        SendAttackFx(ecb, s.Family, attack.Damage, position, victimState);
-                        if (wentDown) GoDown(victimState);
+                        var a = s.AttackSettings;
+                        FireBolt(ecb, s.Family, eye, attack.Aim, a.BoltSpeed, a.BoltRadius, attack.Damage, a.Range);
                     }
+                    else if (attack.Kind == AttackEventKind.Hit) HurtPlayer(ecb, attack.TargetId, s.Family, attack.Damage, position, 0);
                 }
 
                 s.History.Record(tick, position, hittable, teleported);
@@ -521,7 +524,9 @@ namespace FriendlyPersonShooter.Arena
                 {
                     Family = s.Family, Health = s.Vitals.Health, MaxHealth = s.Vitals.MaxHealth,
                     Hittable = hittable, Telegraph = s.Telegraph,
-                    Yaw = s.Boss.Yaw, PlateOpen = s.Boss.Open, PlateWarn = s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(ShapeOf(s)),
+                    Yaw = s.WorldBoss ? s.Colossus.Yaw : s.Boss.Yaw,
+                    PlateOpen = s.WorldBoss ? s.Colossus.Exposed : s.Boss.Open,
+                    PlateWarn = s.WorldBoss ? s.Colossus.Warning : s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(_bulwark),
                     World = s.WorldBoss,
                     Withered = s.Vitals.Debuffs.Has(EffectKind.Wither), Exposed = s.Vitals.Debuffs.Has(EffectKind.Expose),
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
@@ -674,9 +679,11 @@ namespace FriendlyPersonShooter.Arena
                         target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
                         break;
                     case EnemyFamily.Bulwark:
-                        var shape = ShapeOf(s);
-                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, shape.BodyRadius,
-                            BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, shape), shape.PlateRadius);
+                        target = s.WorldBoss
+                            ? HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _colossus.BodyRadius,
+                                ColossusBehavior.CoreCenterOf(past.Position, _colossus), _colossus.CoreRadius)
+                            : HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _bulwark.BodyRadius,
+                                BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, _bulwark), _bulwark.PlateRadius);
                         target.WeakPointOnSurface = true;
                         break;
                     default:

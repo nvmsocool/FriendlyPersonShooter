@@ -11,9 +11,11 @@ using Vector3 = System.Numerics.Vector3;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The world boss on the server: on a timer the Colossus (a giant Bulwark, see <see cref="WorldBoss"/>)
-    /// lands at a landmark near the players. Anyone can fight it, no key needed. It calls in Skitters and
-    /// Mites at 75/50/25% like the raid boss. Everyone who hit it gets Yellow, Red and Green, XP and an item.
+    /// The world boss on the server: on a timer the Colossus (see <see cref="WorldBoss"/> and
+    /// <see cref="ColossusBehavior"/>) lands near a landmark close to the players. Anyone can fight it, no key
+    /// needed. It fires volleys to sidestep, slams out shockwaves to jump, and is only open to full damage
+    /// while stunned after a slam. It calls in Skitters and Mites at 75/50/25%. Everyone who hit it gets
+    /// Yellow, Red and Green, XP and an item.
     /// </summary>
     public partial class ArenaServerSystem
     {
@@ -24,18 +26,45 @@ namespace FriendlyPersonShooter.Arena
         private const double WorldAddsLife = 180.0;
 
         private WorldBoss _world;
-        private BulwarkSettings _worldShape;
+        private readonly ColossusSettings _colossus = new ColossusSettings();
         private Entity _worldBossEntity = Entity.Null;
         private int _worldWaveDue;
         private readonly List<Vector2> _worldPlayers = new List<Vector2>();
 
-        /// <summary>The shape a Bulwark is hit and stepped with: the raid's, or the Colossus's scaled one.</summary>
-        private BulwarkSettings ShapeOf(EnemyState s) => s.WorldBoss ? _worldShape : _bulwark;
-
         private void CreateWorldBoss()
         {
             _world = new WorldBoss(null, _time);
-            _worldShape = WorldBoss.Shape(_bulwark, _world.Settings.Scale);
+        }
+
+        /// <summary>
+        /// One tick of the Colossus: turn toward the nearest player, fire volleys at the nearest one it can
+        /// see, slam out shockwaves, and call adds. Returns where it is.
+        /// </summary>
+        private Vector3 StepColossus(EntityCommandBuffer ecb, EnemyState s, float dt)
+        {
+            NearCandidates(s.Colossus.Position);
+            int nearest = EnemyAttack.Nearest(s.Colossus.Position, _candidates, _colossus.VolleyRange * 1.5f);
+            Vector3? face = nearest >= 0 ? _candidates[nearest].Position : (Vector3?)null;
+            var events = s.Colossus.Step(dt, s.Vitals.MoveMultiplier, face, _colossus);
+            var from = s.Colossus.Position;
+            if ((events & ColossusEvent.Volley) != 0)
+            {
+                int target = EnemyAttack.Nearest(from, _candidates, _colossus.VolleyRange, SightTest);
+                if (target >= 0)
+                {
+                    foreach (var aim in ColossusBehavior.VolleyAims(from, _candidates[target].Position, _colossus))
+                    {
+                        FireBolt(ecb, EnemyFamily.Bulwark, from, aim, _colossus.BoltSpeed, _colossus.BoltRadius, _colossus.BoltDamage, _colossus.VolleyRange);
+                    }
+                }
+            }
+            if ((events & ColossusEvent.Slammed) != 0) StartShockwave(ecb, s.Colossus.Home, _colossus);
+            float fraction = s.Vitals.Health / math.max(1f, s.Vitals.MaxHealth);
+            int wave = s.Colossus.TakeWaveDue(fraction, _colossus);
+            if (wave > 0) _worldWaveDue = wave;
+            // Its eye glows just before a volley.
+            s.Telegraph = s.Colossus.Phase == ColossusPhase.Hover && s.Colossus.NextVolley < 0.6f;
+            return from;
         }
 
         private void StepWorldBoss()
@@ -97,9 +126,9 @@ namespace FriendlyPersonShooter.Arena
                 WorldBoss = true,
                 MaxHealth = _world.Health(_players.Count, _combat),
             };
-            state.Boss = BulwarkBehavior.Create(new Vector3(x, SpawnGround(x, z), z), random.NextFloat(0f, 360f), _worldShape);
+            state.Colossus = ColossusBehavior.Create(new Vector3(x, SpawnGround(x, z), z), random.NextFloat(0f, 360f), _colossus);
             _spawned.Clear();
-            _worldBossEntity = SpawnEnemy(state, state.Boss.Position);
+            _worldBossEntity = SpawnEnemy(state, state.Colossus.Position);
             _spawned.Clear();
             _world.Spawned(site);
             _announce.Add((AnnounceKind.WorldBossLanded, site.Id, 0, 0));
@@ -110,7 +139,7 @@ namespace FriendlyPersonShooter.Arena
         private void SpawnWorldAdds(int wave)
         {
             if (!_enemies.TryGetValue(_worldBossEntity, out var boss)) return;
-            var home = boss.Boss.Home;
+            var home = boss.Colossus.Home;
             var random = new Unity.Mathematics.Random(NextSeed() | 1u);
             _spawned.Clear();
             int skitters = 2 + wave;
@@ -157,7 +186,7 @@ namespace FriendlyPersonShooter.Arena
         {
             if (_world == null || !_world.Alive || !_enemies.TryGetValue(_worldBossEntity, out var s)) return;
             status.WorldBoss = true;
-            status.WorldBossAt = new float2(s.Boss.Home.X, s.Boss.Home.Z);
+            status.WorldBossAt = new float2(s.Colossus.Home.X, s.Colossus.Home.Z);
             status.WorldBossHealth = s.Vitals.Health / math.max(1f, s.Vitals.MaxHealth);
         }
 

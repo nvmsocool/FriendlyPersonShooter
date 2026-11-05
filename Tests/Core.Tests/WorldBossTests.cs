@@ -66,17 +66,6 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void ShapeScalesTheRaidBulwark()
-        {
-            var raid = new BulwarkSettings();
-            var big = WorldBoss.Shape(raid, 2f);
-            Assert.That(big.BodyRadius, Is.EqualTo(raid.BodyRadius * 2f));
-            Assert.That(big.PlateRadius, Is.EqualTo(raid.PlateRadius * 2f));
-            Assert.That(big.HoverHeight, Is.EqualTo(raid.HoverHeight * 2f));
-            Assert.That(big.ClosedTime, Is.EqualTo(raid.ClosedTime));
-        }
-
-        [Test]
         public void PlaytestLayer_SpawnsAllThreeFamilies()
         {
             var families = new HashSet<EnemyFamily>();

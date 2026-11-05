@@ -100,6 +100,7 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>An emissive material (bloom makes it glow); a plain one if the glow material is missing.</summary>
         private Material MakeGlow(Color color, float intensity)
         {
+            if (_glowBase == null) _glowBase = Resources.Load<Material>("ArenaGlow");
             if (_glowBase == null) return MakeMat(color);
             var m = new Material(_glowBase) { enableInstancing = true, color = color };
             m.SetColor("_EmissionColor", color * intensity);
@@ -408,28 +409,59 @@ namespace FriendlyPersonShooter.Arena
         }
 
         private static readonly WorldBossSettings WorldBossLook = new WorldBossSettings();
-        private static readonly BulwarkSettings WorldBossShapeLook = WorldBoss.Shape(BossLook, WorldBossLook.Scale);
-        private float _worldPlateAnim;
-        private List<Matrix4x4>[] _bossLists;
-        private readonly int[] _bossListStarts = new int[9];
+        private static readonly ColossusSettings ColossusLook = new ColossusSettings();
+        private bool _colossusSeen, _colossusExposed, _colossusWarn;
+        private float _colossusOpen;
 
         /// <summary>
-        /// The Colossus (world boss): the raid boss's shape drawn around its centre, then scaled up,
-        /// with its own plate animation. Its health is on the HUD from the expedition status.
+        /// The Colossus (world boss): a faceted gem of a body ringed by six armor petals, a slit eye that
+        /// flares before a volley, and a crystal core on top. When a slam stuns it, the petals swing open and
+        /// the core turns gold: that's the time to shoot. Its health is on the HUD from the expedition status.
         /// </summary>
         private void AddWorldBoss(ArenaEnemy en, Vector3 p)
         {
-            _bossLists = _bossLists ?? new[] { _bossBodies, _bossTelegraph, _bossArmor, _bossSeams, _bossThrust, _bossColumn, _platesShut, _platesWarn, _platesOpen };
-            for (int i = 0; i < _bossLists.Length; i++) _bossListStarts[i] = _bossLists[i].Count;
-            float k = WorldBossLook.Scale;
-            // The floor under it, in the unscaled drawing, so its column still reaches the ground once scaled.
-            AddBossShape(en, p, ref _worldPlateAnim, p.y - WorldBossShapeLook.HoverHeight / k);
-            var scale = Matrix4x4.Translate(p) * Matrix4x4.Scale(Vector3.one * k) * Matrix4x4.Translate(-p);
-            for (int i = 0; i < _bossLists.Length; i++)
+            float R = ColossusLook.BodyRadius;
+            float t = Time.time;
+            var rot = Quaternion.Euler(0f, en.Yaw, 0f);
+            var f = rot * Vector3.forward;
+            var u = Vector3.up;
+            _colossusOpen = Mathf.MoveTowards(_colossusOpen, en.PlateOpen ? 1f : 0f, Time.deltaTime * 3f);
+            float open = _colossusOpen;
+
+            // Body: two crossed blocks make a chunky gem inside the hit sphere.
+            Box(en.Telegraph ? _bossTelegraph : _bossBodies, p, rot, Vector3.one * R * 1.45f);
+            Box(_bossBodies, p, rot * Quaternion.Euler(45f, 0f, 45f), Vector3.one * R * 1.3f);
+
+            // Six armor petals around the middle, swinging out and down when it's stunned.
+            for (int k = 0; k < 6; k++)
             {
-                var list = _bossLists[i];
-                for (int j = _bossListStarts[i]; j < list.Count; j++) list[j] = scale * list[j];
+                var dir = rot * Quaternion.Euler(0f, k * 60f + 30f, 0f) * Vector3.forward;
+                var face = Quaternion.LookRotation(dir) * Quaternion.Euler(-15f - 55f * open, 0f, 0f);
+                Box(_bossArmor, p + dir * (R * 0.92f + open * R * 0.45f) - u * (open * R * 0.2f), face, new Vector3(R * 0.95f, R * 1.25f, 0.55f));
+                Box(_bossSeams, p + dir * (R * 0.8f) + u * (R * 0.62f), face, new Vector3(R * 0.7f, 0.2f, 0.25f));
             }
+
+            // The eye: a slit on the front that flares before each volley.
+            Box(en.Telegraph ? _platesWarn : _bossSeams, p + f * (R * 0.78f) + u * (R * 0.12f), rot, new Vector3(R * 0.62f, R * 0.18f, 0.35f));
+
+            // The core on top: dull when armored, warning-orange during a slam, bright gold when it's open.
+            float coreSize = ColossusLook.CoreRadius * (1.35f + 0.15f * open * Mathf.Sin(t * 8f));
+            var core = p + u * (R * 0.85f + open * 0.4f);
+            Box(en.PlateOpen ? _platesOpen : en.PlateWarn ? _platesWarn : _platesShut, core,
+                Quaternion.Euler(0f, t * (en.PlateOpen ? 120f : 40f), 0f) * Quaternion.Euler(45f, 0f, 45f), Vector3.one * coreSize);
+
+            // Four claws under it.
+            for (int k = 0; k < 4; k++)
+            {
+                var dir = rot * Quaternion.Euler(0f, k * 90f + 45f, 0f) * Vector3.forward;
+                Box(_bossArmor, p - u * (R * 0.75f) + dir * (R * 0.45f), Quaternion.LookRotation(dir) * Quaternion.Euler(-35f, 0f, 0f), new Vector3(0.7f, R * 0.95f, 0.7f));
+            }
+            // Thrust glow while it hovers.
+            if (!en.PlateOpen) Box(_bossThrust, p - u * (R * 0.98f), rot * Quaternion.Euler(0f, t * 60f, 0f), new Vector3(R * 0.9f, 0.25f, R * 0.9f));
+
+            _colossusSeen = true;
+            _colossusExposed = en.PlateOpen;
+            _colossusWarn = en.PlateWarn;
         }
 
         /// <summary>The Bulwark's meshes at raid size around <paramref name="p"/>.</summary>
@@ -528,6 +560,14 @@ namespace FriendlyPersonShooter.Arena
 
         private static readonly GateSettings GateLook = new GateSettings();
 
+        private string ColossusHint()
+        {
+            if (!_colossusSeen) return "<color=#B8B0D8>dodge its bolts, jump its shockwave</color>";
+            if (_colossusExposed) return "<color=#FFD84D><b>STUNNED: shoot now!</b> full damage, core is a weak point</color>";
+            if (_colossusWarn) return "<color=#FF6040><b>SLAM: JUMP the shockwave!</b></color>";
+            return "<color=#B8B0D8>armored (1/5 damage): sidestep its volleys, wait for the slam</color>";
+        }
+
         /// <summary>The Colossus's line on the HUD: where it is and its health.</summary>
         private void WriteWorldBossHud(ExpeditionStatus s, System.Text.StringBuilder e)
         {
@@ -537,7 +577,7 @@ namespace FriendlyPersonShooter.Arena
             float bearing = math.degrees(math.atan2(delta.x, delta.z));
             int bars = Mathf.RoundToInt(math.saturate(s.WorldBossHealth) * 20f);
             e.Append($"<color=#FF9A40><b>COLOSSUS</b></color> {distance:0} m {Direction(Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing))}  " +
-                     $"[{new string('|', bars)}{new string('.', 20 - bars)}] {s.WorldBossHealth * 100f:0}%  <color=#B8B0D8>shoot its gold plate when it opens</color>\n");
+                     $"[{new string('|', bars)}{new string('.', 20 - bars)}] {s.WorldBossHealth * 100f:0}%  {ColossusHint()}\n");
         }
 
         /// <summary>Raid lines for the expedition HUD: the boss bar inside, the countdown, the key near the door.</summary>

@@ -74,13 +74,13 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------- Enemy attack effects ----------
 
-        private void SendAttackFx(EntityCommandBuffer ecb, EnemyFamily family, float damage, Vector3 from, PlayerState victim)
+        private void SendAttackFx(EntityCommandBuffer ecb, EnemyFamily family, float damage, Vector3 from, PlayerState victim, int boltId = 0)
         {
             var to = ToFloat3(victim.Position) + new float3(0f, ArenaWeapon.PlayerHitHeight, 0f);
             var rpc = ecb.CreateEntity();
             ecb.AddComponent(rpc, new EnemyAttackFx
             {
-                VictimNetworkId = victim.Vitals.Id, Family = family, Damage = damage,
+                VictimNetworkId = victim.Vitals.Id, Family = family, Damage = damage, BoltId = boltId,
                 From = ExpeditionWorld.Near(ToFloat3(from), to), To = to,
             });
             ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = Entity.Null });

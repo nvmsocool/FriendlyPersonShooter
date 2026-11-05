@@ -35,7 +35,7 @@ namespace FriendlyPersonShooter.Arena
         private const float FragmentRadius = 0.2f;
 
         private static readonly BulwarkSettings BossShape = new BulwarkSettings();
-        private static readonly BulwarkSettings WorldBossShape = WorldBoss.Shape(BossShape, new WorldBossSettings().Scale);
+        private static readonly ColossusSettings ColossusShape = new ColossusSettings();
         private BotAim _aim;
         private BotMover _mover;
         private readonly BotPath _path = new BotPath();
@@ -156,10 +156,21 @@ namespace FriendlyPersonShooter.Arena
                     var enemy = EntityManager.GetComponentData<ArenaEnemy>(_target);
                     aimPoint = tpos;
                     radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f : enemy.Family == EnemyFamily.Glimmer ? 0.4f : 0.15f;
-                    if (enemy.Family == EnemyFamily.Bulwark)
+                    if (enemy.Family == EnemyFamily.Bulwark && enemy.World)
+                    {
+                        // The Colossus: its core on top while it's stunned, else anywhere on the shell.
+                        if (enemy.PlateOpen)
+                        {
+                            var core = ColossusBehavior.CoreCenterOf(ToVec(tpos), ColossusShape);
+                            aimPoint = new float3(core.X, core.Y, core.Z);
+                            radius = ColossusShape.CoreRadius;
+                        }
+                        else radius = ColossusShape.BodyRadius * 0.8f;
+                    }
+                    else if (enemy.Family == EnemyFamily.Bulwark)
                     {
                         // Aim at the plate while it's open and facing us; otherwise at the shell.
-                        var shape = enemy.World ? WorldBossShape : BossShape;
+                        var shape = BossShape;
                         var plate = BulwarkBehavior.PlateCenterOf(ToVec(tpos), enemy.Yaw, shape);
                         var toMe = math.normalizesafe(eye - tpos);
                         var facing = BulwarkBehavior.FacingOf(enemy.Yaw);

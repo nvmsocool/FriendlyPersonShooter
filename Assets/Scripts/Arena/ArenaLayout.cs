@@ -37,9 +37,18 @@ namespace FriendlyPersonShooter.Arena
         };
 
         /// <summary>Distance along a ray to the nearest cover block (or, in the expedition, the ground and zone structures), or float.MaxValue if none is hit.</summary>
-        public static float RaycastCover(float3 origin, float3 dir, float maxDistance)
+        public static float RaycastCover(float3 origin, float3 dir, float maxDistance) => Cast(origin, dir, maxDistance, false);
+
+        /// <summary>
+        /// Like <see cref="RaycastCover"/>, but tree canopies and big shrubs block it too: what an enemy can see
+        /// through, and how far its bolt flies.
+        /// </summary>
+        public static float SightCover(float3 origin, float3 dir, float maxDistance) => Cast(origin, dir, maxDistance, true);
+
+        private static float Cast(float3 origin, float3 dir, float maxDistance, bool foliage)
         {
-            float best = ExpeditionTerrain.Active ? ExpeditionTerrain.Raycast(origin, dir, maxDistance) : float.MaxValue;
+            float best = !ExpeditionTerrain.Active ? float.MaxValue
+                : foliage ? ExpeditionTerrain.SightRaycast(origin, dir, maxDistance) : ExpeditionTerrain.Raycast(origin, dir, maxDistance);
             bool wrap = ExpeditionWorld.Active;
             foreach (var b in Cover)
             {

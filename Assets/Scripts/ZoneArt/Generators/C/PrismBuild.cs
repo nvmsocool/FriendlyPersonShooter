@@ -172,6 +172,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     _step.Restart();
                 }
             }
+            // Foliage boxes on their own layer: they block enemies' sight and bolts, never movement.
+            if (_flora != null && _flora.Foliage.Count > 0)
+            {
+                var foliage = new GameObject("Foliage") { layer = ZoneWorld.FoliageLayer };
+                foliage.transform.SetParent(colRoot, false);
+                foreach (var b in _flora.Foliage)
+                {
+                    var box = foliage.AddComponent<BoxCollider>();
+                    box.center = b.center;
+                    box.size = b.size;
+                }
+            }
             Mark("colliders");
             Lap("colliders");
 

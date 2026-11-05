@@ -18,6 +18,10 @@ namespace FriendlyPersonShooter.Arena
         public static int BestChain;
         /// <summary>Enemy attacks that landed on anyone (bolts are drawn for all; the victim gets the warning).</summary>
         public static readonly List<(EnemyAttackFx Attack, float Time)> EnemyAttacks = new List<(EnemyAttackFx, float)>();
+        /// <summary>Enemy bolts in flight (drawn until they end or hit someone).</summary>
+        public static readonly List<(EnemyBoltFx Bolt, float Time)> Bolts = new List<(EnemyBoltFx, float)>();
+        /// <summary>The Colossus's shockwave rings.</summary>
+        public static readonly List<(ShockwaveFx Wave, float Time)> Waves = new List<(ShockwaveFx, float)>();
         /// <summary>The human's level and skills (set by the view each frame), for the Esc menu's skill tree.</summary>
         public static ArenaProgress LocalProgress;
         public static bool HasProgress;
@@ -79,6 +83,16 @@ namespace FriendlyPersonShooter.Arena
             {
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.EnemyAttacks.Add((attack.ValueRO, now));
+            }
+            foreach (var (bolt, entity) in SystemAPI.Query<RefRO<EnemyBoltFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (keep) ArenaFx.Bolts.Add((bolt.ValueRO, now));
+            }
+            foreach (var (wave, entity) in SystemAPI.Query<RefRO<ShockwaveFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (keep) ArenaFx.Waves.Add((wave.ValueRO, now));
             }
             if (keep && ArenaFx.SkillBuys.Count > 0 && SystemAPI.HasSingleton<NetworkId>())
             {

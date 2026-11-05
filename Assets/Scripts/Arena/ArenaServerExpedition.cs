@@ -462,6 +462,7 @@ namespace FriendlyPersonShooter.Arena
                       $"completions={_completions} cachesDropped={_cachesDropped} cachesReturned={_cachesReturned} players=[{sb}]");
             Debug.Log($"[Social] t={_time:0} {SocialLog()}");
             Debug.Log($"[Raid] t={_time:0} {RaidLog()}");
+            Debug.Log($"[Bolts] t={_time:0} {BoltLog()}");
             Debug.Log($"[WorldBoss] t={_time:0} {WorldBossLog()} gate={(_gate.IsOpen ? "open" : "shut")}/{_gate.Cost}");
         }
     }

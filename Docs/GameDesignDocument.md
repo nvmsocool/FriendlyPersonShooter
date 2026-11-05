@@ -65,6 +65,7 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 **Enemy design rules**
 
 - Every attack is telegraphed by sound and light. Damage to players is moderate; the challenge is landing hits, not surviving surprises.
+- Ranged attacks are slow glowing bolts you can see coming and sidestep, never instant hits. Enemies attack only what they can see: terrain, structures, tree canopies and big shrubs block both their sight and their bolts, so cover works. (Second playtest: Wisps hit instantly and shot through hills and plants.)
 - Damage you take is always readable: a screen-edge marker points to the attacker, the screen flashes, a hurt sound plays, and an attacker you can't see is named. (First playtest: players couldn't tell what was hurting them.)
 - Hitboxes match the visible model. No hidden hit zones.
 - Enemies don't belong to whoever hit first. Everyone who lands a hit gets the full drop, so there is no kill stealing.
@@ -444,7 +445,7 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 
 **First human playtest (Nov 3, 2026).** Friends played a hosted build over Relay. Fixed right after: a HUD in place of the debug text (help moved to the Esc menu), Reset position, player colors, per-payload shot sounds, and the sky that seemed to spin when crossing zones. Added next: party-shared bank, clearer damage taken, your own quick-chat in the feed, a player-only minimap, levels with a skill tree, damage numbers, Glimmers, filled pits, and no view past the loaded zones.
 
-**Guns (built Nov 4, 2026; not yet playtested).** The found-gun system from the Guns section replaces the single rifle and the Q payload cycle. It has all six frames (Pistol, burst Rifle, SMG, Marksman, Beam and a Launcher whose shells burst on landing), 3 mod slots plus a payload slot, and stat, special and payload mods in three tiers. Everyone starts with one random gun with one random payload mod, and bots get their role's payload. Q swaps guns, R reloads, right mouse zooms, and E opens a loot box or takes an item. Shift sprints at 1.5× speed while moving forward and not zoomed, with no stamina. Each zone has 3 boxes, and every player gets their own roll from each box once. A raid clear leaves each raider a rare-or-better item. A swapped-out item stays on the ground for 2 minutes for anyone to take. Bosses outside raids don't exist yet. Checked in the Editor with bots: every frame fires, and boxes, pickups, swaps and drops work.
+**Guns (built Nov 4, 2026; not yet playtested).** The found-gun system from the Guns section replaces the single rifle and the Q payload cycle. It has all six frames (Pistol, burst Rifle, SMG, Marksman, Beam and a Launcher whose shells burst on landing), 3 mod slots plus a payload slot, and stat, special and payload mods in three tiers. Everyone starts with one random gun with one random payload mod, and bots get their role's payload. Q swaps guns, R reloads, right mouse zooms, and E opens a loot box or takes an item. Shift sprints at 1.5× speed while moving forward and not zoomed, with no stamina. Each zone has 9 boxes (3 before the second playtest), and every player gets their own roll from each box once. A raid clear leaves each raider a rare-or-better item. A swapped-out item stays on the ground for 2 minutes for anyone to take. Checked in the Editor with bots: every frame fires, and boxes, pickups, swaps and drops work.
 
 **Avatars (built Nov 4, 2026; not yet playtested).** Players are goofy floating robots in the zones' low-poly style, based on a legless hovering robot with a visor face. Each player gets a random robot when they join: head (ball, box, can or bean), ears (cat ears, antenna, propeller, bunny ears, headphones or twin antennae), eyes (a mismatched pair, one huge eye, three eyes or googly eyes), mouth, body (egg, barrel, cone or ball), a short or springy neck, one or two thrusters, and big mitts or three-fingered hands. Shells are mostly white; the chest plate, cuffs and ears use the player's team colour. Robots bob, lean into movement and wobble their heads. Their floating hands hold the gun on its grip and fore-end, and tracers leave from the gun's muzzle. You see your own hands on your gun. Downed robots lie on their backs.
 
@@ -452,12 +453,24 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **Gate:** it no longer stays open forever. Paying opens it for the whole party for 90 seconds, then it shuts and the next opening costs 20 Yellow more. Players who went through start a new run toward the pricier opening.
 - **All three colors:** the layer had still been using the MVP's Yellow-only setting, so no Skitters or Mites spawned in the world. Zones now lean toward Yellow, Red or Green, as the design says.
 - **HUD:** the HUD shows carried and banked amounts for Yellow, Red and Green on one line.
-- **The Colossus:** the first world boss, a Bulwark 1.8× the size.
+- **The Colossus:** the first world boss.
   - It first lands 4 minutes in, then 8 minutes after each kill, on open ground about 30 m from a landmark 90–320 m from a player.
   - Health is 1.5× the raid Bulwark's for at least 3 players.
   - It calls Skitters and Mites at 75%, 50% and 25%.
   - Everyone who hits it gets 12 Yellow, 12 Red and 12 Green, 300 XP and a rare-or-better item.
   - An orange beam and a HUD line show where it is and its health.
+
+**After the second playtest (built Nov 4, 2026; not yet playtested).**
+- **Dodgeable attacks:** Wisps, Skitters and bosses fire slow glowing bolts (16–22 m/s) aimed where you stood, so sidestepping beats them. Mites still bite up close.
+- **Cover:** enemies need line of sight to attack. Terrain, structures, tree canopies and shrubs taller than 1.1 m block sight and bolts. Plants don't block players or player bullets.
+- **The Colossus fights differently from the raid Bulwark.** It is a floating gem 12 m across with six armor petals and a crystal core on top.
+  - While it hovers it takes 1/5 damage and fires 3-bolt fans at the nearest player it can see every 2.4 s.
+  - Every 9 s it rises and slams down, sending a ground shockwave out to 36 m. Jump over the ring or take 22 damage.
+  - After the slam it is stunned for 5 s: the petals open, it takes full damage and the gold core is a weak point. The HUD says when to dodge, jump and shoot.
+- **Loot boxes:** 9 per zone instead of 3.
+- **Red and Green enemies:** they were spawning, but the dark red Skitters and tiny Mites were hard to spot. Both now glow, Mites are bigger, and the minimap shows enemies as dots in their essence color.
+
+**Zone tiling (built Nov 5, 2026; not yet playtested).** The square 4x4 grid of 250 m zones is replaced by a wrapping rhombitrihexagonal tiling of 54 zones: 9 hexagons (250 m tall), 27 squares and 18 triangles, about 1 km across. Zones are named like "2.1" (a hexagon) and "2.1a" to "2.1e" (its squares and triangles). Features and loot boxes scale with zone area, players start in a hexagon, and the gate stands in a far hexagon. The generated ground follows each zone's outline and meets its neighbors exactly at the border height. Zones load around you by distance instead of by grid neighbor, and bot pathfinding follows paths across the wrap.
 
 **Open questions from the prototype**
 

@@ -75,6 +75,13 @@ namespace FriendlyPersonShooter.ZoneArt
 
         /// <summary>Layers the zone colliders live on (for physics queries).</summary>
         public const int CollisionMask = 1 << 0;
+        /// <summary>
+        /// Tree canopies and big shrubs (boxes): they block sight, not movement. Unity's built-in "Ignore Raycast"
+        /// layer, so default raycasts skip them; only <see cref="SightMask"/> queries see them.
+        /// </summary>
+        public const int FoliageLayer = 2;
+        /// <summary>What blocks an enemy's sight or bolt: everything solid plus foliage.</summary>
+        public const int SightMask = CollisionMask | (1 << FoliageLayer);
 
         private readonly IZoneGenerator _generator;
         private readonly Slot[] _slots;
@@ -197,6 +204,10 @@ namespace FriendlyPersonShooter.ZoneArt
 
         public bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit) =>
             Physics.Raycast(origin, direction, out hit, maxDistance, CollisionMask, QueryTriggerInteraction.Ignore);
+
+        /// <summary>A ray that also stops on foliage (see <see cref="SightMask"/>).</summary>
+        public bool SightRaycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit) =>
+            Physics.Raycast(origin, direction, out hit, maxDistance, SightMask, QueryTriggerInteraction.Ignore);
 
         public bool CheckCapsule(Vector3 a, Vector3 b, float radius) =>
             Physics.CheckCapsule(a, b, radius, CollisionMask, QueryTriggerInteraction.Ignore);
@@ -417,7 +428,12 @@ namespace FriendlyPersonShooter.ZoneArt
             // Colliders go to the fixed collision hierarchy at their true position.
             slot.Collision = new GameObject($"Zone {slot.Coord}");
             slot.Collision.transform.SetParent(_collisionRoot, false);
-            foreach (var c in slot.Visual.GetComponentsInChildren<Collider>(true)) MoveCollider(c, slot.Collision.transform);
+            var moved = new HashSet<GameObject>();
+            foreach (var c in slot.Visual.GetComponentsInChildren<Collider>(true))
+            {
+                // Colliders on an object already moved were destroyed with it.
+                if (c != null && moved.Add(c.gameObject)) MoveColliders(c.gameObject, slot.Collision.transform);
+            }
             Physics.SyncTransforms();
 
             if (Headless)
@@ -435,13 +451,24 @@ namespace FriendlyPersonShooter.ZoneArt
             Debug.Log($"[ZoneWorld] zone {slot.Coord} ready: {slot.Seconds:0.0} s of main-thread building. {slot.Result.Notes}");
         }
 
-        private static void MoveCollider(Collider c, Transform parent)
+        /// <summary>
+        /// Moves every collider on one object to a new object under <paramref name="parent"/>, keeping its layer
+        /// (foliage sits on its own layer) and its world pose. One object per source keeps zones with thousands
+        /// of foliage boxes cheap.
+        /// </summary>
+        private static void MoveColliders(GameObject source, Transform parent)
         {
-            var t = c.transform;
-            var go = new GameObject(t.name);
+            var t = source.transform;
+            var go = new GameObject(t.name) { layer = source.layer };
             go.transform.SetParent(parent, false);
             go.transform.SetPositionAndRotation(t.position, t.rotation);
             go.transform.localScale = t.lossyScale;
+            foreach (var c in source.GetComponents<Collider>()) MoveCollider(c, go);
+        }
+
+        private static void MoveCollider(Collider c, GameObject go)
+        {
+            var t = c.transform;
             switch (c)
             {
                 case MeshCollider m:

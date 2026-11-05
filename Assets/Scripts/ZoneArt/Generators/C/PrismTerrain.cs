@@ -92,6 +92,37 @@ namespace FriendlyPersonShooter.ZoneArt.C
             public Vector2 Feature;   // crater / lake centre (local)
             public float FeatureR;
             public float RiverAngle, RiverPhase, RiverWander;
+
+            /// <summary>Height scale for this zone (0.6..1.2): some zones are low and gentle, a few stay tall.</summary>
+            public float Relief;
+            /// <summary>Where the high ground goes (see <see cref="MassLayout"/>).</summary>
+            public MassLayout Layout;
+            /// <summary>How much of the landform remains away from the high ground (0.25..0.45).</summary>
+            public float MassFloor;
+            /// <summary>Hills: centre (local), radius and strength. Ridge: a point on it, its direction and half width.
+            /// Rim: centre and ring radius and width. Tilt: the uphill direction.</summary>
+            public Vector2[] HillAt;
+            public float[] HillR, HillAmp;
+            public Vector2 MassPoint, MassDir;
+            public float MassR, MassW;
+        }
+
+        /// <summary>The high ground stands a bit taller than the old even landform, since the rest of the zone is lower.</summary>
+        private const float MassBoost = 1.3f;
+
+        /// <summary>How a zone's high ground is arranged, so zones don't all rise in the middle.</summary>
+        public enum MassLayout
+        {
+            /// <summary>One to three hills anywhere in the zone.</summary>
+            Hills,
+            /// <summary>A ridge across the zone.</summary>
+            Ridge,
+            /// <summary>A raised ring around a low middle.</summary>
+            Rim,
+            /// <summary>One side high, sloping down to the other.</summary>
+            Tilt,
+            /// <summary>The old look: high in the middle.</summary>
+            Centre,
         }
 
         public static Shape ShapeFor(ZoneRequest zone)
@@ -115,8 +146,30 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 case TileKind.River: s.A = r.Range(14f, 22f); s.Step = r.Range(4f, 5.5f); s.Soft = r.Range(0.2f, 0.35f); s.HexFrac = r.Range(0.22f, 0.35f); s.LiftAmp = r.Range(4f, 9f); break;
                 default: s.A = r.Range(10f, 18f); s.Step = r.Range(4f, 6f); s.Soft = r.Range(0.15f, 0.3f); s.HexFrac = r.Range(0.3f, 0.42f); s.LiftAmp = r.Range(6f, 12f); s.FeatureR = r.Range(62f, 82f); break;
             }
-            s.A *= 1.35f;
             s.Step *= 1.15f;
+            s.Relief = r.Range(0.6f, 1.2f);
+            s.A *= s.Relief;
+            s.LiftAmp *= 0.5f + 0.5f * s.Relief;
+
+            s.MassFloor = r.Range(0.25f, 0.45f);
+            float pick = r.Value();
+            s.Layout = pick < 0.35f ? MassLayout.Hills : pick < 0.55f ? MassLayout.Ridge : pick < 0.7f ? MassLayout.Rim
+                : pick < 0.9f ? MassLayout.Tilt : MassLayout.Centre;
+            int hills = r.Range(1, 4);
+            s.HillAt = new Vector2[hills];
+            s.HillR = new float[hills];
+            s.HillAmp = new float[hills];
+            for (int i = 0; i < hills; i++)
+            {
+                s.HillAt[i] = new Vector2(r.Range(45f, 205f), r.Range(45f, 205f));
+                s.HillR[i] = r.Range(40f, 75f);
+                s.HillAmp[i] = i == 0 ? 1f : r.Range(0.5f, 0.9f);
+            }
+            float a = r.Range(0f, Mathf.PI * 2f);
+            s.MassDir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+            s.MassPoint = new Vector2(r.Range(80f, 170f), r.Range(80f, 170f));
+            s.MassR = r.Range(62f, 85f);
+            s.MassW = r.Range(26f, 42f);
             return s;
         }
 
@@ -151,7 +204,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     float lx = ix, lz = iz;
                     float wx = z.Origin.x + lx, wz = z.Origin.z + lz;
                     float e = Mathf.Min(Mathf.Min(lx, 250f - lx), Mathf.Min(lz, 250f - lz));
-                    float inner = Smooth(14f, 14f + s.Fall, e);
+                    // A wobbly falloff width, so high ground doesn't end in a square outline.
+                    float fall = s.Fall * (0.9f + 0.55f * ZoneNoise.Fbm(wx + _o3.y, wz + _o3.x, 1f / 70f, 2));
+                    float inner = Smooth(14f, 14f + Mathf.Max(10f, fall), e);
                     float border = ZoneEdges.BorderHeight(z, wx, wz);
                     float blend = ZoneEdges.Blend(z, wx, wz);
                     _border[iz * N + ix] = border;
@@ -175,15 +230,16 @@ namespace FriendlyPersonShooter.ZoneArt.C
             float roll = ZoneNoise.Fbm(wx + _o1.x, wz + _o1.y, 1f / 55f, 4) * s.Roll;
             float n = ZoneNoise.Warped(wx + _o2.x, wz + _o2.y, s.Freq, s.Warp, 4);
             float p = Mathf.Clamp01(0.5f + n * 1.25f);
-            float E = s.A * p;
             var lp = new Vector2(lx, lz);
+            float mass = Mass(lp, wx, wz);
+            float E = s.A * p * mass * MassBoost;
             switch (z.Tile)
             {
                 case TileKind.Canyon:
                 {
                     float c = Mathf.Abs(ZoneNoise.Fbm(wx + _o3.x, wz + _o3.y, 1f / 170f, 3));
                     float canyon = 1f - Smooth(0.035f, 0.13f, c);
-                    E = s.A * (0.6f + 0.4f * p) * (1f - canyon);
+                    E = s.A * (0.6f + 0.4f * p) * (1f - canyon) * mass * MassBoost;
                     break;
                 }
                 case TileKind.Crater:
@@ -221,6 +277,46 @@ namespace FriendlyPersonShooter.ZoneArt.C
             return roll + E;
         }
 
+
+        /// <summary>
+        /// 0..1: how much of the landform's height a spot keeps, from the zone's <see cref="MassLayout"/>
+        /// (high ground in different places per zone). Positions are clamped into the zone, so the far
+        /// terrain outside it continues smoothly.
+        /// </summary>
+        private float Mass(Vector2 lp, float wx, float wz)
+        {
+            var s = _shape;
+            // Bend the shapes with noise so hills, ridges and rims aren't perfect circles and lines.
+            lp += new Vector2(ZoneNoise.Fbm(wx + _o1.y, wz + _o1.x, 1f / 90f, 2), ZoneNoise.Fbm(wx + _o2.y, wz + _o2.x, 1f / 90f, 2)) * 22f;
+            lp = new Vector2(Mathf.Clamp(lp.x, 0f, 250f), Mathf.Clamp(lp.y, 0f, 250f));
+            float m;
+            switch (s.Layout)
+            {
+                case MassLayout.Hills:
+                    m = 0f;
+                    for (int i = 0; i < s.HillAt.Length; i++)
+                    {
+                        m = Mathf.Max(m, s.HillAmp[i] * Mathf.Exp(-Sq((lp - s.HillAt[i]).magnitude / s.HillR[i])));
+                    }
+                    break;
+                case MassLayout.Ridge:
+                {
+                    var normal = new Vector2(-s.MassDir.y, s.MassDir.x);
+                    m = Mathf.Exp(-Sq(Vector2.Dot(lp - s.MassPoint, normal) / s.MassW));
+                    break;
+                }
+                case MassLayout.Rim:
+                    m = Mathf.Exp(-Sq(((lp - new Vector2(125f, 125f)).magnitude - s.MassR) / s.MassW));
+                    break;
+                case MassLayout.Tilt:
+                    m = Smooth(-0.55f, 0.75f, Vector2.Dot(lp - new Vector2(125f, 125f), s.MassDir) / 125f);
+                    break;
+                default:
+                    m = 1f;
+                    break;
+            }
+            return s.MassFloor + (1f - s.MassFloor) * m;
+        }
 
         /// <summary>
         /// A height for grid point <paramref name="k"/> eased to the seam height near the zone edge, like the base

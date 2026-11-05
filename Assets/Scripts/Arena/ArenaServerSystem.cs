@@ -137,6 +137,18 @@ namespace FriendlyPersonShooter.Arena
             if (ExpeditionWorld.Active) CreateExpedition();
         }
 
+        private uint _avatarCounter = (uint)System.Environment.TickCount;
+
+        /// <summary>Gives every newly joined player a random robot avatar.</summary>
+        private void PickAvatars()
+        {
+            foreach (var avatar in SystemAPI.Query<RefRW<ArenaAvatar>>().WithAll<ArenaPlayer>())
+            {
+                if (avatar.ValueRO.Seed != 0) continue;
+                avatar.ValueRW.Seed = FriendlyPersonShooter.Core.Avatars.RobotLook.SeedFrom(++_avatarCounter * 2654435761u);
+            }
+        }
+
         protected override void OnUpdate()
         {
             float dt = SystemAPI.Time.DeltaTime;
@@ -157,6 +169,7 @@ namespace FriendlyPersonShooter.Arena
             }
 
             var ecb = new EntityCommandBuffer(Allocator.Temp);
+            PickAvatars();
             SyncPlayers(dt, tickIndex);
             StepEnemies(dt, tickIndex, ecb);
             SyncFragments(tickIndex, ecb);

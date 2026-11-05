@@ -60,6 +60,15 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Unstuck;
     }
 
+    /// <summary>
+    /// The seed of a player's robot avatar (Core.Avatars.RobotLook). The server picks a random one when
+    /// the player joins, so each load-in gets a different robot; 0 = not picked yet.
+    /// </summary>
+    public struct ArenaAvatar : IComponentData
+    {
+        [GhostField] public uint Seed;
+    }
+
     /// <summary>Where a player looks, replicated so others can see it.</summary>
     public struct ArenaLook : IComponentData
     {

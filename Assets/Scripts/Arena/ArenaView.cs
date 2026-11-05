@@ -23,8 +23,6 @@ namespace FriendlyPersonShooter.Arena
 
         private Mesh _cube;
         private Material _floorMat, _wallMat, _pillarMat;
-        private Material[] _bodyMats, _headMats;
-        private List<Matrix4x4>[] _bodies, _heads;
         private readonly List<Matrix4x4> _batch = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _static = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _walls = new List<Matrix4x4>();
@@ -60,24 +58,13 @@ namespace FriendlyPersonShooter.Arena
             _floorMat = MakeMat(new Color(0.35f, 0.37f, 0.33f));
             _wallMat = MakeMat(new Color(0.25f, 0.26f, 0.3f));
             _pillarMat = MakeMat(new Color(0.45f, 0.42f, 0.38f));
-            int colors = PlayerColors.Palette.Length;
-            _bodyMats = new Material[colors];
-            _headMats = new Material[colors];
-            _bodies = new List<Matrix4x4>[colors];
-            _heads = new List<Matrix4x4>[colors];
-            for (int i = 0; i < colors; i++)
-            {
-                _bodyMats[i] = MakeMat(PlayerColors.Palette[i]);
-                _headMats[i] = MakeMat(Color.Lerp(PlayerColors.Palette[i], Color.white, 0.6f));
-                _bodies[i] = new List<Matrix4x4>();
-                _heads[i] = new List<Matrix4x4>();
-            }
             CreateCombatMaterials();
             CreateExpeditionMaterials();
             CreateFeedbackMaterials();
             CreateRaidMaterials();
             CreateLootMaterials();
             CreateGunMaterials();
+            CreateRobotMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();
@@ -184,7 +171,9 @@ namespace FriendlyPersonShooter.Arena
             if (local != Entity.Null && world.EntityManager.HasComponent<ArenaLoadout>(local))
             {
                 var em = world.EntityManager;
-                AddHeldGun(em.GetComponentData<ArenaLoadout>(local), em.GetComponentData<ArenaVitals>(local).Health > 0f);
+                int myId = em.GetComponentData<GhostOwner>(local).NetworkId;
+                AddHeldGun(em.GetComponentData<ArenaLoadout>(local), em.GetComponentData<ArenaVitals>(local).Health > 0f,
+                    SeedOf(em, local, myId), PlayerColors.Index(myId));
             }
             DrawGuns();
 
@@ -239,31 +228,17 @@ namespace FriendlyPersonShooter.Arena
             using var transforms = _players.ToComponentDataArray<LocalTransform>(Allocator.Temp);
             using var looks = _players.ToComponentDataArray<ArenaLook>(Allocator.Temp);
             using var owners = _players.ToComponentDataArray<GhostOwner>(Allocator.Temp);
-            for (int c = 0; c < _bodies.Length; c++)
-            {
-                _bodies[c].Clear();
-                _heads[c].Clear();
-            }
+            BeginRobots();
             var em = world.EntityManager;
             for (int i = 0; i < entities.Length; i++)
             {
                 if (entities[i] == local) continue;
-                // Downed players are drawn lying down by the combat view.
-                if (em.HasComponent<ArenaVitals>(entities[i]) && em.GetComponentData<ArenaVitals>(entities[i]).Health <= 0f) continue;
-                int c = PlayerColors.Index(owners[i].NetworkId);
-                Vector3 p = Near(transforms[i].Position);
-                var yaw = Quaternion.Euler(0f, looks[i].Yaw, 0f);
-                _bodies[c].Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));
-                _heads[c].Add(Matrix4x4.TRS(p + Vector3.up * 1.6f + yaw * Vector3.forward * 0.3f, yaw, new Vector3(0.5f, 0.3f, 0.3f)));
-                if (em.HasComponent<ArenaLoadout>(entities[i]))
-                {
-                    AddHeldByOther(p, looks[i].Yaw, looks[i].Pitch, em.GetComponentData<ArenaLoadout>(entities[i]));
-                }
-            }
-            for (int c = 0; c < _bodies.Length; c++)
-            {
-                DrawList(_bodies[c], _bodyMats[c]);
-                DrawList(_heads[c], _headMats[c]);
+                var e = entities[i];
+                int id = owners[i].NetworkId;
+                bool downed = em.HasComponent<ArenaVitals>(e) && em.GetComponentData<ArenaVitals>(e).Health <= 0f;
+                ArenaLoadout? lo = em.HasComponent<ArenaLoadout>(e) ? em.GetComponentData<ArenaLoadout>(e) : (ArenaLoadout?)null;
+                DrawRobot(e, id, Near(transforms[i].Position), looks[i].Yaw, looks[i].Pitch, SeedOf(em, e, id),
+                    PlayerColors.Index(id), lo, downed);
             }
         }
 

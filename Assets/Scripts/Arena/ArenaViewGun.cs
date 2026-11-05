@@ -7,8 +7,8 @@ namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
     /// Guns you can see: the one in your hands (it kicks when you fire, flashes at the muzzle, dips to
-    /// reload, comes up after a swap and moves to the centre when you zoom), and the ones other players
-    /// hold. Each frame is a few boxes with a stripe in its payload's colour.
+    /// reload, comes up after a swap and moves to the centre when you zoom), and the ones other players'
+    /// robots hold (ArenaViewRobot). Each frame is a few boxes with a stripe in its payload's colour.
     /// </summary>
     public partial class ArenaView
     {
@@ -147,7 +147,7 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>The gun in your hands, posed in front of the camera.</summary>
-        private void AddHeldGun(ArenaLoadout lo, bool alive)
+        private void AddHeldGun(ArenaLoadout lo, bool alive, uint robotSeed, int colorIndex)
         {
             if (viewCamera == null || !alive)
             {
@@ -191,22 +191,13 @@ namespace FriendlyPersonShooter.Arena
             var local = Matrix4x4.TRS(pos, Quaternion.Euler(-pitchUp, -9f * (1f - _zoomBlend), roll), Vector3.one * 0.6f);
             _heldPose = Matrix4x4.TRS(cam.position, cam.rotation, Vector3.one) * local;
             AddGun(_heldPose, gun.Frame, gun.Payload);
+            AddHeldHands(robotSeed, colorIndex, gun.Frame);
             ShapeOf(gun.Frame, out var muzzle);
             _heldMuzzle = _heldPose.MultiplyPoint3x4(muzzle);
             if (now < _flashUntil)
             {
                 _muzzleFlash.Add(Matrix4x4.TRS(_heldMuzzle, cam.rotation * Quaternion.Euler(0f, 0f, now * 2000f % 360f), Vector3.one * 0.11f));
             }
-        }
-
-        /// <summary>A gun in another player's hands, from their position and where they look.</summary>
-        private void AddHeldByOther(Vector3 feet, float yaw, float pitch, ArenaLoadout lo)
-        {
-            var gun = Gun.Unpack(lo.Active == 0 ? lo.GunA : lo.GunB);
-            if (gun.IsEmpty) return;
-            var body = Quaternion.Euler(0f, yaw, 0f);
-            var hand = feet + Vector3.up * 1.2f + body * new Vector3(0.42f, 0f, 0.25f);
-            AddGun(Matrix4x4.TRS(hand, Quaternion.Euler(-pitch, yaw, 0f), Vector3.one * 1.4f), gun.Frame, lo.Payload);
         }
 
         private void DrawGuns()

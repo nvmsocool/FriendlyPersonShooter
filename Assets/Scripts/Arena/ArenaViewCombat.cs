@@ -220,12 +220,12 @@ namespace FriendlyPersonShooter.Arena
                 Vector3 feet = Near(transforms[i].Position);
                 if (v.Health <= 0f)
                 {
-                    // Downed: a slab on the floor and a revive bar that fills as fragments are shot.
-                    _g.Add(Matrix4x4.TRS(feet + Vector3.up * 0.2f, barRot, new Vector3(0.9f, 0.4f, 1.7f)));
+                    // Downed (the robot lies on its back): a revive bar that fills as fragments are shot.
                     AddBar(feet + Vector3.up * 1.2f, barRot, 1.4f, v.ReviveProgress, 0f, _d, revive, null);
                     continue;
                 }
-                Vector3 top = feet + Vector3.up * 2.2f;
+                // Above the tallest robot ears.
+                Vector3 top = feet + Vector3.up * 2.55f;
                 AddBar(top, barRot, 1.2f, v.Health / math.max(v.MaxHealth, 1f), v.Shield / 25f, _d, _e, _f);
                 // A spinning gold cube over anyone holding a chain: buff them or let them cash it.
                 if (buffs[i].ChainLinks > 0)
@@ -298,7 +298,7 @@ namespace FriendlyPersonShooter.Arena
                 Vector3 from = Near(s.Shot.From);
                 if (s.Shot.Frame == (byte)FrameKind.Launcher)
                 {
-                    AddShell(from, from + (Vector3)(s.Shot.To - s.Shot.From), s.Shot.Payload, s.Time);
+                    AddShell(ShotOrigin(s.Shot.ShooterNetworkId, from), from + (Vector3)(s.Shot.To - s.Shot.From), s.Shot.Payload, s.Time);
                 }
                 if (s.Shot.ShooterNetworkId != myId) ArenaAudio.Shot(s.Shot.Payload, from, own: false, (FrameKind)s.Shot.Frame);
             }
@@ -318,7 +318,8 @@ namespace FriendlyPersonShooter.Arena
                 if (s.Shot.ShooterNetworkId == myId || s.Shot.Frame == (byte)FrameKind.Launcher) continue;
                 // Move the whole tracer by the same offset as its start, so it isn't stretched across the wrap.
                 Vector3 from = Near(s.Shot.From);
-                AddLine(from, from + (Vector3)(s.Shot.To - s.Shot.From), TracerList(s.Shot.Payload), TracerWidth(s.Shot.Frame));
+                // Drawn from the shooter's gun muzzle to where the shot went.
+                AddLine(ShotOrigin(s.Shot.ShooterNetworkId, from), from + (Vector3)(s.Shot.To - s.Shot.From), TracerList(s.Shot.Payload), TracerWidth(s.Shot.Frame));
             }
             DrawShells(now);
             DrawList(_a, _vigorMat);

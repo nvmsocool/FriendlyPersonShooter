@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
 using UnityEngine;
 
@@ -6,7 +7,8 @@ namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
     /// Shooting sounds, synthesized in code (no audio files): one voice per payload, a few variants each, and a
-    /// random pitch and volume on every shot so a long burst doesn't drone. Your own shots play flat and soft;
+    /// random pitch and volume on every shot so a long burst doesn't drone. Each gun frame plays the voice at
+    /// its own pitch and loudness, and heavy frames add a low thump. Your own shots play flat and soft;
     /// everyone else's play from where they were fired and fade with distance.
     /// </summary>
     public static class ArenaAudio
@@ -24,22 +26,103 @@ namespace FriendlyPersonShooter.Arena
         private static readonly System.Random Rng = new System.Random();
 
         /// <summary>Plays one shot. <paramref name="own"/>: the local player's shot (not positioned).</summary>
-        public static void Shot(PayloadKind payload, Vector3 position, bool own)
+        public static void Shot(PayloadKind payload, Vector3 position, bool own, FrameKind frame = FrameKind.Rifle)
         {
             if (Application.isBatchMode || !EnsurePool()) return;
             var listener = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
             float distance = own ? 0f : Vector3.Distance(position, listener);
             if (distance > HearingRange) return;
 
+            FrameVoice(frame, out float pitch, out float loud, out float thump);
+            var variants = _clips[payload];
+            Play(variants[Rng.Next(variants.Length)], pitch * Range(0.92f, 1.08f), loud * Range(0.8f, 1f) * (own ? 0.45f : 0.7f), own, position, listener);
+            if (thump > 0f)
+            {
+                if (_thump == null) _thump = MakeThump();
+                Play(_thump, Range(0.9f, 1.1f) / Mathf.Max(0.5f, pitch), thump * (own ? 0.6f : 0.8f), own, position, listener);
+            }
+        }
+
+        /// <summary>A launcher shell bursting: a deep thump with a noisy crack.</summary>
+        public static void Blast(Vector3 position)
+        {
+            if (Application.isBatchMode || !EnsurePool()) return;
+            var listener = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+            if (Vector3.Distance(position, listener) > HearingRange * 1.5f) return;
+            if (_blast == null) _blast = MakeBlast();
+            Play(_blast, Range(0.9f, 1.05f), 0.9f, false, position, listener);
+        }
+
+        /// <summary>How each frame sounds: pitch (lower = heavier), loudness, and the thump layer's loudness.</summary>
+        private static void FrameVoice(FrameKind frame, out float pitch, out float loud, out float thump)
+        {
+            switch (frame)
+            {
+                case FrameKind.Pistol: pitch = 1.15f; loud = 0.9f; thump = 0f; break;
+                case FrameKind.Smg: pitch = 1.35f; loud = 0.6f; thump = 0f; break;
+                case FrameKind.Marksman: pitch = 0.72f; loud = 1.15f; thump = 0.8f; break;
+                // The beam fires ten pulses a second: soft and high, like a hum.
+                case FrameKind.Beam: pitch = 1.8f; loud = 0.3f; thump = 0f; break;
+                case FrameKind.Launcher: pitch = 0.55f; loud = 0.8f; thump = 1f; break;
+                default: pitch = 1f; loud = 0.85f; thump = 0f; break;
+            }
+        }
+
+        private static void Play(AudioClip clip, float pitch, float volume, bool own, Vector3 position, Vector3 listener)
+        {
             var source = _pool[_next];
             _next = (_next + 1) % _pool.Length;
-            var variants = _clips[payload];
-            source.clip = variants[Rng.Next(variants.Length)];
-            source.pitch = Range(0.9f, 1.1f);
-            source.volume = Volume * Range(0.8f, 1f) * (own ? 0.45f : 0.7f);
+            source.clip = clip;
+            source.pitch = pitch;
+            source.volume = Volume * volume;
             source.spatialBlend = own ? 0f : 1f;
             source.transform.position = own ? listener : position;
             source.Play();
+        }
+
+        private static AudioClip _thump, _blast;
+
+        /// <summary>A short low sine drop: weight under heavy shots.</summary>
+        private static AudioClip MakeThump()
+        {
+            const float length = 0.18f;
+            int n = (int)(Rate * length);
+            var data = new float[n];
+            float phase = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)Rate;
+                float f = 140f * Mathf.Exp(-t * 14f) + 45f;
+                phase += f / Rate;
+                float env = Mathf.Clamp01(t / 0.002f) * Mathf.Exp(-t * 22f);
+                data[i] = 0.8f * Mathf.Sin(phase * 2f * Mathf.PI) * env;
+            }
+            var clip = AudioClip.Create("Thump", n, 1, Rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
+
+        private static AudioClip MakeBlast()
+        {
+            var rng = new System.Random(1234);
+            const float length = 0.7f;
+            int n = (int)(Rate * length);
+            var data = new float[n];
+            float phase = 0f, low = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)Rate;
+                float f = 90f * Mathf.Exp(-t * 6f) + 35f;
+                phase += f / Rate;
+                float noise = (float)rng.NextDouble() * 2f - 1f;
+                low += (noise - low) * 0.12f;
+                float env = Mathf.Clamp01(t / 0.003f) * Mathf.Exp(-t * 6.5f);
+                float tail = Mathf.Clamp01((n - i) / (Rate * 0.02f));
+                data[i] = Mathf.Clamp((0.7f * Mathf.Sin(phase * 2f * Mathf.PI) + 0.9f * low) * env * tail, -1f, 1f);
+            }
+            var clip = AudioClip.Create("Blast", n, 1, Rate, false);
+            clip.SetData(data, 0);
+            return clip;
         }
 
         private static AudioClip[] _hurt;

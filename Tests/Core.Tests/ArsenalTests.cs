@@ -402,6 +402,36 @@ namespace FriendlyPersonShooter.Core.Tests
         }
     }
 
+    public class GunUsageTests
+    {
+        [Test]
+        public void Usage_CountsPerFrameAndReports()
+        {
+            var u = new GunUsage();
+            var rifle = new Gun(FrameKind.Rifle, payload0: new Mod(ModKind.Vigor));
+            u.Held(rifle, 30);
+            u.Shots(FrameKind.Rifle, 10);
+            u.EnemyHit(FrameKind.Rifle, 24f, true);
+            u.AllyHit(FrameKind.Rifle, 12f);
+            u.BoxOpened();
+            u.Took(LootItem.Of(new Mod(ModKind.Damage, ModTier.Epic)));
+            u.Took(LootItem.Of(new Mod(ModKind.Damage, ModTier.Epic)));
+            u.Took(LootItem.Of(new Gun(FrameKind.Beam)));
+
+            var t = u.For(FrameKind.Rifle);
+            Assert.That(t.Shots, Is.EqualTo(10));
+            Assert.That(t.Kills, Is.EqualTo(1));
+            Assert.That(t.Damage, Is.EqualTo(24f));
+            Assert.That(u.PayloadSeconds(PayloadKind.Vigor), Is.EqualTo(30));
+            Assert.That(u.Taken("Epic Damage mod"), Is.EqualTo(2));
+            Assert.That(u.Taken("Beam gun"), Is.EqualTo(1));
+            string report = u.Report();
+            Assert.That(report, Does.Contain("Rifle: held 30s shots=10 hit=20%"));
+            Assert.That(report, Does.Contain("Epic Damage mod x2"));
+            Assert.That(report, Does.Contain("boxes=1"));
+        }
+    }
+
     public class ArsenalCombatTests
     {
         private CombatSettings _s;

@@ -37,8 +37,8 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Matrix4x4> _lootB = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _lootC = new List<Matrix4x4>();
         private readonly List<Matrix4x4>[] _tierLists = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
-        private readonly List<(Vector3 From, Vector3 To, PayloadKind Payload, float Start)> _shells =
-            new List<(Vector3, Vector3, PayloadKind, float)>();
+        private readonly List<(Vector3 From, Vector3 To, PayloadKind Payload, float Start, bool Burst)> _shells =
+            new List<(Vector3, Vector3, PayloadKind, float, bool)>();
         private readonly Dictionary<PayloadKind, List<Matrix4x4>> _blastLists = new Dictionary<PayloadKind, List<Matrix4x4>>();
 
         /// <summary>The gun in hand's zoom, its stats, and what E would do (for the HUD).</summary>
@@ -138,7 +138,7 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------- Launcher shells ----------
 
-        private void AddShell(Vector3 from, Vector3 to, PayloadKind payload, float start) => _shells.Add((from, to, payload, start));
+        private void AddShell(Vector3 from, Vector3 to, PayloadKind payload, float start) => _shells.Add((from, to, payload, start, false));
 
         private void DrawShells(float now)
         {
@@ -161,6 +161,12 @@ namespace FriendlyPersonShooter.Arena
                 }
                 float age = now - arrive;
                 if (age > BlastSeconds) { _shells.RemoveAt(i); continue; }
+                if (!s.Burst)
+                {
+                    ArenaAudio.Blast(s.To);
+                    s.Burst = true;
+                    _shells[i] = s;
+                }
                 // The burst: a quick cube flash the size of the splash, shrinking away.
                 float k = age / BlastSeconds;
                 float size = radius * 2f * Mathf.Lerp(0.6f, 1f, Mathf.Sqrt(k)) * (1f - k * 0.7f);

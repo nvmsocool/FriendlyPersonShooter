@@ -313,7 +313,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 case PayloadKind.Vigor: return "Allies: heal + shield     Enemies: wither";
                 case PayloadKind.Haste: return "Allies: +30% speed, +20% jump     Enemies: slow";
-                case PayloadKind.Relay: return "Allies: next 5 hits carry your other gun's payload + chain     Enemies: tag (splash)";
+                case PayloadKind.Relay: return "Allies: next 5 hits carry your other payload     Enemies: tag (splash)";
                 case PayloadKind.None: return "No payload: damages enemies, heals allies a tiny bit. Find a payload mod to add one.";
                 default: return "Allies: +damage     Enemies: expose";
             }

@@ -68,6 +68,7 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 - Damage you take is always readable: a screen-edge marker points to the attacker, the screen flashes, a hurt sound plays, and an attacker you can't see is named. (First playtest: players couldn't tell what was hurting them.)
 - Hitboxes match the visible model. No hidden hit zones.
 - Enemies don't belong to whoever hit first. Everyone who lands a hit gets the full drop, so there is no kill stealing.
+- Buffing counts as hitting. For 8 seconds after you land a payload buff on someone, every enemy they hit counts as yours too, for drops and kill XP. Supports earn as they help. A plain bullet with no payload doesn't count.
 - Each family has a distinct silhouette and sound, so players can describe them to each other ("lots of Wisps by the river").
 
 ## Resources: essence
@@ -446,7 +447,6 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 
 **Open questions from the prototype**
 
-- Support players earn little essence, because drops go only to players who hit the enemy. Should buffing the killer count as a hit for drops?
 - Under 150 ms of latency, bots land about half as many hits on moving targets. Lag compensation lines up, so this comes from jittery interpolation. Humans should test whether it feels fair.
 - Zones are 250 m in the MVP (about 1 minute to cross), not the doc's 3–5 minutes, so a 20-minute run can reach the gate.
 

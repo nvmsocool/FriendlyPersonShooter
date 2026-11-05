@@ -77,6 +77,7 @@ namespace FriendlyPersonShooter.Arena
             CreateFeedbackMaterials();
             CreateRaidMaterials();
             CreateLootMaterials();
+            CreateGunMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();
@@ -179,6 +180,13 @@ namespace FriendlyPersonShooter.Arena
                 viewCamera.nearClipPlane = 0.05f;
                 viewCamera.transform.SetPositionAndRotation(eye.Value, Quaternion.Euler(-look.y, look.x, 0f));
             }
+            // The gun in hand is posed after the camera moves, so it never trails a turn.
+            if (local != Entity.Null && world.EntityManager.HasComponent<ArenaLoadout>(local))
+            {
+                var em = world.EntityManager;
+                AddHeldGun(em.GetComponentData<ArenaLoadout>(local), em.GetComponentData<ArenaVitals>(local).Health > 0f);
+            }
+            DrawGuns();
 
             _center.text = "";
             if (_wrap) WriteExpeditionHud();
@@ -247,6 +255,10 @@ namespace FriendlyPersonShooter.Arena
                 var yaw = Quaternion.Euler(0f, looks[i].Yaw, 0f);
                 _bodies[c].Add(Matrix4x4.TRS(p + Vector3.up * 0.8f, yaw, new Vector3(0.8f, 1.6f, 0.8f)));
                 _heads[c].Add(Matrix4x4.TRS(p + Vector3.up * 1.6f + yaw * Vector3.forward * 0.3f, yaw, new Vector3(0.5f, 0.3f, 0.3f)));
+                if (em.HasComponent<ArenaLoadout>(entities[i]))
+                {
+                    AddHeldByOther(p, looks[i].Yaw, looks[i].Pitch, em.GetComponentData<ArenaLoadout>(entities[i]));
+                }
             }
             for (int c = 0; c < _bodies.Length; c++)
             {

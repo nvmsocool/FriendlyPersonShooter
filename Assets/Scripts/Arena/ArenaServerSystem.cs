@@ -181,6 +181,7 @@ namespace FriendlyPersonShooter.Arena
                           $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} boxes={_boxesOpened} itemsTaken={_itemsTaken} " +
                           $"blasts={_blastCount} ricochets={_ricochets} hp=[{hp}]");
                 if (ExpeditionWorld.Active) LogExpedition();
+                LogGuns();
             }
         }
 
@@ -204,6 +205,7 @@ namespace FriendlyPersonShooter.Arena
                 _playerById[id] = entity;
 
                 EnsureKit(state);
+                if (!state.BotKit) _usage.Held(state.Loadout.InHand, dt);
                 if (input.ValueRO.SwapGun.IsSet && state.Revive == null) SwapGun(state);
                 if (input.ValueRO.Unstuck.IsSet && state.Revive == null && _time >= state.NextUnstuck)
                 {

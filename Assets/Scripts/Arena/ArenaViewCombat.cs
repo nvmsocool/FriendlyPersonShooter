@@ -281,9 +281,10 @@ namespace FriendlyPersonShooter.Arena
                     var dir = new float3(d.X, d.Y, d.Z);
                     float reach = stats.Range * PlayerProgress.RangeFor(ranks);
                     float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
-                    var gun = eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
+                    var gun = HeldMuzzle(eye);
                     if (stats.Mode != FireMode.Projectile) _localTracers.Add((gun, eye + (Vector3)dir * range, lo.Payload, now, (byte)stats.Frame.Kind));
-                    if (n == 0) ArenaAudio.Shot(lo.Payload, gun, own: true);
+                    if (n == 0) ArenaAudio.Shot(lo.Payload, gun, own: true, stats.Frame.Kind);
+                    OnLocalShot(stats.Frame.Kind);
                 }
             }
 
@@ -299,7 +300,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     AddShell(from, from + (Vector3)(s.Shot.To - s.Shot.From), s.Shot.Payload, s.Time);
                 }
-                if (s.Shot.ShooterNetworkId != myId) ArenaAudio.Shot(s.Shot.Payload, from, own: false);
+                if (s.Shot.ShooterNetworkId != myId) ArenaAudio.Shot(s.Shot.Payload, from, own: false, (FrameKind)s.Shot.Frame);
             }
             _shotsHeardUpTo = heardUpTo;
 

@@ -22,6 +22,11 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float MiteDrop { get; set; } = 0.25f;
         /// <summary>Yellow per Glimmer: a little, for always having something to shoot.</summary>
         public float GlimmerDrop { get; set; } = 1f;
+        /// <summary>
+        /// Seconds after a payload buff during which the buffer shares in whatever the buffed player
+        /// hits, so supports earn essence and kill XP too.
+        /// </summary>
+        public float AssistWindow { get; set; } = 8f;
 
         public float DropFor(EnemyFamily family)
         {
@@ -58,6 +63,8 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// Records which players landed a hit on each live enemy, and on its death hands every one of
     /// them the full drop. No kill stealing: the first hitter, the last hitter and everyone between
     /// all get the same amount. Awards come back in first-hit order so every machine agrees.
+    /// Buffing counts too: for <see cref="EssenceDropSettings.AssistWindow"/> seconds after a payload
+    /// buff, the buffer is credited with every enemy the buffed player hits.
     /// </summary>
     public sealed class DropLedger
     {
@@ -65,6 +72,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         private readonly Dictionary<int, List<int>> _hitters = new Dictionary<int, List<int>>();
         private readonly Dictionary<(int player, EssenceColor color), float> _fractions =
             new Dictionary<(int, EssenceColor), float>();
+        /// <summary>For each buffed player: who buffed them, and until when that counts.</summary>
+        private readonly Dictionary<int, Dictionary<int, double>> _backers = new Dictionary<int, Dictionary<int, double>>();
 
         public DropLedger(EssenceDropSettings settings = null)
         {
@@ -80,6 +89,32 @@ namespace FriendlyPersonShooter.Core.Expedition
                 _hitters.Add(enemyId, list);
             }
             if (!list.Contains(playerId)) list.Add(playerId);
+        }
+
+        /// <summary>
+        /// Notes that a player hit an enemy at <paramref name="time"/>: they count, and so does everyone
+        /// who buffed them within the assist window.
+        /// </summary>
+        public void RecordHit(int enemyId, int playerId, double time)
+        {
+            RecordHit(enemyId, playerId);
+            if (!_backers.TryGetValue(playerId, out var backers)) return;
+            foreach (var kv in backers)
+            {
+                if (time <= kv.Value) RecordHit(enemyId, kv.Key);
+            }
+        }
+
+        /// <summary>A payload buff landed: <paramref name="helperId"/> shares in <paramref name="targetId"/>'s hits for a while.</summary>
+        public void RecordBuff(int helperId, int targetId, double time)
+        {
+            if (helperId == targetId) return;
+            if (!_backers.TryGetValue(targetId, out var backers))
+            {
+                backers = new Dictionary<int, double>();
+                _backers.Add(targetId, backers);
+            }
+            backers[helperId] = time + _settings.AssistWindow;
         }
 
         /// <summary>Players who have hit this enemy so far, in first-hit order.</summary>
@@ -125,6 +160,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         public void PlayerGone(int playerId)
         {
             foreach (var list in _hitters.Values) list.Remove(playerId);
+            _backers.Remove(playerId);
+            foreach (var backers in _backers.Values) backers.Remove(playerId);
             var stale = new List<(int, EssenceColor)>();
             foreach (var key in _fractions.Keys)
             {

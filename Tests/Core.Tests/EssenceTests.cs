@@ -118,6 +118,36 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
+        public void Ledger_BufferSharesInTheBuffedPlayersHitsForAWhile()
+        {
+            var ledger = new DropLedger();
+            ledger.RecordBuff(2, 1, 10.0);
+            ledger.RecordHit(100, 1, 15.0);
+            Assert.That(ledger.HittersOf(100), Is.EqualTo(new[] { 1, 2 }));
+
+            // After the window the buffer no longer counts.
+            ledger.RecordHit(101, 1, 18.5);
+            Assert.That(ledger.HittersOf(101), Is.EqualTo(new[] { 1 }));
+
+            // A fresh buff renews it; buffing yourself never counts.
+            ledger.RecordBuff(2, 1, 20.0);
+            ledger.RecordBuff(1, 1, 20.0);
+            ledger.RecordHit(102, 1, 21.0);
+            Assert.That(ledger.HittersOf(102), Is.EqualTo(new[] { 1, 2 }));
+            Assert.That(ledger.Killed(102, EnemyFamily.Wisp).Select(a => a.PlayerId), Is.EqualTo(new[] { 1, 2 }));
+        }
+
+        [Test]
+        public void Ledger_BufferWhoLeftIsForgotten()
+        {
+            var ledger = new DropLedger();
+            ledger.RecordBuff(2, 1, 0.0);
+            ledger.PlayerGone(2);
+            ledger.RecordHit(100, 1, 1.0);
+            Assert.That(ledger.HittersOf(100), Is.EqualTo(new[] { 1 }));
+        }
+
+        [Test]
         public void Ledger_FractionalDropsBuildUpPerPlayer()
         {
             var ledger = new DropLedger();

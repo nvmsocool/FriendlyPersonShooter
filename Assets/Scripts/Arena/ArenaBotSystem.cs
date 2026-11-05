@@ -47,6 +47,7 @@ namespace FriendlyPersonShooter.Arena
         private PayloadKind _wanted;
         private float _retargetIn;
         private float _swapCooldown;
+        private bool _kitAsked;
         /// <summary>Range of the gun in hand.</summary>
         private float _range = 60f;
         private Entity _target;
@@ -112,13 +113,16 @@ namespace FriendlyPersonShooter.Arena
             }
 
             _swapCooldown -= dt;
-            if (payload != _wanted && _swapCooldown <= 0f)
+            // Always ask once (even when the random starting gun already has the right payload), so the
+            // bot gets a frame it can aim and the server knows it's a bot.
+            if ((payload != _wanted || !_kitAsked) && _swapCooldown <= 0f)
             {
                 // Ask the server for this role's kit (a gun with the wanted payload); retry until it shows up.
                 var rpc = EntityManager.CreateEntity();
                 EntityManager.AddComponentData(rpc, new BotKitRequest { Payload = _wanted });
                 EntityManager.AddComponent<SendRpcCommandRequest>(rpc);
                 _swapCooldown = 2f;
+                _kitAsked = true;
             }
 
             _retargetIn -= dt;

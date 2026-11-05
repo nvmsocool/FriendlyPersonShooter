@@ -51,6 +51,17 @@ namespace FriendlyPersonShooter.Arena
         private IReadOnlyList<LootBox> _boxes;
         private readonly Dictionary<int, Entity> _connections = new Dictionary<int, Entity>();
         private int _boxesOpened, _itemsTaken, _blastCount, _ricochets;
+        /// <summary>Playtest tuning numbers (humans only), logged as a [Guns] line.</summary>
+        private readonly GunUsage _usage = new GunUsage();
+        private double _nextGunLog = 30;
+
+        /// <summary>Every 30 s: the [Guns] tuning line.</summary>
+        private void LogGuns()
+        {
+            if (_time < _nextGunLog) return;
+            _nextGunLog = _time + 30;
+            UnityEngine.Debug.Log(_usage.Report());
+        }
 
         // ---------- Loadouts ----------
 
@@ -133,6 +144,7 @@ namespace FriendlyPersonShooter.Arena
                     PlayerProgress.FireRateFor(ranks));
                 if (shots <= 0) continue;
                 _shots += shots;
+                if (!shooter.BotKit) _usage.Shots(stats.Frame.Kind, shots);
 
                 // Rewind everyone else to the tick this player was looking at when they fired.
                 int delay = 0;
@@ -245,6 +257,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     SocialBuff(shooter.Vitals.Id, target.Vitals.Id, result);
                     AddXp(shooter.Vitals.Id, XpRewards.AllyBuff);
+                    _ledger?.RecordBuff(shooter.Vitals.Id, target.Vitals.Id, _time);
                 }
                 _allyHits++;
                 float given = result.Healed + result.ShieldGained;
@@ -257,6 +270,7 @@ namespace FriendlyPersonShooter.Arena
                 }
                 if (helped && stats.Ricochet) given += Ricochet(shooter, target, stats, fx, point, ecb);
                 _healing += given;
+                if (!shooter.BotKit) _usage.AllyHit(stats.Frame.Kind, given);
                 confirm.TargetIsPlayer = 1;
                 confirm.Refused = (byte)(result.Refused != RefuseReason.None ? 1 : 0);
                 confirm.Healed += given;
@@ -308,10 +322,11 @@ namespace FriendlyPersonShooter.Arena
                 baseDamage *= armor;
             }
             var hitResult = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, fx, baseDamage, weakPoint, _time, _combos);
-            _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id);
+            _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id, _time);
             _enemyHits++;
             if (hitResult.WeakPoint) _weakHits++;
             _damageDealt += hitResult.DamageDealt;
+            if (!shooter.BotKit) _usage.EnemyHit(stats.Frame.Kind, hitResult.DamageDealt, hitResult.Killed);
             if (hitResult.ChainEvent == ChainEvent.Cashed && hitResult.ChainLinks >= 2)
             {
                 _chainsCashed++;
@@ -355,6 +370,7 @@ namespace FriendlyPersonShooter.Arena
             if (r.Refused != RefuseReason.None) return 0f;
             _ricochets++;
             SocialBuff(shooter.Vitals.Id, best.Vitals.Id, r);
+            _ledger?.RecordBuff(shooter.Vitals.Id, best.Vitals.Id, _time);
             SendShot(0, ToFloat3(from), ToFloat3(bestCenter), fx.Payload, stats.Frame.Kind, ecb);
             return r.Healed + r.ShieldGained;
         }
@@ -440,6 +456,7 @@ namespace FriendlyPersonShooter.Arena
                 _items.Remove(bestItem);
                 ecb.DestroyEntity(bestItem);
                 _itemsTaken++;
+                if (!state.BotKit) _usage.Took(ground.Item);
                 Refit(state);
                 if (state.Loadout.Active != before) FireControl.SwappedIn(ref state.Guns[state.Loadout.Active], _time);
                 var at = feet + new float3(0f, 0.6f, 0f);
@@ -464,6 +481,7 @@ namespace FriendlyPersonShooter.Arena
             }
             if (box < 0 || !_boxLedger.TryOpen(box, id)) return;
             _boxesOpened++;
+            if (!state.BotKit) _usage.BoxOpened();
             var item = LootRolls.Roll(LootSource.Box, LootBoxLedger.RollSeed(_lootSeed, box, id));
             SpawnItem(item, id, ExpeditionWorld.Wrap(boxPos + new float3(0f, 1.1f, 0f)), PersonalItemLife);
             if (_connections.TryGetValue(id, out var connection))

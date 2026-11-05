@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.Progression;
@@ -105,10 +106,24 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void GlimmersDropALittleYellowAndNeverAttack()
+        public void GlimmersSometimesDropARandomColorAndNeverAttack()
         {
-            Assert.That(EssenceColors.Of(EnemyFamily.Glimmer), Is.EqualTo(EssenceColor.Yellow));
-            Assert.That(new EssenceDropSettings().DropFor(EnemyFamily.Glimmer), Is.EqualTo(1f));
+            var ledger = new DropLedger(seed: 42);
+            int drops = 0;
+            var colors = new HashSet<EssenceColor>();
+            for (int i = 0; i < 2000; i++)
+            {
+                ledger.RecordHit(i, 7);
+                foreach (var a in ledger.Killed(i, EnemyFamily.Glimmer))
+                {
+                    Assert.That(a.PlayerId, Is.EqualTo(7));
+                    Assert.That(a.Amount, Is.EqualTo(1));
+                    drops++;
+                    colors.Add(a.Color);
+                }
+            }
+            Assert.That(drops, Is.InRange(420, 580), "about 25% of kills drop");
+            Assert.That(colors, Is.EquivalentTo(new[] { EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green }));
             Assert.That(EnemyAttackSettings.For(EnemyFamily.Glimmer).Damage, Is.EqualTo(0f));
             Assert.That(new CombatSettings().EnemyHealth(EnemyFamily.Glimmer), Is.LessThanOrEqualTo(10f), "one base shot kills");
         }

@@ -20,8 +20,11 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float SkitterDrop { get; set; } = 2f;
         /// <summary>Green per single Mite; a 12-Mite swarm is worth 3.</summary>
         public float MiteDrop { get; set; } = 0.25f;
-        /// <summary>Yellow per Glimmer: a little, for always having something to shoot.</summary>
-        public float GlimmerDrop { get; set; } = 1f;
+        /// <summary>
+        /// Chance that a Glimmer kill drops one essence of a random color (among the colors enemies drop
+        /// today): a small bonus for always having something to shoot, never a reliable source of any color.
+        /// </summary>
+        public float GlimmerChance { get; set; } = 0.25f;
         /// <summary>
         /// Seconds after a payload buff during which the buffer shares in whatever the buffed player
         /// hits, so supports earn essence and kill XP too.
@@ -34,7 +37,8 @@ namespace FriendlyPersonShooter.Core.Expedition
             {
                 case EnemyFamily.Wisp: return WispDrop;
                 case EnemyFamily.Skitter: return SkitterDrop;
-                case EnemyFamily.Glimmer: return GlimmerDrop;
+                // Glimmers roll a chance at a random color instead (see GlimmerChance).
+                case EnemyFamily.Glimmer: return 0f;
                 // The raid boss pays out through the raid's clear reward instead.
                 case EnemyFamily.Bulwark: return 0f;
                 default: return MiteDrop;
@@ -75,10 +79,17 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>For each buffed player: who buffed them, and until when that counts.</summary>
         private readonly Dictionary<int, Dictionary<int, double>> _backers = new Dictionary<int, Dictionary<int, double>>();
 
-        public DropLedger(EssenceDropSettings settings = null)
+        private CombatRandom _rng;
+
+        /// <param name="seed">Seeds the Glimmer drop rolls.</param>
+        public DropLedger(EssenceDropSettings settings = null, uint seed = 1)
         {
             _settings = settings ?? new EssenceDropSettings();
+            _rng = new CombatRandom(seed == 0 ? 1u : seed);
         }
+
+        /// <summary>The colors a Glimmer can drop: those some enemy drops today.</summary>
+        private static readonly EssenceColor[] GlimmerColors = { EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green };
 
         /// <summary>Notes that a player hit an enemy. Repeat hits by the same player count once.</summary>
         public void RecordHit(int enemyId, int playerId)
@@ -132,6 +143,17 @@ namespace FriendlyPersonShooter.Core.Expedition
             var awards = new List<EssenceAward>();
             if (!_hitters.TryGetValue(enemyId, out var list)) return awards;
             _hitters.Remove(enemyId);
+
+            if (family == EnemyFamily.Glimmer)
+            {
+                // Each hitter rolls on their own: a chance at one essence of a random color.
+                foreach (int player in list)
+                {
+                    if (!_rng.Chance(_settings.GlimmerChance)) continue;
+                    awards.Add(new EssenceAward(player, GlimmerColors[_rng.NextInt(GlimmerColors.Length)], 1));
+                }
+                return awards;
+            }
 
             var color = EssenceColors.Of(family);
             float drop = _settings.DropFor(family);

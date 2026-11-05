@@ -56,9 +56,9 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 | Sentinel | Long-range precision | Stands far off, opens a head-sized eye briefly before firing | Eye | Blue |
 | Bulwark | Timing and patience | Armored shell; the weak plate rotates or opens on a rhythm | Rotating plate | Purple |
 | Diver | Vertical tracking | Circles overhead, then dives at you | Wings | Orange |
-| Glimmer | Quick flicks | Small, short-lived target that pops up near players; never attacks; dies to one shot | Whole body, small | A little Yellow |
+| Glimmer | Quick flicks | Small, short-lived target that pops up near players; never attacks; dies to one shot | Whole body, small | 25% chance of 1 random essence |
 
-**Glimmers** keep you shooting between fights. They appear often, die to any single hit and drop about 1 Yellow each, so their yield stays small next to real Yellow hunting.
+**Glimmers** keep you shooting between fights. They appear often and die to any single hit. Each kill has a 25% chance to drop 1 essence of a random color (Yellow, Red or Green), so they're a small bonus, never a reliable source of any color.
 
 **Difficulty tiers.** Each family has tiers that scale hitbox size, speed, pattern randomness and how long the weak point stays open. Elites combine two families (a Skitter that blinks, a Bulwark guarded by Mites), so higher regions test mixed skills.
 
@@ -370,7 +370,7 @@ The biggest risk is population: the social design only works if players keep run
 - [x] Banked essence is shared within a party, and one gate payment covers the party (decided after the first playtest).
 - [x] The party bank stays with the party when someone leaves; the leaver takes nothing (decided).
 - [x] Levels and gear each get about +20% of the power budget (decided).
-- [ ] Do Glimmers' Yellow drops weaken "knowing where your color is"? Keep their yield small and watch it.
+- [ ] Do Glimmers' random drops weaken "knowing where your color is"? Keep their yield small and watch it.
 
 ## Test bots
 

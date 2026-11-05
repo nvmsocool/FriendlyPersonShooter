@@ -77,7 +77,7 @@ namespace FriendlyPersonShooter.Arena
             _map = ExpeditionWorld.Map;
             _blooms = new BloomSchedule(_map, new BloomSettings());
             _schedule = new SpawnSchedule(_map, _blooms, new SpawnSettings());
-            _ledger = new DropLedger();
+            _ledger = new DropLedger(seed: (uint)System.Environment.TickCount);
             _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed);
             _caches = new CacheRegistry();
             CreateSocial();

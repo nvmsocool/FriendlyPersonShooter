@@ -128,5 +128,32 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(a.Banked(EssenceColor.Yellow), Is.EqualTo(0));
             Assert.That(gate.HasAccess(1));
         }
+
+        [Test]
+        public void Gate_ShutsAfterItsOpenTime_AndCostsMoreEachTime()
+        {
+            var gate = new Gate(Site(), 1, new GateSettings { Cost = 40, CostStep = 20, OpenSeconds = 90 });
+            var a = new EssenceWallet(1);
+            a.PickUp(EssenceColor.Yellow, 200);
+            a.BankAll();
+            Assert.That(gate.IsOpen, Is.False);
+            Assert.That(gate.Unlock(a, 10), Is.EqualTo(GateUnlockOutcome.Unlocked));
+            Assert.That(gate.IsOpen);
+            Assert.That(gate.OpenLeft(40), Is.EqualTo(60).Within(1e-9));
+            gate.GrantAccess(2);
+            Assert.That(gate.Step(99), Is.False);
+            Assert.That(gate.HasAccess(2));
+
+            Assert.That(gate.Step(100), Is.True);
+            Assert.That(gate.IsOpen, Is.False);
+            Assert.That(gate.HasAccess(1) || gate.HasAccess(2), Is.False, "everyone's access ends");
+            Assert.That(gate.Cost, Is.EqualTo(60));
+            Assert.That(gate.Step(500), Is.False, "a shut gate stays shut");
+
+            Assert.That(gate.Unlock(a, 600), Is.EqualTo(GateUnlockOutcome.Unlocked));
+            Assert.That(a.Banked(EssenceColor.Yellow), Is.EqualTo(100));
+            Assert.That(gate.Step(690), Is.True);
+            Assert.That(gate.Cost, Is.EqualTo(80));
+        }
     }
 }

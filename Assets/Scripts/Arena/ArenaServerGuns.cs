@@ -318,7 +318,7 @@ namespace FriendlyPersonShooter.Arena
             float baseDamage = damage;
             if (enemy.Family == EnemyFamily.Bulwark)
             {
-                enemy.Boss.HitOutcome(weakPoint, _bulwark, out float armor, out weakPoint);
+                enemy.Boss.HitOutcome(weakPoint, ShapeOf(enemy), out float armor, out weakPoint);
                 baseDamage *= armor;
             }
             var hitResult = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, fx, baseDamage, weakPoint, _time, _combos);

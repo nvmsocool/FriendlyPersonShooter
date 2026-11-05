@@ -111,7 +111,7 @@ namespace FriendlyPersonShooter.Arena
                 case EnemyFamily.Wisp: return "A Wisp (yellow, flies)";
                 case EnemyFamily.Skitter: return "A Skitter (red, ground)";
                 case EnemyFamily.Mite: return "Mites (green swarm)";
-                case EnemyFamily.Bulwark: return "The Bulwark (raid boss)";
+                case EnemyFamily.Bulwark: return "A Bulwark (boss)";
                 default: return f.ToString();
             }
         }

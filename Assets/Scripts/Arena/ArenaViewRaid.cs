@@ -392,6 +392,49 @@ namespace FriendlyPersonShooter.Arena
         /// </summary>
         private void AddBoss(ArenaEnemy en, Vector3 p)
         {
+            if (en.World)
+            {
+                AddWorldBoss(en, p);
+                return;
+            }
+            AddBossShape(en, p, ref _plateAnim, Near(RaidArena.Center).y);
+            _bossSeen = true;
+            _bossHealth = en.Health;
+            _bossMax = en.MaxHealth;
+            _bossOpen = en.PlateOpen;
+            _bossWarn = en.PlateWarn;
+            _bossTele = en.Telegraph;
+            _bossEnraged = en.MaxHealth > 0f && en.Health / en.MaxHealth < 0.5f;
+        }
+
+        private static readonly WorldBossSettings WorldBossLook = new WorldBossSettings();
+        private static readonly BulwarkSettings WorldBossShapeLook = WorldBoss.Shape(BossLook, WorldBossLook.Scale);
+        private float _worldPlateAnim;
+        private List<Matrix4x4>[] _bossLists;
+        private readonly int[] _bossListStarts = new int[9];
+
+        /// <summary>
+        /// The Colossus (world boss): the raid boss's shape drawn around its centre, then scaled up,
+        /// with its own plate animation. Its health is on the HUD from the expedition status.
+        /// </summary>
+        private void AddWorldBoss(ArenaEnemy en, Vector3 p)
+        {
+            _bossLists = _bossLists ?? new[] { _bossBodies, _bossTelegraph, _bossArmor, _bossSeams, _bossThrust, _bossColumn, _platesShut, _platesWarn, _platesOpen };
+            for (int i = 0; i < _bossLists.Length; i++) _bossListStarts[i] = _bossLists[i].Count;
+            float k = WorldBossLook.Scale;
+            // The floor under it, in the unscaled drawing, so its column still reaches the ground once scaled.
+            AddBossShape(en, p, ref _worldPlateAnim, p.y - WorldBossShapeLook.HoverHeight / k);
+            var scale = Matrix4x4.Translate(p) * Matrix4x4.Scale(Vector3.one * k) * Matrix4x4.Translate(-p);
+            for (int i = 0; i < _bossLists.Length; i++)
+            {
+                var list = _bossLists[i];
+                for (int j = _bossListStarts[i]; j < list.Count; j++) list[j] = scale * list[j];
+            }
+        }
+
+        /// <summary>The Bulwark's meshes at raid size around <paramref name="p"/>.</summary>
+        private void AddBossShape(ArenaEnemy en, Vector3 p, ref float plateAnim, float floorY)
+        {
             float t = Time.time;
             var rot = Quaternion.Euler(0f, en.Yaw, 0f);
             var f = rot * Vector3.forward;
@@ -441,32 +484,23 @@ namespace FriendlyPersonShooter.Arena
 
             // Hover glow under the shell and a faint column down to the floor.
             Box(_bossThrust, p - u * 2.25f, rot * Quaternion.Euler(0f, 45f + t * 40f, 0f), new Vector3(1.7f, 0.15f, 1.7f));
-            float floorY = Near(RaidArena.Center).y;
             float column = p.y - 2.3f - floorY;
             if (column > 0.1f) Box(_bossColumn, new Vector3(p.x, floorY + column / 2f, p.z), rot, new Vector3(0.3f, column, 0.3f));
 
             // The plate: shutters that slide apart to reveal the gold crystal (the hit area).
             float target = en.PlateOpen ? 1f : 0f;
-            _plateAnim = Mathf.MoveTowards(_plateAnim, target, Time.deltaTime * 5f);
+            plateAnim = Mathf.MoveTowards(plateAnim, target, Time.deltaTime * 5f);
             var plate = p + f * (BossLook.BodyRadius + BossLook.PlateOut);
-            float slide = 0.4f + _plateAnim * 0.85f;
+            float slide = 0.4f + plateAnim * 0.85f;
             var shutterMats = en.PlateWarn ? _platesWarn : _platesShut;
             Box(shutterMats, plate - f * 0.25f + r * slide, rot, new Vector3(0.78f, 1.55f, 0.3f));
             Box(shutterMats, plate - f * 0.25f - r * slide, rot, new Vector3(0.78f, 1.55f, 0.3f));
             if (en.PlateWarn) Box(_platesWarn, plate - f * 0.3f, rot, new Vector3(0.1f, 1.5f, 0.32f));
-            if (_plateAnim > 0.02f)
+            if (plateAnim > 0.02f)
             {
-                float size = BossLook.PlateRadius * 1.3f * _plateAnim;
+                float size = BossLook.PlateRadius * 1.3f * plateAnim;
                 Box(_platesOpen, plate, rot * Quaternion.Euler(0f, 0f, 45f + t * 90f), new Vector3(size, size, size));
             }
-
-            _bossSeen = true;
-            _bossHealth = en.Health;
-            _bossMax = en.MaxHealth;
-            _bossOpen = en.PlateOpen;
-            _bossWarn = en.PlateWarn;
-            _bossTele = en.Telegraph;
-            _bossEnraged = health < 0.5f;
         }
 
         private void DrawBosses()
@@ -490,6 +524,20 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_platesOpen, _plateOpenMat);
             DrawList(_bossColumn, _raidBeamMat);
             foreach (var l in new[] { _bossColumn, _bossBodies, _bossTelegraph, _bossArmor, _bossSeams, _bossThrust, _platesShut, _platesWarn, _platesOpen }) l.Clear();
+        }
+
+        private static readonly GateSettings GateLook = new GateSettings();
+
+        /// <summary>The Colossus's line on the HUD: where it is and its health.</summary>
+        private void WriteWorldBossHud(ExpeditionStatus s, System.Text.StringBuilder e)
+        {
+            if (!s.WorldBoss || s.InRaid) return;
+            var delta = ExpeditionWorld.Near(new float3(s.WorldBossAt.x, 0f, s.WorldBossAt.y), _camRef) - _camRef;
+            float distance = math.length(delta.xz);
+            float bearing = math.degrees(math.atan2(delta.x, delta.z));
+            int bars = Mathf.RoundToInt(math.saturate(s.WorldBossHealth) * 20f);
+            e.Append($"<color=#FF9A40><b>COLOSSUS</b></color> {distance:0} m {Direction(Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing))}  " +
+                     $"[{new string('|', bars)}{new string('.', 20 - bars)}] {s.WorldBossHealth * 100f:0}%  <color=#B8B0D8>shoot its gold plate when it opens</color>\n");
         }
 
         /// <summary>Raid lines for the expedition HUD: the boss bar inside, the countdown, the key near the door.</summary>
@@ -550,6 +598,20 @@ namespace FriendlyPersonShooter.Arena
                     return "<color=#FF9A40>The Bulwark calls for help: adds incoming!</color>\n";
                 case AnnounceKind.RaidPledged:
                     return $"{PlayerColors.Tag(m.PlayerNetworkId)} pledged {m.Value} to the raid key\n";
+                case AnnounceKind.GateUnlocked:
+                    return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} opened the gate ({m.Value} Yellow)! It shuts in {(int)GateLook.OpenSeconds}s</color>\n";
+                case AnnounceKind.ExpeditionComplete:
+                    return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} went through the gate in {m.Value / 60}:{m.Value % 60:00}</color>\n";
+                case AnnounceKind.GateClosed:
+                    return $"<color=#FFB040>The gate shut. Opening it again costs {m.Value} Yellow</color>\n";
+                case AnnounceKind.WorldBossLanded:
+                {
+                    var landmarks = ExpeditionWorld.Map.Landmarks;
+                    string where = m.Value >= 0 && m.Value < landmarks.Count ? $" near the {landmarks[m.Value].Name}" : "";
+                    return $"<color=#FF9A40><b>WORLD BOSS!</b> The Colossus landed{where}. Everyone's welcome: Yellow, Red and Green for all who hit it</color>\n";
+                }
+                case AnnounceKind.WorldBossDown:
+                    return $"<color=#FFD84D>THE COLOSSUS FELL! +{WorldBossLook.EssenceEach} Yellow, Red and Green and an item for each of the {m.Value} who hit it</color>\n";
                 default:
                     return null;
             }

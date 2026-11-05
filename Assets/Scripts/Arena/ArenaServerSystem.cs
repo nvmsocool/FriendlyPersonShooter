@@ -87,6 +87,8 @@ namespace FriendlyPersonShooter.Arena
             public float MaxHealth;
             /// <summary>Part of the raid fight: removed (without drops) when the run ends.</summary>
             public bool Raid;
+            /// <summary>The Colossus, the open-world boss (a big Bulwark).</summary>
+            public bool WorldBoss;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -376,7 +378,7 @@ namespace FriendlyPersonShooter.Arena
             EntityManager.SetComponentData(e, new ArenaEnemy
             {
                 Family = state.Family, Health = state.Vitals.Health, MaxHealth = state.Vitals.Health, Hittable = true,
-                Yaw = state.Boss.Yaw,
+                Yaw = state.Boss.Yaw, World = state.WorldBoss,
             });
             _enemies[e] = state;
             _enemyById[id] = e;
@@ -479,9 +481,14 @@ namespace FriendlyPersonShooter.Arena
                     case EnemyFamily.Bulwark:
                     {
                         float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
-                        s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, _bulwark);
-                        int wave = s.Boss.TakeWaveDue(fraction, _bulwark);
-                        if (wave > 0) _raidWaveDue = wave;
+                        var shape = ShapeOf(s);
+                        s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, shape);
+                        int wave = s.Boss.TakeWaveDue(fraction, shape);
+                        if (wave > 0)
+                        {
+                            if (s.WorldBoss) _worldWaveDue = wave;
+                            else _raidWaveDue = wave;
+                        }
                         position = s.Boss.Position;
                         break;
                     }
@@ -514,7 +521,8 @@ namespace FriendlyPersonShooter.Arena
                 {
                     Family = s.Family, Health = s.Vitals.Health, MaxHealth = s.Vitals.MaxHealth,
                     Hittable = hittable, Telegraph = s.Telegraph,
-                    Yaw = s.Boss.Yaw, PlateOpen = s.Boss.Open, PlateWarn = s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(_bulwark),
+                    Yaw = s.Boss.Yaw, PlateOpen = s.Boss.Open, PlateWarn = s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(ShapeOf(s)),
+                    World = s.WorldBoss,
                     Withered = s.Vitals.Debuffs.Has(EffectKind.Wither), Exposed = s.Vitals.Debuffs.Has(EffectKind.Expose),
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
                 });
@@ -547,7 +555,11 @@ namespace FriendlyPersonShooter.Arena
             if (ExpeditionWorld.Active)
             {
                 if (s.Family == EnemyFamily.Mite) s.Swarm.Alive[s.MiteIndex] = false;
-                if (s.Family == EnemyFamily.Bulwark) RaidBossKilled();
+                if (s.Family == EnemyFamily.Bulwark)
+                {
+                    if (s.WorldBoss) WorldBossKilled(s, ecb);
+                    else RaidBossKilled();
+                }
                 ExpeditionKill(s);
                 return;
             }
@@ -662,8 +674,9 @@ namespace FriendlyPersonShooter.Arena
                         target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
                         break;
                     case EnemyFamily.Bulwark:
-                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _bulwark.BodyRadius,
-                            BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, _bulwark), _bulwark.PlateRadius);
+                        var shape = ShapeOf(s);
+                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, shape.BodyRadius,
+                            BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, shape), shape.PlateRadius);
                         target.WeakPointOnSurface = true;
                         break;
                     default:

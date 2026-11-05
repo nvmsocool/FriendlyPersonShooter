@@ -69,6 +69,15 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
+        /// The playtest layer: zones lean toward Yellow, Red or Green (Wisps, Skitters, Mites), so the
+        /// raid key's Red and Green can be hunted; one gate (still Yellow).
+        /// </summary>
+        public static LayerSettings ForPlaytest()
+        {
+            return new LayerSettings { GateCount = 1 };
+        }
+
+        /// <summary>
         /// Suggested MVP grid: 4x4 zones of 250 m. The gate is then 2 zones (500–700 m) from the
         /// start, about 2–3 minutes of walking at 5 m/s, leaving most of 20 minutes for hunting.
         /// </summary>

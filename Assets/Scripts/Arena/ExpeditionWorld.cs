@@ -37,7 +37,7 @@ namespace FriendlyPersonShooter.Arena
                 if (_map == null || _mapSeed != NetTestSettings.WorldSeed)
                 {
                     _mapSeed = NetTestSettings.WorldSeed;
-                    _map = LayerGenerator.Generate(_mapSeed, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+                    _map = LayerGenerator.Generate(_mapSeed, LayerSettings.MvpGrid(), LayerSettings.ForPlaytest());
                     _cover = null;
                 }
                 return _map;

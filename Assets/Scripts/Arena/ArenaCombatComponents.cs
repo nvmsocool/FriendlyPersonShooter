@@ -104,6 +104,8 @@ namespace FriendlyPersonShooter.Arena
         [GhostField(Quantization = 10)] public float Yaw;
         [GhostField] public bool PlateOpen;
         [GhostField] public bool PlateWarn;
+        /// <summary>The Colossus, the open-world boss: a Bulwark drawn and hit at a bigger size.</summary>
+        [GhostField] public bool World;
     }
 
     /// <summary>A downed player's soul fragment. Shoot it to help revive them.</summary>
@@ -171,6 +173,12 @@ namespace FriendlyPersonShooter.Arena
         RaidAdds = 13,
         /// <summary>Raid: Player pledged essence to the key. Value = how much.</summary>
         RaidPledged = 14,
+        /// <summary>Expedition: the gate shut. Value = what the next opening costs.</summary>
+        GateClosed = 15,
+        /// <summary>The Colossus landed. Value = the landmark id it landed by.</summary>
+        WorldBossLanded = 16,
+        /// <summary>The Colossus fell. Value = how many players hit it.</summary>
+        WorldBossDown = 17,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

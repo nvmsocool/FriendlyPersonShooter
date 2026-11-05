@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
+using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Net;
 using Unity.Collections;
 using Unity.Entities;
@@ -34,6 +35,7 @@ namespace FriendlyPersonShooter.Arena
         private const float FragmentRadius = 0.2f;
 
         private static readonly BulwarkSettings BossShape = new BulwarkSettings();
+        private static readonly BulwarkSettings WorldBossShape = WorldBoss.Shape(BossShape, new WorldBossSettings().Scale);
         private BotAim _aim;
         private BotMover _mover;
         private readonly BotPath _path = new BotPath();
@@ -157,16 +159,17 @@ namespace FriendlyPersonShooter.Arena
                     if (enemy.Family == EnemyFamily.Bulwark)
                     {
                         // Aim at the plate while it's open and facing us; otherwise at the shell.
-                        var plate = BulwarkBehavior.PlateCenterOf(ToVec(tpos), enemy.Yaw, BossShape);
+                        var shape = enemy.World ? WorldBossShape : BossShape;
+                        var plate = BulwarkBehavior.PlateCenterOf(ToVec(tpos), enemy.Yaw, shape);
                         var toMe = math.normalizesafe(eye - tpos);
                         var facing = BulwarkBehavior.FacingOf(enemy.Yaw);
                         bool plateFacesMe = facing.X * toMe.x + facing.Z * toMe.z > 0.3f;
                         if (enemy.PlateOpen && plateFacesMe)
                         {
                             aimPoint = new float3(plate.X, plate.Y, plate.Z);
-                            radius = BossShape.PlateRadius;
+                            radius = shape.PlateRadius;
                         }
-                        else radius = BossShape.BodyRadius * 0.8f;
+                        else radius = shape.BodyRadius * 0.8f;
                     }
                 }
                 var aim = _aim.Step(dt, ToVec(eye), _target.Index, ToVec(aimPoint), radius);

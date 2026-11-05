@@ -89,7 +89,7 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 
 **What it's for**
 
-- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access.
+- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access. An opening lasts 90 seconds; then the gate shuts and the next opening costs 20 more (40, 60, 80...), so the gate stays a goal instead of a door left open.
 - **Raid keys** cost several colors at once (for example 30 Blue + 30 Purple + 20 Green). One player rarely has the mix, so groups pool essence.
 - **Attunement** (small, optional): spend essence to reroll a mod's secondary stat.
 
@@ -228,6 +228,7 @@ The world is a set of huge grids of zones that wrap around at the edges, one gri
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
 - **Raids** are doors in the world. Whoever is standing at the door when its key is fully pooled goes in together, strangers included. Raids take 4–8 players, the boss scales to the group size, and everyone returns to the door's zone afterward.
+- **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it.
 
 **Zones and generation**
 
@@ -446,6 +447,17 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 **Guns (built Nov 4, 2026; not yet playtested).** The found-gun system from the Guns section replaces the single rifle and the Q payload cycle. It has all six frames (Pistol, burst Rifle, SMG, Marksman, Beam and a Launcher whose shells burst on landing), 3 mod slots plus a payload slot, and stat, special and payload mods in three tiers. Everyone starts with one random gun with one random payload mod, and bots get their role's payload. Q swaps guns, R reloads, right mouse zooms, and E opens a loot box or takes an item. Shift sprints at 1.5× speed while moving forward and not zoomed, with no stamina. Each zone has 3 boxes, and every player gets their own roll from each box once. A raid clear leaves each raider a rare-or-better item. A swapped-out item stays on the ground for 2 minutes for anyone to take. Bosses outside raids don't exist yet. Checked in the Editor with bots: every frame fires, and boxes, pickups, swaps and drops work.
 
 **Avatars (built Nov 4, 2026; not yet playtested).** Players are goofy floating robots in the zones' low-poly style, based on a legless hovering robot with a visor face. Each player gets a random robot when they join: head (ball, box, can or bean), ears (cat ears, antenna, propeller, bunny ears, headphones or twin antennae), eyes (a mismatched pair, one huge eye, three eyes or googly eyes), mouth, body (egg, barrel, cone or ball), a short or springy neck, one or two thrusters, and big mitts or three-fingered hands. Shells are mostly white; the chest plate, cuffs and ears use the player's team colour. Robots bob, lean into movement and wobble their heads. Their floating hands hold the gun on its grip and fore-end, and tracers leave from the gun's muzzle. You see your own hands on your gun. Downed robots lie on their backs.
+
+**After the first playtest (built Nov 4, 2026; not yet playtested).**
+- **Gate:** it no longer stays open forever. Paying opens it for the whole party for 90 seconds, then it shuts and the next opening costs 20 Yellow more. Players who went through start a new run toward the pricier opening.
+- **All three colors:** the layer had still been using the MVP's Yellow-only setting, so no Skitters or Mites spawned in the world. Zones now lean toward Yellow, Red or Green, as the design says.
+- **HUD:** the HUD shows carried and banked amounts for Yellow, Red and Green on one line.
+- **The Colossus:** the first world boss, a Bulwark 1.8× the size.
+  - It first lands 4 minutes in, then 8 minutes after each kill, on open ground about 30 m from a landmark 90–320 m from a player.
+  - Health is 1.5× the raid Bulwark's for at least 3 players.
+  - It calls Skitters and Mites at 75%, 50% and 25%.
+  - Everyone who hits it gets 12 Yellow, 12 Red and 12 Green, 300 XP and a rare-or-better item.
+  - An orange beam and a HUD line show where it is and its health.
 
 **Open questions from the prototype**
 

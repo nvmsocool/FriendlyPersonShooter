@@ -151,7 +151,7 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case EnemyFamily.Bulwark:
                         // The raid boss: a big shell with a plate on one side (its health bar is on the HUD).
-                        size = 4.2f;
+                        size = en.World ? 4.2f * 1.8f : 4.2f;
                         AddBoss(en, p);
                         break;
                     default:

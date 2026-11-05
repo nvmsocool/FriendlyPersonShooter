@@ -64,7 +64,7 @@ namespace FriendlyPersonShooter.Core.Tests
             o = _tracker.Update(1100, _gate.Site.Point.World);
             Assert.That(o.Phase, Is.EqualTo(ExpeditionPhase.Complete));
             Assert.That(o.HasTarget, Is.False);
-            Assert.That(o.Text, Is.EqualTo("Expedition complete in 16:50"));
+            Assert.That(o.Text, Does.StartWith("Expedition complete in 16:50"));
             Assert.That(_tracker.TimerText(5000), Is.EqualTo("16:50 / 20:00"));
 
             Assert.That(_tracker.PhaseReachedAt(ExpeditionPhase.Gather), Is.EqualTo(0));
@@ -72,6 +72,25 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(_tracker.PhaseReachedAt(ExpeditionPhase.Unlock), Is.EqualTo(860));
             Assert.That(_tracker.PhaseReachedAt(ExpeditionPhase.PassThrough), Is.EqualTo(1000));
             Assert.That(_tracker.PhaseReachedAt(ExpeditionPhase.Complete), Is.EqualTo(1010));
+        }
+
+        [Test]
+        public void GateShuts_FinishersStartANewRunAtTheHigherPrice()
+        {
+            _wallet.PickUp(EssenceColor.Yellow, 40);
+            _wallet.BankAll();
+            Assert.That(_gate.Unlock(_wallet, 100), Is.EqualTo(GateUnlockOutcome.Unlocked));
+            Assert.That(_tracker.Update(110, _gate.Site.Point.World).Text, Does.StartWith("Gate open for 80s"));
+            Assert.That(_tracker.PassedGate(120));
+            Assert.That(_tracker.Update(130, _gate.Site.Point.World).Text, Does.Contain("reopening costs 60 Yellow"));
+
+            Assert.That(_gate.Step(190), Is.True);
+            _tracker.GateClosed(190);
+            Assert.That(_tracker.IsComplete, Is.False);
+            Assert.That(_tracker.StartedAt, Is.EqualTo(190));
+            var o = _tracker.Update(200, _map.StartPoint.World);
+            Assert.That(o.Phase, Is.EqualTo(ExpeditionPhase.Gather));
+            Assert.That(o.Text, Does.StartWith("Gather Yellow essence: 0/60"));
         }
 
         [Test]

@@ -42,7 +42,7 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             for (int i = 0; i < count; i++)
             {
                 uint layerSeed = ZoneRandom.Hash(seed, 0x6A11, i);
-                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpGrid(), LayerSettings.ForPlaytest());
                 var zones = map.Zones;
                 // Prefer zones with something on them, and vary the pick.
                 int start = (int)(ZoneRandom.Hash(layerSeed, 99) % (uint)zones.Count);

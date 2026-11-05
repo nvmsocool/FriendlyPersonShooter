@@ -97,7 +97,21 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         public int PlayerId => _wallet.PlayerId;
-        public double StartedAt { get; }
+        public double StartedAt { get; private set; }
+
+        /// <summary>
+        /// The gate shut: if this player had finished, a new run starts now (gather for the next,
+        /// pricier opening). A player who hadn't finished keeps their run; their phase follows the gate.
+        /// </summary>
+        public void GateClosed(double now)
+        {
+            if (!IsComplete) return;
+            _completedAt = null;
+            StartedAt = now;
+            for (int i = 0; i < _reachedAt.Length; i++) _reachedAt[i] = null;
+            Phase = CurrentPhase();
+            _reachedAt[(int)Phase] = now;
+        }
         public ExpeditionPhase Phase { get; private set; }
         public bool IsComplete => _completedAt.HasValue;
         /// <summary>When the player went through the gate, or null.</summary>
@@ -195,11 +209,13 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case ExpeditionPhase.PassThrough:
                 {
                     string label = $"the gate {gatePlace}";
-                    return new ExpeditionObjective(Phase, $"Gate open. Go through {label}", true, gatePoint, label);
+                    return new ExpeditionObjective(Phase,
+                        $"Gate open for {(int)Math.Ceiling(_gate.OpenLeft(now))}s. Go through {label}", true, gatePoint, label);
                 }
                 default:
                     return new ExpeditionObjective(Phase,
-                        $"Expedition complete in {Clock(Elapsed(now))}", false, default, null);
+                        $"Expedition complete in {Clock(Elapsed(now))}. The gate shuts in {(int)Math.Ceiling(_gate.OpenLeft(now))}s; " +
+                        $"reopening costs {_gate.Cost + _gate.CostStep} {color}", false, default, null);
             }
         }
 

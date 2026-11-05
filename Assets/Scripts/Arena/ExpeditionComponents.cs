@@ -10,8 +10,14 @@ namespace FriendlyPersonShooter.Arena
     [GhostComponent(OwnerSendType = SendToOwnerType.SendToOwner)]
     public struct ExpeditionStatus : IComponentData
     {
+        /// <summary>The gate's color (Yellow): carried, and in the party bank.</summary>
         [GhostField] public int Carried;
         [GhostField] public int Banked;
+        /// <summary>The raid key's colors, carried and banked.</summary>
+        [GhostField] public int CarriedRed;
+        [GhostField] public int BankedRed;
+        [GhostField] public int CarriedGreen;
+        [GhostField] public int BankedGreen;
         /// <summary>Essence the gate costs.</summary>
         [GhostField] public int Goal;
         [GhostField] public ExpeditionPhase Phase;
@@ -33,6 +39,11 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public int KeyRed;
         [GhostField] public int KeyGreen;
         [GhostField(Quantization = 10)] public float RaidTimer;
+
+        /// <summary>The Colossus (world boss) is up: where it hovers (world x, z) and its health share.</summary>
+        [GhostField] public bool WorldBoss;
+        [GhostField(Quantization = 10)] public float2 WorldBossAt;
+        [GhostField(Quantization = 100)] public float WorldBossHealth;
     }
 
     /// <summary>Essence dropped by a player who bled out. Walk over it to send it back to them.</summary>

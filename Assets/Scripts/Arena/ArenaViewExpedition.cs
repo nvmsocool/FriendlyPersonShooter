@@ -18,7 +18,7 @@ namespace FriendlyPersonShooter.Arena
     public partial class ArenaView
     {
         private Material[] _tileMats;
-        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _beaconMat;
+        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _beaconMat, _worldBossBeaconMat;
         private EntityQuery _cacheQuery, _statusQuery;
         private readonly List<Matrix4x4> _x = new List<Matrix4x4>();
         private float3 _camRef;
@@ -42,6 +42,7 @@ namespace FriendlyPersonShooter.Arena
             _gateOpenMat = MakeMat(new Color(1f, 0.95f, 0.4f));
             _cacheMat = MakeMat(new Color(1f, 0.85f, 0.1f));
             _beaconMat = MakeMat(new Color(1f, 1f, 0.6f));
+            _worldBossBeaconMat = MakeMat(new Color(1f, 0.55f, 0.15f));
         }
 
         private void CreateExpeditionQueries(EntityManager em)
@@ -143,6 +144,16 @@ namespace FriendlyPersonShooter.Arena
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * 30f, Quaternion.identity, new Vector3(0.4f, 60f, 0.4f)));
                 DrawList(_x, _beaconMat);
             }
+
+            // A thick orange pillar over the Colossus, so it can be found from anywhere.
+            if (status.WorldBoss && !status.InRaid)
+            {
+                var at = new System.Numerics.Vector2(status.WorldBossAt.x, status.WorldBossAt.y);
+                var p = Near(new float3(at.X, GroundAt(at), at.Y));
+                _x.Clear();
+                _x.Add(Matrix4x4.TRS(p + Vector3.up * 60f, Quaternion.identity, new Vector3(1.2f, 120f, 1.2f)));
+                DrawList(_x, _worldBossBeaconMat);
+            }
         }
 
         private readonly Dictionary<System.Numerics.Vector2, float> _groundCache = new Dictionary<System.Numerics.Vector2, float>();
@@ -165,10 +176,14 @@ namespace FriendlyPersonShooter.Arena
             int minutes = (int)(s.Elapsed / 60f), seconds = (int)(s.Elapsed % 60f);
             var e = _hud.Expedition;
             e.Append($"<b>EXPEDITION</b>   {minutes:00}:{seconds:00} / 20:00\n");
-            e.Append($"<color=#FFE14D>Yellow</color>  carried <b>{s.Carried}</b>   party bank <b>{s.Banked} / {s.Goal}</b>");
+            // Every color at a glance: carried in bold, then the party bank (the gate's price after Yellow).
+            e.Append($"<color=#FFE14D>Yellow</color> <b>{s.Carried}</b> +{s.Banked}/{s.Goal}   " +
+                     $"<color=#FF6B5B>Red</color> <b>{s.CarriedRed}</b> +{s.BankedRed}   " +
+                     $"<color=#7BE07B>Green</color> <b>{s.CarriedGreen}</b> +{s.BankedGreen}   <color=#B8B0D8>carried +banked</color>");
             if (s.Kudos > 0) e.Append($"   kudos {s.Kudos}");
             e.Append($"\n{s.Objective}\n");
             WriteRaidHud(s, e);
+            WriteWorldBossHud(s, e);
             if (s.HasTarget && !s.Complete)
             {
                 var delta = ExpeditionWorld.Near(new float3(s.Target.x, 0f, s.Target.y), _camRef) - _camRef;

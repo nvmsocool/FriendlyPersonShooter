@@ -60,8 +60,6 @@ namespace FriendlyPersonShooter.Arena
         private readonly Dictionary<int, EssenceWallet> _wallets = new Dictionary<int, EssenceWallet>();
         /// <summary>Banked essence is one pool for the whole party; carried essence stays personal.</summary>
         private readonly EssenceAmounts _partyBank = new EssenceAmounts();
-        /// <summary>Once anyone pays the gate it is open for the whole party, including players who join later.</summary>
-        private bool _partyUnlocked;
         private readonly Dictionary<int, ExpeditionTracker> _trackers = new Dictionary<int, ExpeditionTracker>();
         private readonly HashSet<SpawnKey> _spawnedEvents = new HashSet<SpawnKey>();
         private readonly Dictionary<SpawnKey, double> _eventEnds = new Dictionary<SpawnKey, double>();
@@ -82,6 +80,7 @@ namespace FriendlyPersonShooter.Arena
             _caches = new CacheRegistry();
             CreateSocial();
             CreateRaid();
+            CreateWorldBoss();
             // Doors bank, shrines don't: shrines are where bleeding out and Reset position put you.
             _banking = new Banking(_map);
             _banking.AddSite(RaidDoorPoint, _raid.Settings.UseRadius);
@@ -96,7 +95,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 w = new EssenceWallet(id, _partyBank);
                 _wallets[id] = w;
-                if (_partyUnlocked) _gate.GrantAccess(id);
+                // While the gate is open it is open for the whole party, including players who join later.
+                if (_gate.IsOpen) _gate.GrantAccess(id);
             }
             return w;
         }
@@ -167,6 +167,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 _nextStatus = _time + StatusInterval;
                 StepRaid(ecb);
+                StepWorldBoss();
+                StepGate();
                 UpdateExpeditionPlayers();
                 _caches.ExpireOld(_time);
                 SyncCaches(ecb);
@@ -211,7 +213,7 @@ namespace FriendlyPersonShooter.Arena
             _scratch.Clear();
             foreach (var kv in _enemies)
             {
-                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && !kv.Value.WorldBoss && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
             }
             foreach (var e in _scratch)
             {
@@ -288,10 +290,9 @@ namespace FriendlyPersonShooter.Arena
 
                     float toGate = _map.Distance(_gate.Site.Point.World, pos);
                     if (toGate <= ExpeditionWorld.GateUseRadius && !_gate.HasAccess(id) && _gate.Shortfall(wallet) == 0 &&
-                        _gate.Unlock(wallet) == GateUnlockOutcome.Unlocked)
+                        _gate.Unlock(wallet, _time) == GateUnlockOutcome.Unlocked)
                     {
                         _gateUnlocks++;
-                        _partyUnlocked = true;
                         foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
                         _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, 0));
                     }
@@ -343,6 +344,10 @@ namespace FriendlyPersonShooter.Arena
                 {
                     Carried = wallet.Carried(color),
                     Banked = wallet.Banked(color),
+                    CarriedRed = wallet.Carried(EssenceColor.Red),
+                    BankedRed = wallet.Banked(EssenceColor.Red),
+                    CarriedGreen = wallet.Carried(EssenceColor.Green),
+                    BankedGreen = wallet.Banked(EssenceColor.Green),
                     Goal = tracker.GoalAmount,
                     Phase = tracker.Phase,
                     HasTarget = objective.HasTarget,
@@ -355,8 +360,21 @@ namespace FriendlyPersonShooter.Arena
                     Location = Truncate(inRaid ? "in the raid arena, high above the raid door" : _map.Describe(pos)),
                 };
                 WriteRaidStatus(id, ref next);
+                WriteWorldBossStatus(ref next);
                 status.ValueRW = next;
             }
+        }
+
+        /// <summary>
+        /// The gate's opening ran out: it shuts for everyone and the next opening costs more. Players who
+        /// went through start a new run toward it.
+        /// </summary>
+        private void StepGate()
+        {
+            if (!_gate.Step(_time)) return;
+            foreach (var t in _trackers.Values) t.GateClosed(_time);
+            _announce.Add((AnnounceKind.GateClosed, _gate.Cost, 0, 0));
+            Debug.Log($"[Expedition] gate shut; next opening costs {_gate.Cost} {_gate.Color}");
         }
 
         private const float PreySearchRadius = 400f;
@@ -444,6 +462,7 @@ namespace FriendlyPersonShooter.Arena
                       $"completions={_completions} cachesDropped={_cachesDropped} cachesReturned={_cachesReturned} players=[{sb}]");
             Debug.Log($"[Social] t={_time:0} {SocialLog()}");
             Debug.Log($"[Raid] t={_time:0} {RaidLog()}");
+            Debug.Log($"[WorldBoss] t={_time:0} {WorldBossLog()} gate={(_gate.IsOpen ? "open" : "shut")}/{_gate.Cost}");
         }
     }
 }

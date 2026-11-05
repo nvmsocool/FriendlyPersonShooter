@@ -11,6 +11,8 @@ namespace FriendlyPersonShooter.Arena
         public const float Size = 50f;
         public const float HalfSize = Size * 0.5f;
         public const float MoveSpeed = 6.5f;
+        /// <summary>Holding Shift while moving forward (not zoomed): no stamina, just speed.</summary>
+        public const float SprintMultiplier = 1.5f;
         public const float JumpSpeed = 6f;
         public const float Gravity = 18f;
         /// <summary>Eye height above the feet.</summary>
@@ -52,6 +54,8 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Interact;
         /// <summary>1 while aiming down the sights (right mouse).</summary>
         public int Zoom;
+        /// <summary>1 while Shift is held.</summary>
+        public int Sprint;
         /// <summary>"Reset position" from the Esc menu: the server moves the player to the nearest shrine.</summary>
         public InputEvent Unstuck;
     }

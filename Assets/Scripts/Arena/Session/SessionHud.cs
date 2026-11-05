@@ -89,6 +89,7 @@ namespace FriendlyPersonShooter.Arena
         private const string Controls =
             "<b><size=26>Controls</size></b>\n" +
             "WASD  move          Space  jump\n" +
+            "Shift  sprint (forward)\n" +
             "Left mouse  fire    Right mouse  zoom\n" +
             "Q  switch gun       R  reload\n" +
             "E  open a loot box / take an item\n" +

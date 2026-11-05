@@ -182,11 +182,9 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void DoorStandsByAShrineAwayFromStartAndEdges()
         {
-            var map = LayerGenerator.Generate(2026, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            var map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             var door = RaidSite.DoorFor(map);
-            float size = map.Grid.Width * map.Grid.ZoneSize;
-            Assert.That(door.X, Is.InRange(RaidSite.EdgeMargin, size - RaidSite.EdgeMargin));
-            Assert.That(door.Y, Is.InRange(RaidSite.EdgeMargin, size - RaidSite.EdgeMargin));
+            Assert.That(RaidSite.ClearOfSeam(map, door), Is.True);
             Assert.That(map.Distance(map.StartPoint.World, door), Is.GreaterThanOrEqualTo(RaidSite.MinFromStart));
             Assert.That(RaidSite.DoorFor(map), Is.EqualTo(door), "same map, same door");
         }

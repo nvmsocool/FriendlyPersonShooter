@@ -9,11 +9,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
     /// (<see cref="PrismCollision"/>) on worker threads, so the build can check and repair the ground it is about to
     /// create without Physics. Same rules: 1 m columns sampled at their centres, up to 8 surfaces per column, 50 degree
     /// slope limit, a player capsule of headroom, 4-neighbour moves up at most 1.0 m and down at most 20 m, the biggest
-    /// two-way set from the same natural starts.
+    /// two-way set from the same natural starts. The grid covers the zone's build box (<see cref="ZoneRequest.Size"/>);
+    /// only columns inside the zone's outline have ground.
     /// </summary>
     public sealed class PrismWalk
     {
-        public const int N = 250;
+        /// <summary>Columns per side (the build box size in metres).</summary>
+        public int N;
         private const int MaxLevels = 8;
 
         public float[] Heights;     // per node
@@ -23,17 +25,27 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public byte[] Map;          // per column: 0 nothing, 1 standable, 2 two-way
         public int Walkable, TwoWayCount;
         public float TwoWayShare;
-        public readonly float[] EdgeReach = new float[4];
+        /// <summary>Per outline edge: the share of points 1.5 m inside it that are two-way ground.</summary>
+        public float[] EdgeReach = new float[0];
         public readonly List<int> UnreachableAnchors = new List<int>(); // indices into zone.Anchors
 
-        public float MinEdge => Mathf.Min(Mathf.Min(EdgeReach[0], EdgeReach[1]), Mathf.Min(EdgeReach[2], EdgeReach[3]));
+        public float MinEdge
+        {
+            get
+            {
+                float m = 1f;
+                foreach (float e in EdgeReach) m = Mathf.Min(m, e);
+                return m;
+            }
+        }
 
         public override string ToString() =>
-            $"two-way {TwoWayShare * 100f:0.0}% of {Walkable}, edges {EdgeReach[0] * 100f:0}/{EdgeReach[1] * 100f:0}/{EdgeReach[2] * 100f:0}/{EdgeReach[3] * 100f:0}%, unreachable anchors {UnreachableAnchors.Count}";
+            $"two-way {TwoWayShare * 100f:0.0}% of {Walkable}, edges {string.Join("/", System.Array.ConvertAll(EdgeReach, e => (e * 100f).ToString("0")))}%, unreachable anchors {UnreachableAnchors.Count}";
 
         public static PrismWalk Analyze(ZoneRequest zone, PrismCollision world)
         {
             var o = zone.Origin;
+            int N = Mathf.RoundToInt(zone.Size);
             float minNormalY = Mathf.Cos(Walkability.MaxSlope * Mathf.Deg2Rad);
             float r = Walkability.PlayerRadius;
             var rowHeights = new List<float>[N];
@@ -64,7 +76,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 rowCols[z] = cs;
             });
 
-            var w = new PrismWalk { FirstNode = new int[N * N + 1], Map = new byte[N * N] };
+            var w = new PrismWalk { N = N, FirstNode = new int[N * N + 1], Map = new byte[N * N] };
             int total = 0;
             for (int z = 0; z < N; z++) total += rowHeights[z].Count;
             w.Heights = new float[total];
@@ -98,11 +110,12 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var starts = new List<Vector3>();
             foreach (var a in zone.Anchors) if (a.Kind == ZoneAnchorKind.Shrine || a.Kind == ZoneAnchorKind.Gate) starts.Add(a.World);
             starts.Add(zone.Center);
-            float hsz = zone.Size * 0.5f;
-            starts.Add(zone.Center + new Vector3(hsz - 2f, 0f, 0f));
-            starts.Add(zone.Center + new Vector3(-hsz + 2f, 0f, 0f));
-            starts.Add(zone.Center + new Vector3(0f, 0f, hsz - 2f));
-            starts.Add(zone.Center + new Vector3(0f, 0f, -hsz + 2f));
+            // Toward each corner of the outline, most of the way out.
+            foreach (var corner in zone.Outline)
+            {
+                var toward = new Vector3(corner.x, 0f, corner.y) - zone.Center;
+                starts.Add(zone.Center + toward * 0.85f);
+            }
 
             bool[] best = null;
             int bestCount = -1;
@@ -136,21 +149,23 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (best[i]) w.Map[col] = 2;
                 else if (w.Map[col] == 0) w.Map[col] = 1;
             }
-            for (int side = 0; side < 4; side++)
+            var outline = zone.Outline;
+            w.EdgeReach = new float[outline.Count];
+            for (int side = 0; side < outline.Count; side++)
             {
+                var a = outline[side];
+                var b = outline[(side + 1) % outline.Count];
+                var e = b - a;
+                var inward = new Vector2(-e.y, e.x).normalized * 1.5f;
+                int samples = Mathf.Max(1, Mathf.FloorToInt(e.magnitude));
                 int hit = 0;
-                for (int i = 0; i < N; i++)
+                for (int i = 0; i < samples; i++)
                 {
-                    bool ok = false;
-                    for (int d = 0; d < 2 && !ok; d++)
-                    {
-                        int x = side == 1 ? N - 1 - d : side == 3 ? d : i;
-                        int z = side == 0 ? N - 1 - d : side == 2 ? d : i;
-                        ok = w.Map[z * N + x] == 2;
-                    }
-                    if (ok) hit++;
+                    var p = a + e * ((i + 0.5f) / samples) + inward;
+                    int x = Mathf.FloorToInt(p.x - o.x), z = Mathf.FloorToInt(p.y - o.z);
+                    if (x >= 0 && z >= 0 && x < N && z < N && w.Map[z * N + x] == 2) hit++;
                 }
-                w.EdgeReach[side] = hit / (float)N;
+                w.EdgeReach[side] = hit / (float)samples;
             }
             for (int ai = 0; ai < zone.Anchors.Count; ai++)
             {

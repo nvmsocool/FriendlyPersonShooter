@@ -7,20 +7,20 @@ using FriendlyPersonShooter.Core.World;
 namespace FriendlyPersonShooter.Core.Expedition
 {
     /// <summary>
-    /// One generated layer: every zone's tile, color lean, landmarks, shrines and spawn points, plus
+    /// One generated layer: every zone's theme, color lean, landmarks, shrines and spawn points, plus
     /// the gates and the start point. Built by <see cref="LayerGenerator"/>; identical on every
-    /// machine for the same seed and grid. All lookups measure the short way around the wrap.
+    /// machine for the same seed and tiling. All lookups measure the short way around the wrap.
     /// World positions are <see cref="Vector2"/> with X = world x and Y = world z, in metres.
     /// </summary>
     public sealed class LayerMap
     {
         private readonly ZoneInfo[] _zones;
 
-        internal LayerMap(uint seed, WorldGrid grid, ZoneInfo[] zones, IReadOnlyList<Landmark> landmarks,
+        internal LayerMap(uint seed, ZoneTiling tiling, ZoneInfo[] zones, IReadOnlyList<Landmark> landmarks,
             IReadOnlyList<Shrine> shrines, IReadOnlyList<GateSite> gates, ZoneCoord startZone, MapPoint startPoint)
         {
             Seed = seed;
-            Grid = grid;
+            Tiling = tiling;
             _zones = zones;
             Landmarks = landmarks;
             Shrines = shrines;
@@ -30,8 +30,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         public uint Seed { get; }
-        public WorldGrid Grid { get; }
-        /// <summary>All zones, row by row (index = y * Width + x).</summary>
+        public ZoneTiling Tiling { get; }
+        /// <summary>All zones, in the tiling's index order.</summary>
         public IReadOnlyList<ZoneInfo> Zones => _zones;
         public IReadOnlyList<Landmark> Landmarks { get; }
         public IReadOnlyList<Shrine> Shrines { get; }
@@ -41,45 +41,23 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Where new players appear: the start zone's first shrine.</summary>
         public MapPoint StartPoint { get; }
 
-        private float WorldWidth => Grid.Width * Grid.ZoneSize;
-        private float WorldHeight => Grid.Height * Grid.ZoneSize;
-
-        public ZoneInfo Zone(ZoneCoord coord)
-        {
-            var c = Grid.Wrap(coord.X, coord.Y);
-            return _zones[c.Y * Grid.Width + c.X];
-        }
+        public ZoneInfo Zone(ZoneCoord coord) => _zones[Tiling.IndexOf(coord)];
 
         /// <summary>The middle of a zone, in world metres.</summary>
-        public Vector2 ZoneCentre(ZoneCoord coord)
-        {
-            float half = Grid.ZoneSize * 0.5f;
-            return new MapPoint(coord, new Vector2(half, half), Grid.ZoneSize).World;
-        }
+        public Vector2 ZoneCentre(ZoneCoord coord) => Tiling.Centre(coord);
 
-        /// <summary>Which zone a world position is in, and where inside it (wrapping positions outside the grid).</summary>
+        /// <summary>Which zone a world position is in, and its canonical position (wrapping positions outside the world).</summary>
         public MapPoint Locate(Vector2 world)
         {
-            float x = WrapValue(world.X, WorldWidth);
-            float z = WrapValue(world.Y, WorldHeight);
-            int zx = Math.Min(Grid.Width - 1, (int)(x / Grid.ZoneSize));
-            int zy = Math.Min(Grid.Height - 1, (int)(z / Grid.ZoneSize));
-            var local = new Vector2(x - zx * Grid.ZoneSize, z - zy * Grid.ZoneSize);
-            return new MapPoint(new ZoneCoord(zx, zy), local, Grid.ZoneSize);
+            var p = Tiling.WrapPoint(world);
+            return new MapPoint(Tiling.ZoneAt(p), p);
         }
 
         /// <summary>The shortest step from one world position to another, going around the wrap if shorter.</summary>
-        public Vector2 Delta(Vector2 from, Vector2 to)
-        {
-            float dx = to.X - from.X;
-            float dz = to.Y - from.Y;
-            dx -= WorldWidth * MathF.Round(dx / WorldWidth);
-            dz -= WorldHeight * MathF.Round(dz / WorldHeight);
-            return new Vector2(dx, dz);
-        }
+        public Vector2 Delta(Vector2 from, Vector2 to) => Tiling.Delta(from, to);
 
         /// <summary>Metres between two world positions, the short way around.</summary>
-        public float Distance(Vector2 a, Vector2 b) => Delta(a, b).Length();
+        public float Distance(Vector2 a, Vector2 b) => Tiling.DistanceBetween(a, b);
 
         /// <summary>The landmark closest to a world position (any zone). Null only if the layer has none.</summary>
         public Landmark NearestLandmark(Vector2 world) => Nearest(Landmarks, world, l => l.Point.World);
@@ -124,7 +102,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             foreach (var zone in _zones)
             {
                 if (!zone.Bias.LeansToward(color)) continue;
-                int steps = Grid.Distance(here, zone.Coord);
+                int steps = Tiling.Distance(here, zone.Coord);
                 float d = Distance(world, ZoneCentre(zone.Coord));
                 if (steps < bestSteps || (steps == bestSteps && d < bestDistance))
                 {
@@ -137,7 +115,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
-        /// Directions for the compass and quick-chat: "near the Broken Tower in zone (3,4)", using
+        /// Directions for the compass and quick-chat: "near the Broken Tower in zone 3.4", using
         /// the nearest landmark and the zone it stands in.
         /// </summary>
         public string Describe(Vector2 world)
@@ -161,13 +139,6 @@ namespace FriendlyPersonShooter.Core.Expedition
                 }
             }
             return best;
-        }
-
-        private static float WrapValue(float value, float size)
-        {
-            float r = value % size;
-            if (r < 0f) r += size;
-            return r >= size ? 0f : r;
         }
     }
 }

@@ -146,7 +146,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (lift < 0.5f && !g.Pillar[i] && n > 0.1f) topCol = Color.Lerp(topCol, _p.Grass[1], 0.7f);
                 topCol = rng.Jitter(topCol, 0.012f, 0.06f, 0.07f);
                 if (g.Pillar[i]) topCol = Color.Lerp(topCol, _p.Glow, 0.25f);
-                int ci = Mathf.Clamp((int)(c2.y / 62.5f), 0, 3) * chunks + Mathf.Clamp((int)(c2.x / 62.5f), 0, 3);
+                float chunkSize = _t.C / (float)chunks;
+                int ci = Mathf.Clamp((int)(c2.y / chunkSize), 0, chunks - 1) * chunks + Mathf.Clamp((int)(c2.x / chunkSize), 0, chunks - 1);
                 HexColumn(builders[ci], c, g.R, top, bottom, topCol, 63, Mathf.Min(0.14f, g.R * 0.1f), sideBottom);
             }
             return builders;

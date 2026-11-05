@@ -19,7 +19,7 @@ namespace FriendlyPersonShooter.Arena
         protected override void OnUpdate()
         {
             Enabled = false;
-            if (!NetTestSettings.IsFirstPerson || SystemAPI.HasSingleton<PlayerPrefab>()) return;
+            if (SystemAPI.HasSingleton<PlayerPrefab>()) return;
 
             var prefab = EntityManager.CreateEntity();
             EntityManager.AddComponentData(prefab, LocalTransform.Identity);

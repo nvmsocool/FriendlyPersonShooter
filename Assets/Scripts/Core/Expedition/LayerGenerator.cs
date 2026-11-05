@@ -8,79 +8,89 @@ namespace FriendlyPersonShooter.Core.Expedition
 {
     /// <summary>
     /// Builds a <see cref="LayerMap"/> from a seed. Every zone draws from its own random stream
-    /// (seed + zone), so the same seed and grid give the same layer on every machine, and changing
+    /// (seed + zone), so the same seed and tiling give the same layer on every machine, and changing
     /// one setting for one zone doesn't reshuffle the rest. Landmark names are made unique across
-    /// the whole layer by generating zones in row order.
+    /// the whole layer by generating zones in index order. Feature counts are for a hexagon and
+    /// scale down with zone area (at least one each).
     /// </summary>
     public static class LayerGenerator
     {
         private const int FamilyCount = 3;
 
-        public static LayerMap Generate(uint seed, WorldGrid grid, LayerSettings settings = null)
+        public static LayerMap Generate(uint seed, ZoneTiling tiling, LayerSettings settings = null)
         {
-            if (grid == null) throw new ArgumentNullException(nameof(grid));
+            if (tiling == null) throw new ArgumentNullException(nameof(tiling));
             settings = settings ?? new LayerSettings();
             Validate(settings);
 
             var layerRandom = new CombatRandom(SeedHash.Of(seed, SeedHash.LayerSalt));
-            var startZone = new ZoneCoord(layerRandom.NextInt(grid.Width), layerRandom.NextInt(grid.Height));
+            // New players start in a hexagon: the roomiest zones.
+            var startZone = new ZoneCoord(layerRandom.NextInt(tiling.Width), layerRandom.NextInt(tiling.Height), 0);
 
-            var zones = new ZoneInfo[grid.Width * grid.Height];
+            var zones = new ZoneInfo[tiling.Count];
             var takenByZone = new List<Vector2>[zones.Length];
             var landmarks = new List<Landmark>();
             var shrines = new List<Shrine>();
             var usedNames = new HashSet<string>();
 
-            for (int y = 0; y < grid.Height; y++)
+            for (int i = 0; i < zones.Length; i++)
             {
-                for (int x = 0; x < grid.Width; x++)
-                {
-                    var taken = new List<Vector2>();
-                    var zone = GenerateZone(seed, grid, settings, new ZoneCoord(x, y), taken, usedNames, landmarks, shrines);
-                    zones[y * grid.Width + x] = zone;
-                    takenByZone[y * grid.Width + x] = taken;
-                }
+                var taken = new List<Vector2>();
+                zones[i] = GenerateZone(seed, tiling, settings, tiling.Zones[i], taken, usedNames, landmarks, shrines);
+                takenByZone[i] = taken;
             }
 
-            var gates = PlaceGates(seed, grid, settings, startZone, zones, takenByZone, ref layerRandom);
-            var startPoint = zones[startZone.Y * grid.Width + startZone.X].Shrines[0].Point;
-            return new LayerMap(seed, grid, zones, landmarks, shrines, gates, startZone, startPoint);
+            var startPoint = zones[tiling.IndexOf(startZone)].Shrines[0].Point;
+            var gates = PlaceGates(seed, tiling, settings, startPoint.World, zones, takenByZone, ref layerRandom);
+            return new LayerMap(seed, tiling, zones, landmarks, shrines, gates, startZone, startPoint);
         }
 
-        /// <summary>The smallest zone distance from the start a gate may have under these settings.</summary>
-        public static int MinGateDistance(WorldGrid grid, LayerSettings settings)
+        /// <summary>
+        /// The zones a gate may stand in: centres at least <see cref="LayerSettings.GateDistanceShare"/> of the
+        /// farthest zone centre's distance from <paramref name="start"/>, only hexagons when enough qualify.
+        /// </summary>
+        public static List<ZoneCoord> GateCandidates(ZoneTiling tiling, LayerSettings settings, Vector2 start)
         {
-            int farthest = Math.Max(grid.Width / 2, grid.Height / 2);
-            int min = (int)Math.Ceiling(settings.GateDistanceShare * farthest - 1e-6);
-            return Math.Max(0, Math.Min(farthest, min));
+            float farthest = 0f;
+            foreach (var z in tiling.Zones) farthest = Math.Max(farthest, tiling.DistanceBetween(start, tiling.Centre(z)));
+            float min = settings.GateDistanceShare * farthest - 1e-3f;
+            var all = new List<ZoneCoord>();
+            var hexes = new List<ZoneCoord>();
+            foreach (var z in tiling.Zones)
+            {
+                if (tiling.DistanceBetween(start, tiling.Centre(z)) < min) continue;
+                all.Add(z);
+                if (z.Shape == ZoneShape.Hexagon) hexes.Add(z);
+            }
+            return hexes.Count >= settings.GateCount ? hexes : all;
         }
 
-        private static ZoneInfo GenerateZone(uint seed, WorldGrid grid, LayerSettings s, ZoneCoord coord,
+        private static ZoneInfo GenerateZone(uint seed, ZoneTiling tiling, LayerSettings s, ZoneCoord coord,
             List<Vector2> taken, HashSet<string> usedNames, List<Landmark> landmarks, List<Shrine> shrines)
         {
-            var random = new CombatRandom(SeedHash.Of(seed, SeedHash.ZoneSalt, coord.X, coord.Y));
-            float size = grid.ZoneSize;
+            var random = new CombatRandom(SeedHash.Of(seed, SeedHash.ZoneSalt, coord.Key));
+            float share = tiling.AreaShare(coord);
 
             var tile = s.Tiles[random.NextInt(s.Tiles.Count)];
             var bias = PickBias(s, ref random);
             var familyWeights = FamilyWeights(s, bias);
 
             var zoneLandmarks = new List<Landmark>();
-            int landmarkCount = Between(s.MinLandmarks, s.MaxLandmarks, ref random);
+            int landmarkCount = Scaled(Between(s.MinLandmarks, s.MaxLandmarks, ref random), share);
             for (int i = 0; i < landmarkCount; i++)
             {
                 string name = LandmarkNames.Make(tile, ref random, usedNames);
-                var point = new MapPoint(coord, Place(s, size, taken, ref random), size);
+                var point = new MapPoint(coord, Place(s, tiling, coord, taken, ref random));
                 var landmark = new Landmark(landmarks.Count, name, point);
                 landmarks.Add(landmark);
                 zoneLandmarks.Add(landmark);
             }
 
             var zoneShrines = new List<Shrine>();
-            int shrineCount = Between(s.MinShrines, s.MaxShrines, ref random);
+            int shrineCount = Scaled(Between(s.MinShrines, s.MaxShrines, ref random), share);
             for (int i = 0; i < shrineCount; i++)
             {
-                var shrine = new Shrine(shrines.Count, new MapPoint(coord, Place(s, size, taken, ref random), size));
+                var shrine = new Shrine(shrines.Count, new MapPoint(coord, Place(s, tiling, coord, taken, ref random)));
                 shrines.Add(shrine);
                 zoneShrines.Add(shrine);
             }
@@ -88,16 +98,19 @@ namespace FriendlyPersonShooter.Core.Expedition
             // Spawn points don't block other features: enemies can appear near a landmark.
             var spawnTaken = new List<Vector2>(taken);
             var spawnPoints = new List<SpawnPoint>();
-            int spawnCount = Between(s.MinSpawnPoints, s.MaxSpawnPoints, ref random);
+            int spawnCount = Scaled(Between(s.MinSpawnPoints, s.MaxSpawnPoints, ref random), share);
             for (int i = 0; i < spawnCount; i++)
             {
                 var family = PickFamily(familyWeights, ref random);
-                var point = new MapPoint(coord, Place(s, size, spawnTaken, ref random), size);
+                var point = new MapPoint(coord, Place(s, tiling, coord, spawnTaken, ref random));
                 spawnPoints.Add(new SpawnPoint(i, family, point));
             }
 
             return new ZoneInfo(coord, tile, bias, familyWeights, zoneLandmarks, zoneShrines, spawnPoints);
         }
+
+        /// <summary>A hexagon's count scaled to a zone's area share; never below one unless the count was zero.</summary>
+        private static int Scaled(int count, float share) => count <= 0 ? 0 : Math.Max(1, (int)Math.Round(count * share));
 
         private static ZoneColorBias PickBias(LayerSettings s, ref CombatRandom random)
         {
@@ -157,32 +170,27 @@ namespace FriendlyPersonShooter.Core.Expedition
             return (EnemyFamily)last;
         }
 
-        private static List<GateSite> PlaceGates(uint seed, WorldGrid grid, LayerSettings s, ZoneCoord start,
+        private static List<GateSite> PlaceGates(uint seed, ZoneTiling tiling, LayerSettings s, Vector2 start,
             ZoneInfo[] zones, List<Vector2>[] takenByZone, ref CombatRandom layerRandom)
         {
-            int minDistance = MinGateDistance(grid, s);
-            var candidates = new List<int>();
-            for (int i = 0; i < zones.Length; i++)
-            {
-                if (grid.Distance(start, zones[i].Coord) >= minDistance) candidates.Add(i);
-            }
+            var candidates = GateCandidates(tiling, s, start);
             if (candidates.Count < s.GateCount)
             {
                 throw new InvalidOperationException(
-                    $"Only {candidates.Count} zones are {minDistance}+ zones from the start; can't place {s.GateCount} gates.");
+                    $"Only {candidates.Count} zones are far enough from the start; can't place {s.GateCount} gates.");
             }
 
             var gates = new List<GateSite>();
             for (int g = 0; g < s.GateCount; g++)
             {
                 int pick = layerRandom.NextInt(candidates.Count);
-                int index = candidates[pick];
+                var coord = candidates[pick];
                 candidates.RemoveAt(pick);
 
+                int index = tiling.IndexOf(coord);
                 var zone = zones[index];
-                var random = new CombatRandom(SeedHash.Of(seed, SeedHash.GateSalt, zone.Coord.X, zone.Coord.Y));
-                var local = Place(s, grid.ZoneSize, takenByZone[index], ref random);
-                var site = new GateSite(gates.Count, new MapPoint(zone.Coord, local, grid.ZoneSize));
+                var random = new CombatRandom(SeedHash.Of(seed, SeedHash.GateSalt, coord.Key));
+                var site = new GateSite(gates.Count, new MapPoint(coord, Place(s, tiling, coord, takenByZone[index], ref random)));
                 zone.Gate = site;
                 gates.Add(site);
             }
@@ -190,18 +198,23 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
-        /// A spot inside the zone margins, trying to keep <see cref="LayerSettings.FeatureSpacing"/>
-        /// from everything already taken; after the tries run out it takes the roomiest spot found.
+        /// A spot inside the zone, at least the edge margin (capped at half the zone's inner radius) from its
+        /// edges, trying to keep <see cref="LayerSettings.FeatureSpacing"/> from everything already taken;
+        /// after the tries run out it takes the roomiest spot found.
         /// </summary>
-        private static Vector2 Place(LayerSettings s, float size, List<Vector2> taken, ref CombatRandom random)
+        private static Vector2 Place(LayerSettings s, ZoneTiling tiling, ZoneCoord zone, List<Vector2> taken, ref CombatRandom random)
         {
-            float margin = Math.Min(s.EdgeMargin, size * 0.25f);
-            Vector2 best = default;
+            var centre = tiling.Centre(zone);
+            float margin = Math.Min(s.EdgeMargin, tiling.EdgeDistance(zone, centre) * 0.5f);
+            tiling.Bounds(zone, out var min, out var max);
+            Vector2 best = centre;
             float bestGap = -1f;
             int tries = Math.Max(1, s.PlacementTries);
-            for (int i = 0; i < tries; i++)
+            for (int i = 0, valid = 0; i < tries * 8 && valid < tries; i++)
             {
-                var p = new Vector2(random.Range(margin, size - margin), random.Range(margin, size - margin));
+                var p = new Vector2(random.Range(min.X, max.X), random.Range(min.Y, max.Y));
+                if (tiling.EdgeDistance(zone, p) < margin) continue;
+                valid++;
                 float gap = float.MaxValue;
                 foreach (var t in taken) gap = Math.Min(gap, Vector2.Distance(p, t));
                 if (gap > bestGap)

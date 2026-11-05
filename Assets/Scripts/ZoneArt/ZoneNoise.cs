@@ -40,17 +40,24 @@ namespace FriendlyPersonShooter.ZoneArt
         /// Fractal noise in about [-1, 1] that repeats every <paramref name="period"/> metres on x and z, for things
         /// that must line up across the wrapping world's edge. The frequency is rounded so a whole number of cycles fits the period.
         /// </summary>
-        public static float PeriodicFbm(float x, float z, float frequency, float period, int octaves = 3)
+        public static float PeriodicFbm(float x, float z, float frequency, float period, int octaves = 3) =>
+            PeriodicFbm(x, z, frequency, period, period, octaves);
+
+        /// <summary>
+        /// Like <see cref="PeriodicFbm(float, float, float, float, int)"/>, repeating every <paramref name="periodX"/>
+        /// metres on x and <paramref name="periodZ"/> on z.
+        /// </summary>
+        public static float PeriodicFbm(float x, float z, float frequency, float periodX, float periodZ, int octaves = 3)
         {
-            float cycles = math.max(1f, math.round(period * frequency));
+            var cycles = new float2(math.max(1f, math.round(periodX * frequency)), math.max(1f, math.round(periodZ * frequency)));
             float sum = 0f, amp = 1f, norm = 0f;
             // pnoise only repeats for positive coordinates (its lattice wrap keeps the sign), so wrap into [0, period) first.
-            x -= math.floor(x / period) * period;
-            z -= math.floor(z / period) * period;
-            var p = new float2(x, z) * (cycles / period);
+            x -= math.floor(x / periodX) * periodX;
+            z -= math.floor(z / periodZ) * periodZ;
+            var p = new float2(x / periodX, z / periodZ) * cycles;
             for (int i = 0; i < octaves; i++)
             {
-                sum += amp * math.clamp(noise.pnoise(p, new float2(cycles)) * 1.4f, -1f, 1f);
+                sum += amp * math.clamp(noise.pnoise(p, cycles) * 1.4f, -1f, 1f);
                 norm += amp;
                 amp *= 0.5f;
                 p *= 2f;

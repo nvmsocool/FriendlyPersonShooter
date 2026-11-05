@@ -8,8 +8,9 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>
     /// The expedition layer (MVP step 4) as every world sees it. The layer is generated from
     /// <see cref="NetTestSettings.WorldSeed"/>, so the server and every client build the same map
-    /// without sending it. The world wraps at its edges: positions are kept in [0, Size) and
-    /// anything drawn, aimed at or hit is first moved to its copy nearest the viewer.
+    /// without sending it. The world wraps (see <see cref="Core.World.ZoneTiling"/>): positions are kept
+    /// in the canonical copy of their zone, and anything drawn, aimed at or hit is first moved to its
+    /// copy nearest the viewer.
     /// In the arena, every helper here does nothing.
     /// </summary>
     public static class ExpeditionWorld
@@ -37,7 +38,7 @@ namespace FriendlyPersonShooter.Arena
                 if (_map == null || _mapSeed != NetTestSettings.WorldSeed)
                 {
                     _mapSeed = NetTestSettings.WorldSeed;
-                    _map = LayerGenerator.Generate(_mapSeed, LayerSettings.MvpGrid(), LayerSettings.ForPlaytest());
+                    _map = LayerGenerator.Generate(_mapSeed, LayerSettings.MvpTiling(), LayerSettings.ForPlaytest());
                     _cover = null;
                 }
                 return _map;
@@ -62,29 +63,20 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        /// <summary>Side of the square world in metres (0 in the arena).</summary>
-        public static float Size => Active ? Map.Grid.Width * Map.Grid.ZoneSize : 0f;
-
-        /// <summary>Puts a position back inside [0, Size) on x and z.</summary>
+        /// <summary>Moves a position into the canonical copy of its zone (keeps y).</summary>
         public static float3 Wrap(float3 p)
         {
             if (!Active) return p;
-            float s = Size;
-            p.x -= s * math.floor(p.x / s);
-            p.z -= s * math.floor(p.z / s);
-            return p;
+            var w = Map.Tiling.WrapPoint(Ground(p));
+            return new float3(w.X, p.y, w.Y);
         }
 
         /// <summary>The copy of <paramref name="p"/> nearest <paramref name="reference"/> in the wrapping world.</summary>
         public static float3 Near(float3 p, float3 reference)
         {
             if (!Active) return p;
-            float s = Size;
-            float dx = p.x - reference.x;
-            float dz = p.z - reference.z;
-            dx -= s * math.round(dx / s);
-            dz -= s * math.round(dz / s);
-            return new float3(reference.x + dx, p.y, reference.z + dz);
+            var d = Map.Tiling.Delta(Ground(reference), Ground(p));
+            return new float3(reference.x + d.X, p.y, reference.z + d.Y);
         }
 
         public static float3 ToFloat3(System.Numerics.Vector2 ground, float y = 0f) => new float3(ground.X, y, ground.Y);

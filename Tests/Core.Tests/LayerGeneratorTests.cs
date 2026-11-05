@@ -27,79 +27,96 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void SameSeed_GivesIdenticalMap()
         {
-            var grid = new WorldGrid(6, 5, 200f);
-            var a = LayerGenerator.Generate(1234, grid);
-            var b = LayerGenerator.Generate(1234, new WorldGrid(6, 5, 200f));
+            var tiling = new ZoneTiling(4, 3, 100f);
+            var a = LayerGenerator.Generate(1234, tiling);
+            var b = LayerGenerator.Generate(1234, new ZoneTiling(4, 3, 100f));
             Assert.That(Fingerprint(a), Is.EqualTo(Fingerprint(b)));
         }
 
         [Test]
         public void DifferentSeed_GivesDifferentMap()
         {
-            var grid = new WorldGrid(6, 5, 200f);
-            Assert.That(Fingerprint(LayerGenerator.Generate(1, grid)), Is.Not.EqualTo(Fingerprint(LayerGenerator.Generate(2, grid))));
+            var tiling = new ZoneTiling(4, 3, 100f);
+            Assert.That(Fingerprint(LayerGenerator.Generate(1, tiling)), Is.Not.EqualTo(Fingerprint(LayerGenerator.Generate(2, tiling))));
         }
 
         [Test]
-        public void Gate_IsHalfTheGridAwayFromStart_CountingTheWrap([Range(0u, 30u)] uint seed)
+        public void StartZone_IsAHexagon([Range(0u, 10u)] uint seed)
         {
-            var grid = LayerSettings.MvpGrid();
-            var map = LayerGenerator.Generate(seed, grid, LayerSettings.ForMvp());
+            var map = LayerGenerator.Generate(seed, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
+            Assert.That(map.StartZone.Shape, Is.EqualTo(ZoneShape.Hexagon));
+        }
+
+        [Test]
+        public void Gate_IsInAFarZone_CountingTheWrap([Range(0u, 30u)] uint seed)
+        {
+            var tiling = LayerSettings.MvpTiling();
+            var settings = LayerSettings.ForMvp();
+            var map = LayerGenerator.Generate(seed, tiling, settings);
             Assert.That(map.Gates.Count, Is.EqualTo(1));
             var gateZone = map.Gates[0].Point.Zone;
-            Assert.That(grid.Distance(map.StartZone, gateZone), Is.EqualTo(2));
+            Assert.That(LayerGenerator.GateCandidates(tiling, settings, map.StartPoint.World), Does.Contain(gateZone));
             Assert.That(map.Zone(gateZone).HasGate);
             Assert.That(map.Zones.Count(z => z.HasGate), Is.EqualTo(1));
         }
 
         [Test]
-        public void MinGateDistance_UsesTheWrappedFarthestZone()
+        public void GateCandidates_AreFarAndPreferHexagons()
         {
+            var tiling = new ZoneTiling(4, 4, 100f);
             var settings = new LayerSettings();
-            Assert.That(LayerGenerator.MinGateDistance(new WorldGrid(8, 8, 100f), settings), Is.EqualTo(4));
-            Assert.That(LayerGenerator.MinGateDistance(new WorldGrid(5, 5, 100f), settings), Is.EqualTo(2));
-            settings.GateDistanceShare = 0.5f;
-            Assert.That(LayerGenerator.MinGateDistance(new WorldGrid(8, 8, 100f), settings), Is.EqualTo(2));
-        }
-
-        [Test]
-        public void Gate_OnAWrappedGrid_IsNeverInAZoneThatLooksFarButIsAcrossTheEdge()
-        {
-            // On 8x8 a gate at x distance 7 is really 1 zone away; the generator must not place it there.
-            var grid = new WorldGrid(8, 8, 100f);
-            for (uint seed = 0; seed < 40; seed++)
+            var start = tiling.Centre(new ZoneCoord(0, 0));
+            var candidates = LayerGenerator.GateCandidates(tiling, settings, start);
+            float farthest = tiling.Zones.Max(z => tiling.DistanceBetween(start, tiling.Centre(z)));
+            Assert.That(candidates, Is.Not.Empty);
+            foreach (var z in candidates)
             {
-                var map = LayerGenerator.Generate(seed, grid);
-                Assert.That(grid.Distance(map.StartZone, map.Gates[0].Point.Zone), Is.EqualTo(4));
+                // Measured the short way around: no zone that is really close across the wrap.
+                Assert.That(tiling.DistanceBetween(start, tiling.Centre(z)), Is.GreaterThanOrEqualTo(settings.GateDistanceShare * farthest - 0.01f));
+            }
+            if (candidates.Count(z => z.Shape == ZoneShape.Hexagon) >= settings.GateCount)
+            {
+                Assert.That(candidates.All(z => z.Shape == ZoneShape.Hexagon));
             }
         }
 
         [Test]
         public void LandmarkNames_AreUniqueAcrossTheLayer()
         {
-            var map = LayerGenerator.Generate(77, new WorldGrid(12, 12, 200f));
+            var map = LayerGenerator.Generate(77, new ZoneTiling(5, 5, 100f));
             var names = map.Landmarks.Select(l => l.Name).ToList();
-            Assert.That(names.Count, Is.GreaterThan(144));
+            Assert.That(names.Count, Is.GreaterThanOrEqualTo(150));
             Assert.That(names.Distinct().Count(), Is.EqualTo(names.Count));
             Assert.That(names.All(n => n.Length > 3));
         }
 
         [Test]
-        public void EveryZone_HasLandmarksShrinesAndSpawnPointsInRange()
+        public void EveryZone_HasFeaturesInsideItsOutline_ScaledByArea()
         {
             var settings = new LayerSettings();
-            var grid = new WorldGrid(6, 6, 250f);
-            var map = LayerGenerator.Generate(5, grid, settings);
+            var tiling = new ZoneTiling(3, 3, 125f);
+            var map = LayerGenerator.Generate(5, tiling, settings);
             foreach (var z in map.Zones)
             {
-                Assert.That(z.Landmarks.Count, Is.InRange(1, 3));
-                Assert.That(z.Shrines.Count, Is.InRange(2, 3));
-                Assert.That(z.SpawnPoints.Count, Is.InRange(6, 10));
-                foreach (var p in z.Landmarks.Select(l => l.Point).Concat(z.Shrines.Select(s => s.Point)))
+                if (z.Coord.Shape == ZoneShape.Hexagon)
+                {
+                    Assert.That(z.Landmarks.Count, Is.InRange(1, 3));
+                    Assert.That(z.Shrines.Count, Is.InRange(2, 3));
+                    Assert.That(z.SpawnPoints.Count, Is.InRange(6, 10));
+                }
+                else
+                {
+                    Assert.That(z.Landmarks.Count, Is.InRange(1, 2));
+                    Assert.That(z.Shrines.Count, Is.InRange(1, 2));
+                    Assert.That(z.SpawnPoints.Count, Is.InRange(1, 4));
+                }
+                var points = z.Landmarks.Select(l => l.Point).Concat(z.Shrines.Select(s => s.Point)).Concat(z.SpawnPoints.Select(s => s.Point));
+                foreach (var p in points)
                 {
                     Assert.That(p.Zone, Is.EqualTo(z.Coord));
-                    Assert.That(p.Local.X, Is.InRange(0f, grid.ZoneSize));
-                    Assert.That(p.Local.Y, Is.InRange(0f, grid.ZoneSize));
+                    Assert.That(tiling.ZoneAt(p.World), Is.EqualTo(z.Coord));
+                    Assert.That(tiling.IsCanonical(p.World));
+                    Assert.That(tiling.EdgeDistance(z.Coord, p.World), Is.GreaterThan(5f));
                 }
             }
             Assert.That(map.Shrines.Select(s => s.Id).Distinct().Count(), Is.EqualTo(map.Shrines.Count));
@@ -109,7 +126,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void Zones_LeanTowardOneOrTwoColors()
         {
-            var map = LayerGenerator.Generate(9, new WorldGrid(10, 10, 200f));
+            var map = LayerGenerator.Generate(9, new ZoneTiling(4, 4, 100f));
             Assert.That(map.Zones.Any(z => z.Bias.HasSecondary));
             Assert.That(map.Zones.Any(z => !z.Bias.HasSecondary));
             foreach (var z in map.Zones.Where(z => z.Bias.HasSecondary))
@@ -121,7 +138,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void MvpSettings_ForceYellowAndOnlyWisps()
         {
-            var map = LayerGenerator.Generate(3, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            var map = LayerGenerator.Generate(3, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             foreach (var z in map.Zones)
             {
                 Assert.That(z.Bias.Primary, Is.EqualTo(EssenceColor.Yellow));
@@ -149,7 +166,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void SpawnPoints_FollowTheLeanAcrossALayer()
         {
-            var map = LayerGenerator.Generate(21, new WorldGrid(12, 12, 200f));
+            var map = LayerGenerator.Generate(21, new ZoneTiling(5, 5, 100f));
             int matching = 0, total = 0;
             foreach (var z in map.Zones.Where(z => !z.Bias.HasSecondary))
             {
@@ -163,7 +180,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void Describe_NamesTheNearestLandmarkAndItsZone()
         {
-            var map = LayerGenerator.Generate(11, new WorldGrid(4, 4, 250f));
+            var map = LayerGenerator.Generate(11, new ZoneTiling(3, 3, 125f));
             var landmark = map.Landmarks[5];
             var nearby = landmark.Point.World + new Vector2(1f, 1f);
             Assert.That(map.Describe(nearby), Is.EqualTo($"near {landmark.Name} in zone {landmark.Point.Zone}"));
@@ -172,21 +189,24 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void Distance_WrapsAroundTheWorldEdge()
         {
-            var map = LayerGenerator.Generate(11, new WorldGrid(4, 4, 250f));
-            Assert.That(map.Distance(new Vector2(5f, 5f), new Vector2(995f, 5f)), Is.EqualTo(10f).Within(1e-3));
-            var located = map.Locate(new Vector2(-10f, 1010f));
-            Assert.That(located.Zone, Is.EqualTo(new ZoneCoord(3, 0)));
-            Assert.That(located.Local.X, Is.EqualTo(240f).Within(1e-3));
+            var tiling = new ZoneTiling(3, 3, 125f);
+            var map = LayerGenerator.Generate(11, tiling);
+            var p = tiling.Centre(new ZoneCoord(1, 1, 0));
+            Assert.That(map.Distance(p, p + tiling.PeriodA - new Vector2(10f, 0f)), Is.EqualTo(10f).Within(1e-2));
+            var located = map.Locate(p + tiling.PeriodA - tiling.PeriodB * 2f + new Vector2(3f, 4f));
+            Assert.That(located.Zone, Is.EqualTo(new ZoneCoord(1, 1, 0)));
+            Assert.That(Vector2.Distance(located.World, p + new Vector2(3f, 4f)), Is.LessThan(1e-2f));
         }
 
         [Test]
         public void NearestLandmark_LooksAcrossTheWrap()
         {
-            var map = LayerGenerator.Generate(11, new WorldGrid(4, 4, 250f));
+            var tiling = new ZoneTiling(3, 3, 125f);
+            var map = LayerGenerator.Generate(11, tiling);
             foreach (var landmark in map.Landmarks)
             {
-                // The same spot one whole world-width over is still that landmark.
-                var shifted = landmark.Point.World + new Vector2(1000f, -1000f);
+                // The same spot one whole period over is still that landmark.
+                var shifted = landmark.Point.World + tiling.PeriodA - tiling.PeriodB;
                 Assert.That(map.NearestLandmark(shifted), Is.SameAs(landmark));
             }
         }

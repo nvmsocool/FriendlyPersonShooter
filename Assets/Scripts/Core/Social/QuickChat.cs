@@ -192,7 +192,7 @@ namespace FriendlyPersonShooter.Core.Social
                 (map == null || message.LandmarkId < 0 || message.LandmarkId >= map.Landmarks.Count)) return false;
             if ((slots & QuickChatSlots.Player) != 0 && message.PlayerId < 0) return false;
             if ((slots & QuickChatSlots.Zone) != 0 && map != null &&
-                (message.Zone.X < 0 || message.Zone.Y < 0 || message.Zone.X >= map.Grid.Width || message.Zone.Y >= map.Grid.Height)) return false;
+                !map.Tiling.InRange(message.Zone)) return false;
             return true;
         }
 

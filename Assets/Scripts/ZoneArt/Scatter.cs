@@ -72,9 +72,10 @@ namespace FriendlyPersonShooter.ZoneArt
             return result;
         }
 
-        /// <summary>Poisson points over a whole zone.</summary>
+        /// <summary>Poisson points over a whole zone (inside its outline).</summary>
         public static List<Vector2> Poisson(ZoneRequest zone, float minDistance, ref ZoneRandom random, Func<Vector2, bool> accept = null) =>
-            Poisson(new Vector2(zone.Origin.x, zone.Origin.z), new Vector2(zone.Size, zone.Size), minDistance, ref random, accept);
+            Poisson(new Vector2(zone.Origin.x, zone.Origin.z), new Vector2(zone.Size, zone.Size), minDistance, ref random,
+                p => zone.Contains(p.x, p.y) && (accept == null || accept(p)));
 
         /// <summary>
         /// The highest collider surface under (x, z), or false if there's none. Call Physics.SyncTransforms()

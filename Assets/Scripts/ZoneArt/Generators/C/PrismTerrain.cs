@@ -9,27 +9,33 @@ namespace FriendlyPersonShooter.ZoneArt.C
     /// The zone's ground: a 1 m height grid shaped per tile kind (terraced plateaus, canyons, craters,
     /// lakes, rivers), basalt hex-column fields that step up in walkable increments, and a connectivity
     /// pass that carves ramps from every stranded shelf down (or up) to the main ground.
-    /// Grid coordinates are zone-local metres.
+    /// Grid coordinates are zone-local metres over the zone's square build box (<see cref="ZoneRequest.Size"/>); only
+    /// the part inside the zone's outline is meshed, and the ground meets the seam height exactly along the outline.
     /// </summary>
     public sealed class PrismTerrain
     {
-        public const int N = 251;
-        public const int C = 250;
         public const float Climb = 0.75f;
         public const float MaxGrad = 0.85f;
 
+        /// <summary>Grid points per side (Size + 1) and 1 m cells per side (Size).</summary>
+        public readonly int N, C;
+        /// <summary>The middle of the zone in local metres, and the distance from it to the nearest edge.</summary>
+        public readonly Vector2 Mid;
+        public readonly float Inner;
         public readonly ZoneRequest Zone;
-        public readonly float[] H = new float[N * N];
-        public readonly float[] Ramp = new float[N * N];
-        public readonly float[] NoHex = new float[N * N];
-        public readonly float[] Pad = new float[N * N];
+        public readonly float[] H, Ramp, NoHex, Pad;
         // The seam height and how far each grid point is from it (0 on the zone edge, 1 from BorderWidth in).
-        private readonly float[] _border = new float[N * N];
-        private readonly float[] _seamBlend = new float[N * N];
-        public readonly float[] S = new float[C * C];
-        public readonly int[] CellHex = new int[C * C];
-        public readonly int[] Comp = new int[C * C];
-        public readonly bool[] Steep = new bool[C * C];
+        private readonly float[] _border, _seamBlend;
+        public readonly float[] S;
+        public readonly int[] CellHex, Comp;
+        public readonly bool[] Steep;
+        /// <summary>Signed distance from each cell centre to the zone's outline (positive inside).</summary>
+        public readonly float[] CellEdge;
+        // Grid points: signed distance to the outline (positive inside).
+        private readonly float[] _vEdge;
+        // Triangle split parity, from world coordinates so neighbouring zones split their cells the same way.
+        private readonly int _parity;
+        private readonly Vector2[] _outline, _normals;
         public int MainComp;
         public float WaterLevel = -999f;
         public bool HasWater;
@@ -45,7 +51,48 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public PrismTerrain(ZoneRequest zone)
         {
             Zone = zone;
+            C = Mathf.RoundToInt(zone.Size);
+            N = C + 1;
+            Mid = new Vector2(zone.Center.x - zone.Origin.x, zone.Center.z - zone.Origin.z);
+            Inner = Mathf.Max(10f, zone.InnerRadius);
+            H = new float[N * N];
+            Ramp = new float[N * N];
+            NoHex = new float[N * N];
+            Pad = new float[N * N];
+            _border = new float[N * N];
+            _seamBlend = new float[N * N];
+            _vEdge = new float[N * N];
+            S = new float[C * C];
+            CellHex = new int[C * C];
+            Comp = new int[C * C];
+            Steep = new bool[C * C];
+            CellEdge = new float[C * C];
+            _parity = (Mathf.RoundToInt(zone.Origin.x) + Mathf.RoundToInt(zone.Origin.z)) & 1;
+            _outline = new Vector2[zone.Outline.Count];
+            _normals = new Vector2[_outline.Length];
+            for (int i = 0; i < _outline.Length; i++) _outline[i] = zone.Outline[i];
+            for (int i = 0; i < _outline.Length; i++)
+            {
+                var e = _outline[(i + 1) % _outline.Length] - _outline[i];
+                _normals[i] = new Vector2(-e.y, e.x).normalized;
+            }
+            var o = zone.Origin;
+            for (int iz = 0; iz < N; iz++)
+                for (int ix = 0; ix < N; ix++)
+                    _vEdge[iz * N + ix] = zone.EdgeDistance(o.x + ix, o.z + iz);
+            for (int iz = 0; iz < C; iz++)
+                for (int ix = 0; ix < C; ix++)
+                    CellEdge[iz * C + ix] = zone.EdgeDistance(o.x + ix + 0.5f, o.z + iz + 0.5f);
         }
+
+        /// <summary>True if local (lx, lz) is inside the zone, at least <paramref name="margin"/> metres from its edges.</summary>
+        public bool Inside(float lx, float lz, float margin = 0f) => Zone.Contains(Zone.Origin.x + lx, Zone.Origin.z + lz, margin);
+
+        /// <summary>Cell index of a local position, clamped into the grid.</summary>
+        public int Cell(float lx, float lz) => Mathf.Clamp((int)lz, 0, C - 1) * C + Mathf.Clamp((int)lx, 0, C - 1);
+
+        /// <summary>Which way a cell's quad is split into two triangles (0 or 1); the same in every zone for the same world cell.</summary>
+        public int Split(int x, int z) => (x + z + _parity) & 1;
 
         public float this[int x, int z] => H[Mathf.Clamp(z, 0, N - 1) * N + Mathf.Clamp(x, 0, N - 1)];
 
@@ -65,7 +112,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
         }
         public float PadAt(float lx, float lz) => Bilinear(Pad, lx, lz);
 
-        private static float Bilinear(float[] a, float lx, float lz)
+        private float Bilinear(float[] a, float lx, float lz)
         {
             int x = Mathf.Clamp(Mathf.FloorToInt(lx), 0, N - 2), z = Mathf.Clamp(Mathf.FloorToInt(lz), 0, N - 2);
             float tx = Mathf.Clamp01(lx - x), tz = Mathf.Clamp01(lz - z);
@@ -159,17 +206,24 @@ namespace FriendlyPersonShooter.ZoneArt.C
             s.HillAt = new Vector2[hills];
             s.HillR = new float[hills];
             s.HillAmp = new float[hills];
+            // The numbers above were tuned for a 250 m square zone (125 m to its edges); smaller zones (squares,
+            // triangles) scale their features to fit, around the zone's own middle.
+            var mid = new Vector2(zone.Center.x - zone.Origin.x, zone.Center.z - zone.Origin.z);
+            float k = Mathf.Clamp(zone.InnerRadius / 108f, 0.3f, 1.2f);
+            s.Feature = mid + (s.Feature - new Vector2(125f, 125f)) * k;
+            s.FeatureR *= k;
+            s.RiverWander *= k;
             for (int i = 0; i < hills; i++)
             {
-                s.HillAt[i] = new Vector2(r.Range(45f, 205f), r.Range(45f, 205f));
-                s.HillR[i] = r.Range(40f, 75f);
+                s.HillAt[i] = mid + (new Vector2(r.Range(45f, 205f), r.Range(45f, 205f)) - new Vector2(125f, 125f)) * k;
+                s.HillR[i] = r.Range(40f, 75f) * k;
                 s.HillAmp[i] = i == 0 ? 1f : r.Range(0.5f, 0.9f);
             }
             float a = r.Range(0f, Mathf.PI * 2f);
             s.MassDir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-            s.MassPoint = new Vector2(r.Range(80f, 170f), r.Range(80f, 170f));
-            s.MassR = r.Range(62f, 85f);
-            s.MassW = r.Range(26f, 42f);
+            s.MassPoint = mid + (new Vector2(r.Range(80f, 170f), r.Range(80f, 170f)) - new Vector2(125f, 125f)) * k;
+            s.MassR = r.Range(62f, 85f) * k;
+            s.MassW = r.Range(26f, 42f) * Mathf.Max(k, 0.5f);
             return s;
         }
 
@@ -185,14 +239,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
             _o3 = ZoneNoise.Offset(z.Seed, 13);
             if (z.Tile == TileKind.Lake || z.Tile == TileKind.River)
             {
+                // Water sits just below the lowest point of the seam, so it never spills over the zone's edge.
                 float minB = float.MaxValue;
-                for (int i = 0; i <= 50; i++)
+                for (int i = 0; i < _outline.Length; i++)
                 {
-                    float t = i * 5f;
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + t, z.Origin.z));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + t, z.Origin.z + 250f));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x, z.Origin.z + t));
-                    minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, z.Origin.x + 250f, z.Origin.z + t));
+                    var a = _outline[i];
+                    var b = _outline[(i + 1) % _outline.Length];
+                    int steps = Mathf.Max(1, Mathf.CeilToInt((b - a).magnitude / 2.5f));
+                    for (int j = 0; j < steps; j++)
+                    {
+                        var p = Vector2.Lerp(a, b, j / (float)steps);
+                        minB = Mathf.Min(minB, ZoneEdges.BorderHeight(z, p.x, p.y));
+                    }
                 }
                 WaterLevel = minB - 0.4f;
                 HasWater = true;
@@ -203,8 +261,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     float lx = ix, lz = iz;
                     float wx = z.Origin.x + lx, wz = z.Origin.z + lz;
-                    float e = Mathf.Min(Mathf.Min(lx, 250f - lx), Mathf.Min(lz, 250f - lz));
-                    // A wobbly falloff width, so high ground doesn't end in a square outline.
+                    float e = _vEdge[iz * N + ix];
+                    // A wobbly falloff width, so high ground doesn't end in a straight line along the outline.
                     float fall = s.Fall * (0.9f + 0.55f * ZoneNoise.Fbm(wx + _o3.y, wz + _o3.x, 1f / 70f, 2));
                     float inner = Smooth(14f, 14f + Mathf.Max(10f, fall), e);
                     float border = ZoneEdges.BorderHeight(z, wx, wz);
@@ -263,7 +321,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     var rdir = new Vector2(Mathf.Cos(s.RiverAngle), Mathf.Sin(s.RiverAngle));
                     var rperp = new Vector2(-rdir.y, rdir.x);
-                    var q = lp - new Vector2(125f, 125f);
+                    var q = lp - Mid;
                     float along = Vector2.Dot(q, rdir);
                     float across = Vector2.Dot(q, rperp);
                     float path = Mathf.Sin(along / 38f + s.RiverPhase) * s.RiverWander + Mathf.Sin(along / 17f + s.RiverPhase * 2.3f) * 5f;
@@ -288,7 +346,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var s = _shape;
             // Bend the shapes with noise so hills, ridges and rims aren't perfect circles and lines.
             lp += new Vector2(ZoneNoise.Fbm(wx + _o1.y, wz + _o1.x, 1f / 90f, 2), ZoneNoise.Fbm(wx + _o2.y, wz + _o2.x, 1f / 90f, 2)) * 22f;
-            lp = new Vector2(Mathf.Clamp(lp.x, 0f, 250f), Mathf.Clamp(lp.y, 0f, 250f));
+            lp = new Vector2(Mathf.Clamp(lp.x, 0f, C), Mathf.Clamp(lp.y, 0f, C));
             float m;
             switch (s.Layout)
             {
@@ -306,10 +364,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     break;
                 }
                 case MassLayout.Rim:
-                    m = Mathf.Exp(-Sq(((lp - new Vector2(125f, 125f)).magnitude - s.MassR) / s.MassW));
+                    m = Mathf.Exp(-Sq(((lp - Mid).magnitude - s.MassR) / s.MassW));
                     break;
                 case MassLayout.Tilt:
-                    m = Smooth(-0.55f, 0.75f, Vector2.Dot(lp - new Vector2(125f, 125f), s.MassDir) / 125f);
+                    m = Smooth(-0.55f, 0.75f, Vector2.Dot(lp - Mid, s.MassDir) / Inner);
                     break;
                 default:
                     m = 1f;
@@ -352,7 +410,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public void BuildHexes(Shape s, float hexThreshold)
         {
-            if (Hex == null) Hex = new HexGrid(s.HexR);
+            if (Hex == null) Hex = new HexGrid(s.HexR, C);
             var g = Hex;
             var z = Zone;
             if (_hexMask == null)
@@ -391,7 +449,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     }
                     g.Hmax[i] = hmax;
                     g.Hmin[i] = hmin;
-                    bool inside = c.x > 2f && c.y > 2f && c.x < 248f && c.y < 248f;
+                    bool inside = Inside(c.x, c.y, g.R + 2f);
                     g.On[i] = inside && _hexMask[i] > hexThreshold && nohex < 0.5f;
                 }
             });
@@ -480,7 +538,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         float h00 = H[iz * N + ix], h10 = H[iz * N + ix + 1], h01 = H[(iz + 1) * N + ix], h11 = H[(iz + 1) * N + ix + 1];
                         // Exact gradients of the two mesh triangles in this cell (same split as BuildMesh).
                         float g1, g2;
-                        if (((ix + iz) & 1) == 0)
+                        if (Split(ix, iz) == 0)
                         {
                             g1 = Sq(h01 - h00) + Sq(h11 - h01);
                             g2 = Sq(h10 - h00) + Sq(h11 - h10);
@@ -516,7 +574,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     int k = stack.Pop();
                     size++;
                     int x = k % C, zz = k / C;
-                    if (x < 3 || zz < 3 || x >= C - 3 || zz >= C - 3) nb++;
+                    if (CellEdge[k] < 3f) nb++;
                     float h = S[k];
                     for (int d = 0; d < 4; d++)
                     {
@@ -588,9 +646,20 @@ namespace FriendlyPersonShooter.ZoneArt.C
             BuildHexes(s, hexThreshold);
             ComputeSurface();
             Label(out var finalSizes, out _);
-            int stranded = 0, total = C * C;
-            for (int k = 0; k < C * C; k++) if (Comp[k] != MainComp) stranded++;
-            StrandedShare = stranded / (float)total;
+            StrandedShare = Stranded();
+        }
+
+        /// <summary>Share of the cells inside the zone that aren't on the main ground.</summary>
+        private float Stranded()
+        {
+            int stranded = 0, total = 0;
+            for (int k = 0; k < C * C; k++)
+            {
+                if (CellEdge[k] < 0f) continue;
+                total++;
+                if (Comp[k] != MainComp) stranded++;
+            }
+            return stranded / (float)Mathf.Max(1, total);
         }
 
         private bool FindRamp(List<int> boundary, int comp, int main, HashSet<int> merged, out int from, out int to, bool fromPad = false)
@@ -622,6 +691,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         if (qx < 1 || qz < 1 || qx >= C - 1 || qz >= C - 1) break;
                         if (t > 3 && (home < 0 ? Protected(qx + 0.5f, qz + 0.5f) : ProtectedOther(qx + 0.5f, qz + 0.5f, home))) break;
                         int q = qz * C + qx;
+                        // Ramps stay inside the zone and out of the seam strip.
+                        if (CellEdge[q] < ZoneEdges.SeamWidth + 1f) break;
                         int cq = Comp[q];
                         if (cq == main || merged.Contains(cq))
                         {
@@ -813,9 +884,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             BuildHexes(s, hexThreshold);
             ComputeSurface();
             Label(out _, out _);
-            int stranded = 0;
-            for (int k = 0; k < C * C; k++) if (Comp[k] != MainComp) stranded++;
-            StrandedShare = stranded / (float)(C * C);
+            StrandedShare = Stranded();
             return carved;
         }
 
@@ -900,68 +969,161 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public const int Chunk = 50;
 
-        /// <summary>The collision mesh of one 50 m terrain chunk: shared grid vertices, the same triangles as the render mesh.</summary>
-        public PrismCollider ChunkCollider(int cx, int cz)
+        /// <summary>Terrain chunks per side of the build box (the last row and column may be narrower).</summary>
+        public int ChunksPerSide => (C + Chunk - 1) / Chunk;
+        public int ChunkCount => ChunksPerSide * ChunksPerSide;
+
+        /// <summary>
+        /// Every ground triangle of chunk <paramref name="index"/>, clipped to the zone's outline. Triangles inside keep
+        /// their grid heights; points made by clipping lie on the outline and get the exact seam height, so this zone
+        /// and its neighbour meet without cracks.
+        /// </summary>
+        private void ChunkTriangles(int index, System.Action<Vector3, Vector3, Vector3> emit)
         {
             var o = Zone.Origin;
-            const int w = Chunk + 1;
-            var pos = new Vector3[w * w];
-            for (int z = 0; z <= Chunk; z++)
-            for (int x = 0; x <= Chunk; x++)
-                pos[z * w + x] = new Vector3(o.x + cx + x, this[cx + x, cz + z], o.z + cz + z);
-            var idx = new int[Chunk * Chunk * 6];
-            int n = 0;
-            for (int z = 0; z < Chunk; z++)
+            int cx = index % ChunksPerSide * Chunk, cz = index / ChunksPerSide * Chunk;
+            int x1 = Mathf.Min(cx + Chunk, C), z1 = Mathf.Min(cz + Chunk, C);
+            var poly = new List<Vector3>(12);
+            var next = new List<Vector3>(12);
+            var fresh = new List<bool>(12);
+            var nextFresh = new List<bool>(12);
+            void Tri(int ax, int az, int bx, int bz, int qx, int qz)
             {
-                for (int x = 0; x < Chunk; x++)
+                float ea = _vEdge[az * N + ax], eb = _vEdge[bz * N + bx], ec = _vEdge[qz * N + qx];
+                var a = new Vector3(o.x + ax, H[az * N + ax], o.z + az);
+                var b = new Vector3(o.x + bx, H[bz * N + bx], o.z + bz);
+                var c = new Vector3(o.x + qx, H[qz * N + qx], o.z + qz);
+                if (ea >= 0f && eb >= 0f && ec >= 0f)
                 {
-                    int a = z * w + x, b = a + w, c = a + w + 1, d = a + 1;
-                    if (((cx + x + cz + z) & 1) == 0)
+                    emit(a, b, c);
+                    return;
+                }
+                // Further outside than the triangle is wide: nothing to keep.
+                if (ea < -1.5f && eb < -1.5f && ec < -1.5f) return;
+                poly.Clear();
+                fresh.Clear();
+                poly.Add(a); poly.Add(b); poly.Add(c);
+                fresh.Add(false); fresh.Add(false); fresh.Add(false);
+                for (int i = 0; i < _outline.Length && poly.Count > 0; i++)
+                {
+                    var p0 = _outline[i];
+                    var n = _normals[i];
+                    next.Clear();
+                    nextFresh.Clear();
+                    for (int k = 0; k < poly.Count; k++)
                     {
-                        idx[n++] = a; idx[n++] = b; idx[n++] = c;
-                        idx[n++] = a; idx[n++] = c; idx[n++] = d;
+                        var p = poly[k];
+                        var q = poly[(k + 1) % poly.Count];
+                        float dp = (p.x - p0.x) * n.x + (p.z - p0.y) * n.y;
+                        float dq = (q.x - p0.x) * n.x + (q.z - p0.y) * n.y;
+                        if (dp >= 0f)
+                        {
+                            next.Add(p);
+                            nextFresh.Add(fresh[k]);
+                        }
+                        if ((dp >= 0f) != (dq >= 0f))
+                        {
+                            float t = dp / (dp - dq);
+                            next.Add(Vector3.Lerp(p, q, t));
+                            nextFresh.Add(true);
+                        }
+                    }
+                    (poly, next) = (next, poly);
+                    (fresh, nextFresh) = (nextFresh, fresh);
+                }
+                if (poly.Count < 3) return;
+                for (int k = 0; k < poly.Count; k++)
+                {
+                    if (!fresh[k]) continue;
+                    var p = poly[k];
+                    poly[k] = new Vector3(p.x, ZoneEdges.BorderHeight(Zone, p.x, p.z), p.z);
+                }
+                for (int k = 1; k + 1 < poly.Count; k++)
+                {
+                    var u = poly[k] - poly[0];
+                    var v = poly[k + 1] - poly[0];
+                    if (Mathf.Abs(u.x * v.z - u.z * v.x) < 1e-6f) continue;
+                    emit(poly[0], poly[k], poly[k + 1]);
+                }
+            }
+            for (int z = cz; z < z1; z++)
+            {
+                for (int x = cx; x < x1; x++)
+                {
+                    if (Split(x, z) == 0)
+                    {
+                        Tri(x, z, x, z + 1, x + 1, z + 1);
+                        Tri(x, z, x + 1, z + 1, x + 1, z);
                     }
                     else
                     {
-                        idx[n++] = a; idx[n++] = b; idx[n++] = d;
-                        idx[n++] = b; idx[n++] = c; idx[n++] = d;
+                        Tri(x, z, x, z + 1, x + 1, z);
+                        Tri(x, z + 1, x + 1, z + 1, x + 1, z);
                     }
                 }
             }
-            return new PrismCollider($"Terrain {cx / Chunk},{cz / Chunk}", pos, idx, PrismCollision.TagGround);
         }
 
-        /// <summary>The flat-shaded render mesh of one terrain chunk (each triangle colored at its centre).</summary>
-        public PrismMesh ChunkRender(int cx, int cz, System.Func<Vector3, Vector3, Color> colorAt)
+        /// <summary>The collision mesh of one terrain chunk (welded vertices, the same triangles as the render mesh), or null if the chunk is outside the zone.</summary>
+        public PrismCollider ChunkCollider(int index)
         {
-            var o = Zone.Origin;
-            var mb = new PrismMesh($"Terrain {cx / Chunk},{cz / Chunk}", Chunk * Chunk * 6);
-            void Tri(Vector3 a, Vector3 b, Vector3 c)
+            var map = new Dictionary<Vector3, int>((Chunk + 1) * (Chunk + 1));
+            var pos = new List<Vector3>((Chunk + 1) * (Chunk + 1));
+            var idx = new List<int>(Chunk * Chunk * 6);
+            int Weld(Vector3 p)
+            {
+                if (!map.TryGetValue(p, out int k))
+                {
+                    k = pos.Count;
+                    pos.Add(p);
+                    map.Add(p, k);
+                }
+                return k;
+            }
+            ChunkTriangles(index, (a, b, c) =>
+            {
+                idx.Add(Weld(a));
+                idx.Add(Weld(b));
+                idx.Add(Weld(c));
+            });
+            if (idx.Count == 0) return null;
+            return new PrismCollider($"Terrain {index}", pos.ToArray(), idx.ToArray(), PrismCollision.TagGround);
+        }
+
+        /// <summary>The flat-shaded render mesh of one terrain chunk (each triangle colored at its centre), or null if it is empty.</summary>
+        public PrismMesh ChunkRender(int index, System.Func<Vector3, Vector3, Color> colorAt)
+        {
+            var mb = new PrismMesh($"Terrain {index}", Chunk * Chunk * 6);
+            ChunkTriangles(index, (a, b, c) =>
             {
                 var n = Vector3.Cross(b - a, c - a).normalized;
                 mb.FlatTriangle(a, b, c, colorAt((a + b + c) / 3f, n));
-            }
-            for (int z = cz; z < cz + Chunk; z++)
+            });
+            return mb.Empty ? null : mb;
+        }
+
+        /// <summary>Clips a horizontal triangle (any y) to the zone's outline; emits the pieces inside.</summary>
+        public void ClipFlat(Vector3 a, Vector3 b, Vector3 c, System.Action<Vector3, Vector3, Vector3> emit)
+        {
+            var poly = new List<Vector3> { a, b, c };
+            var next = new List<Vector3>(8);
+            for (int i = 0; i < _outline.Length && poly.Count > 0; i++)
             {
-                for (int x = cx; x < cx + Chunk; x++)
+                var p0 = _outline[i];
+                var n = _normals[i];
+                next.Clear();
+                for (int k = 0; k < poly.Count; k++)
                 {
-                    var a = new Vector3(o.x + x, this[x, z], o.z + z);
-                    var b = new Vector3(o.x + x, this[x, z + 1], o.z + z + 1);
-                    var c = new Vector3(o.x + x + 1, this[x + 1, z + 1], o.z + z + 1);
-                    var d = new Vector3(o.x + x + 1, this[x + 1, z], o.z + z);
-                    if (((x + z) & 1) == 0)
-                    {
-                        Tri(a, b, c);
-                        Tri(a, c, d);
-                    }
-                    else
-                    {
-                        Tri(a, b, d);
-                        Tri(b, c, d);
-                    }
+                    var p = poly[k];
+                    var q = poly[(k + 1) % poly.Count];
+                    float dp = (p.x - p0.x) * n.x + (p.z - p0.y) * n.y;
+                    float dq = (q.x - p0.x) * n.x + (q.z - p0.y) * n.y;
+                    if (dp >= 0f) next.Add(p);
+                    if ((dp >= 0f) != (dq >= 0f)) next.Add(Vector3.Lerp(p, q, dp / (dp - dq)));
                 }
+                (poly, next) = (next, poly);
             }
-            return mb;
+            for (int k = 1; k + 1 < poly.Count; k++) emit(poly[0], poly[k], poly[k + 1]);
         }
 
         public static float Smooth(float e0, float e1, float x)
@@ -982,11 +1144,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public readonly bool[] On, Pillar;
         private static readonly float Sqrt3 = Mathf.Sqrt(3f);
 
-        public HexGrid(float radius)
+        public HexGrid(float radius, float extent)
         {
             R = radius;
-            Cols = Mathf.CeilToInt(250f / (R * Sqrt3)) + 2;
-            Rows = Mathf.CeilToInt(250f / (R * 1.5f)) + 2;
+            Cols = Mathf.CeilToInt(extent / (R * Sqrt3)) + 2;
+            Rows = Mathf.CeilToInt(extent / (R * 1.5f)) + 2;
             Count = Cols * Rows;
             Hmax = new float[Count];
             Hmin = new float[Count];

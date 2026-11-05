@@ -42,7 +42,7 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             for (int i = 0; i < count; i++)
             {
                 uint layerSeed = ZoneRandom.Hash(seed, 0x6A11, i);
-                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpGrid(), LayerSettings.ForPlaytest());
+                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpTiling(), LayerSettings.ForPlaytest());
                 var zones = map.Zones;
                 // Prefer zones with something on them, and vary the pick.
                 int start = (int)(ZoneRandom.Hash(layerSeed, 99) % (uint)zones.Count);
@@ -248,7 +248,7 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
                             }
                         }
 
-                        string edges = $"{walk.EdgeReach[0] * 100f:0}/{walk.EdgeReach[1] * 100f:0}/{walk.EdgeReach[2] * 100f:0}/{walk.EdgeReach[3] * 100f:0}%";
+                        string edges = string.Join("/", System.Linq.Enumerable.Select(walk.EdgeReach, e => (e * 100f).ToString("0"))) + "%";
                         string notes = (result.Notes ?? "").Replace("|", "/").Replace("\n", " ");
                         report.AppendLine($"| {i} | {zone.Coord} {zone.Tile} | {timing.Wall:0.00} | {timing.MainMs:0} | {timing.LongestMs:0.0} | {tris:N0} | {walk.TwoWayShare * 100f:0}% of {walk.Walkable:N0} m² | {edges} | {walk.P10:0}..{walk.P90:0} m ({walk.Verticality:0}) | {walk.MultiLevelShare * 100f:0}% | {walk.AnchorsReachable}/{walk.AnchorsTotal}{(walk.UnreachableAnchors.Count > 0 ? " (missing " + string.Join(", ", walk.UnreachableAnchors) + ")" : "")} | {headless} | {notes} |");
                         Debug.Log($"[ZoneGallery] {generator.Name} zone {i} {zone}: built {timing}, {tris:N0} tris; {walk}");

@@ -145,7 +145,7 @@ namespace FriendlyPersonShooter.Core.Social
         public bool TryGetBias(ZoneCoord zone, LayerMap map, out ZoneColorBias bias)
         {
             if (map == null) throw new ArgumentNullException(nameof(map));
-            var wrapped = map.Grid.Wrap(zone.X, zone.Y);
+            var wrapped = map.Tiling.Wrap(zone);
             if (!KnowsBias(wrapped))
             {
                 bias = default;

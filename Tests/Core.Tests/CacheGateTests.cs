@@ -68,7 +68,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(registry.Count, Is.EqualTo(0));
         }
 
-        private static GateSite Site() => new GateSite(0, new MapPoint(new ZoneCoord(2, 2), new Vector2(50, 50), 250f));
+        private static GateSite Site() => new GateSite(0, new MapPoint(new ZoneCoord(2, 2), new Vector2(50, 50)));
 
         [Test]
         public void Gate_UnlockPaysFromBankedAndGrantsPersonalAccess()

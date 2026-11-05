@@ -31,7 +31,8 @@ namespace FriendlyPersonShooter.ZoneArt
             /// <summary>TwoWay / Walkable.</summary>
             public float TwoWayShare;
             /// <summary>Share of each border (N, E, S, W) with two-way ground within 2 m of the edge.</summary>
-            public float[] EdgeReach = new float[4];
+            /// <summary>Share of each outline edge (in outline order) reachable two-way from just inside it.</summary>
+            public float[] EdgeReach = new float[0];
             /// <summary>Two-way surface heights: 10th and 90th percentile, min and max.</summary>
             public float P10, P90, Min, Max;
             /// <summary>Share of columns with two-way ground that have two or more two-way levels (bridges, ledges, overhangs).</summary>
@@ -47,7 +48,7 @@ namespace FriendlyPersonShooter.ZoneArt
             public float Verticality => P90 - P10;
 
             public override string ToString() =>
-                $"two-way {TwoWayShare * 100f:0}% of {Walkable} standable cells; edges N {EdgeReach[0] * 100f:0}% E {EdgeReach[1] * 100f:0}% S {EdgeReach[2] * 100f:0}% W {EdgeReach[3] * 100f:0}%; " +
+                $"two-way {TwoWayShare * 100f:0}% of {Walkable} standable cells; edges {string.Join("/", System.Linq.Enumerable.Select(EdgeReach, e => (e * 100f).ToString("0")))}%; " +
                 $"height p10..p90 {P10:0.0}..{P90:0.0} m (span {Verticality:0.0}), min {Min:0.0} max {Max:0.0}; multi-level {MultiLevelShare * 100f:0}%; " +
                 $"anchors reachable {AnchorsReachable}/{AnchorsTotal}" + (UnreachableAnchors.Count > 0 ? $" (missing: {string.Join(", ", UnreachableAnchors)})" : "");
         }
@@ -68,6 +69,8 @@ namespace FriendlyPersonShooter.ZoneArt
                     int col = z * n + x;
                     firstNode[col] = heights.Count;
                     float wx = zone.Origin.x + (x + 0.5f) * Cell, wz = zone.Origin.z + (z + 0.5f) * Cell;
+                    // Only this zone's own ground counts (the build box overlaps its neighbours).
+                    if (!zone.Contains(wx, wz)) continue;
                     var origin = new Vector3(wx, 800f, wz);
                     for (int level = 0; level < MaxLevels; level++)
                     {
@@ -127,15 +130,14 @@ namespace FriendlyPersonShooter.ZoneArt
                 return seen;
             }
 
-            // Try a few natural starts (shrines, gate, centre, edge midpoints) and keep the biggest two-way area.
+            // Try a few natural starts (shrines, gate, centre, toward each corner) and keep the biggest two-way area.
             var starts = new List<Vector3>();
             foreach (var a in zone.Anchors) if (a.Kind == ZoneAnchorKind.Shrine || a.Kind == ZoneAnchorKind.Gate) starts.Add(a.World);
             starts.Add(zone.Center);
-            float hs = zone.Size * 0.5f;
-            starts.Add(zone.Center + new Vector3(hs - 2f, 0f, 0f));
-            starts.Add(zone.Center + new Vector3(-hs + 2f, 0f, 0f));
-            starts.Add(zone.Center + new Vector3(0f, 0f, hs - 2f));
-            starts.Add(zone.Center + new Vector3(0f, 0f, -hs + 2f));
+            foreach (var corner in zone.Outline)
+            {
+                starts.Add(Vector3.Lerp(zone.Center, new Vector3(corner.x, 0f, corner.y), 0.85f));
+            }
 
             bool[] best = null;
             int bestCount = -1;
@@ -213,22 +215,23 @@ namespace FriendlyPersonShooter.ZoneArt
             }
             report.MultiLevelShare = withGround > 0 ? multi / (float)withGround : 0f;
 
-            // Border strips: N (z max), E (x max), S (z min), W (x min).
-            for (int side = 0; side < 4; side++)
+            // Each outline edge: sample a point every metre, 1.5 m inside it.
+            var outline = zone.Outline;
+            report.EdgeReach = new float[outline.Count];
+            for (int side = 0; side < outline.Count; side++)
             {
+                var a = outline[side];
+                var b = outline[(side + 1) % outline.Count];
+                var inward = (Vector2)(Quaternion.Euler(0f, 0f, 90f) * (b - a).normalized) * 1.5f;
+                int samples = Mathf.Max(1, Mathf.RoundToInt((b - a).magnitude));
                 int hitCount = 0;
-                for (int i = 0; i < n; i++)
+                for (int i = 0; i < samples; i++)
                 {
-                    bool ok = false;
-                    for (int d = 0; d < 2 && !ok; d++)
-                    {
-                        int x = side == 1 ? n - 1 - d : side == 3 ? d : i;
-                        int z = side == 0 ? n - 1 - d : side == 2 ? d : i;
-                        ok = report.Map[z * n + x] == 2;
-                    }
-                    if (ok) hitCount++;
+                    var p = Vector2.Lerp(a, b, (i + 0.5f) / samples) + inward;
+                    int x = Mathf.FloorToInt((p.x - zone.Origin.x) / Cell), z = Mathf.FloorToInt((p.y - zone.Origin.z) / Cell);
+                    if (x >= 0 && z >= 0 && x < n && z < n && report.Map[z * n + x] == 2) hitCount++;
                 }
-                report.EdgeReach[side] = hitCount / (float)n;
+                report.EdgeReach[side] = hitCount / (float)samples;
             }
 
             foreach (var a in zone.Anchors)

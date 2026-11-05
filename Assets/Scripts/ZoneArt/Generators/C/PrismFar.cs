@@ -17,9 +17,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             return (wx, wz) =>
             {
                 float lx = wx - zone.Origin.x, lz = wz - zone.Origin.z;
-                float dx = Mathf.Max(0f, Mathf.Max(-lx, lx - zone.Size));
-                float dz = Mathf.Max(0f, Mathf.Max(-lz, lz - zone.Size));
-                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                // Metres outside the zone's outline (0 inside).
+                float d = Mathf.Max(0f, -zone.EdgeDistance(wx, wz));
                 float border = ZoneEdges.BorderHeight(zone, wx, wz);
                 float rise = PrismTerrain.Smooth(0f, 70f, d);
                 float e = terrain.Elevation(lx, lz) * (1f + PrismTerrain.Smooth(200f, 900f, d) * 1.5f);
@@ -47,9 +46,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var lands = new Lands();
             var hf = HeightFunction(zone, terrain, waterLevel);
             var o = zone.Origin;
-            Ring(lands.Ground, hf, colorAt, o, -70f, 320f, 2.5f, 0f, 250f);
-            Ring(lands.Ground, hf, colorAt, o, -500f, 750f, 10f, -70f, 320f);
-            Ring(lands.Ground, hf, colorAt, o, -2200f, 2450f, 50f, -500f, 750f);
+            // Three rings, each a grid aligned with the next one's cells; the innermost leaves out the zone itself.
+            float max1 = -70f + Mathf.Ceil((zone.Size + 140f) / 10f) * 10f;
+            float max2 = -500f + Mathf.Ceil((max1 + 500f + 430f) / 50f) * 50f;
+            float max3 = max2 + 1700f;
+            Ring(lands.Ground, hf, colorAt, o, -70f, max1, 2.5f, 0f, 0f, zone);
+            Ring(lands.Ground, hf, colorAt, o, -500f, max2, 10f, -70f, max1, null);
+            Ring(lands.Ground, hf, colorAt, o, -2200f, max3, 50f, -500f, max2, null);
 
             // Toy forests near the zone.
             var rng = ZoneRandom.For(zone.Seed, "far");
@@ -84,11 +87,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
             System.Threading.Tasks.Parallel.For(0, tries, i =>
             {
                 var r = ZoneRandom.For(ZoneRandom.Hash(zone.Seed, 0xFA7, i), 1);
-                float lx = r.Range(-450f, 700f), lz = r.Range(-450f, 700f);
-                if (lx > -4f && lz > -4f && lx < 254f && lz < 254f) return;
+                float lx = r.Range(-450f, zone.Size + 450f), lz = r.Range(-450f, zone.Size + 450f);
                 float wx = o.x + lx, wz = o.z + lz;
-                float dx = Mathf.Max(0f, Mathf.Max(-lx, lx - 250f)), dz = Mathf.Max(0f, Mathf.Max(-lz, lz - 250f));
-                float d = Mathf.Sqrt(dx * dx + dz * dz);
+                float d = -zone.EdgeDistance(wx, wz);
+                if (d < 4f) return;
                 if (r.Value() > Mathf.Lerp(1f, 0.25f, d / 500f)) return;
                 float patch = ZoneNoise.Fbm(wx + oPatch.x, wz + oPatch.y, 1f / 70f, 2);
                 if (patch < (d < 120f ? -0.15f : 0.05f)) return;
@@ -158,8 +160,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 var w = new PrismMesh("Far water", 16);
                 float y = waterLevel;
                 var col = new Color(0.6f, 0f, 0f, 1f);
-                float a0 = -2200f, a1 = 2450f;
-                // Four big quads around the zone (the zone has its own water).
+                float a0 = -2200f, a1 = max3, s = zone.Size;
+                // Four big quads around the build box (the zone has its own water), then the box outside the zone.
                 void Q(float x0, float z0, float x1, float z1)
                 {
                     int i = w.Vertex(new Vector3(o.x + x0, y, o.z + z0), Vector3.up, col);
@@ -170,16 +172,27 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     w.Triangle(i, i + 2, i + 3);
                 }
                 Q(a0, a0, a1, 0f);
-                Q(a0, 250f, a1, a1);
-                Q(a0, 0f, 0f, 250f);
-                Q(250f, 0f, a1, 250f);
+                Q(a0, s, a1, a1);
+                Q(a0, 0f, 0f, s);
+                Q(s, 0f, a1, s);
+                const float cell = 2.5f;
+                int cells = Mathf.CeilToInt(s / cell);
+                for (int z = 0; z < cells; z++)
+                {
+                    for (int x = 0; x < cells; x++)
+                    {
+                        float x0 = x * cell, z0 = z * cell, x1 = Mathf.Min(s, x0 + cell), z1 = Mathf.Min(s, z0 + cell);
+                        if (zone.EdgeDistance(o.x + (x0 + x1) * 0.5f, o.z + (z0 + z1) * 0.5f) >= 0f) continue;
+                        Q(x0, z0, x1, z1);
+                    }
+                }
                 lands.Water = w;
             }
             return lands;
         }
 
         private static void Ring(List<PrismMesh> output, Func<float, float, float> hf, Func<Vector3, Vector3, Color> colorAt, Vector3 o,
-            float min, float max, float cell, float holeMin, float holeMax)
+            float min, float max, float cell, float holeMin, float holeMax, ZoneRequest zoneHole)
         {
             int n = Mathf.RoundToInt((max - min) / cell);
             int w = n + 1;
@@ -207,7 +220,14 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     for (int x = 0; x < n; x++)
                     {
                         float lx0 = min + x * cell, lz0 = min + z * cell;
-                        if (lx0 >= holeMin - 0.01f && lx0 + cell <= holeMax + 0.01f && lz0 >= holeMin - 0.01f && lz0 + cell <= holeMax + 0.01f) continue;
+                        if (zoneHole != null)
+                        {
+                            // Leave out cells wholly inside the zone (it has its own ground there).
+                            float wx0 = o.x + lx0, wz0 = o.z + lz0;
+                            if (zoneHole.Contains(wx0, wz0) && zoneHole.Contains(wx0 + cell, wz0) && zoneHole.Contains(wx0, wz0 + cell) &&
+                                zoneHole.Contains(wx0 + cell, wz0 + cell)) continue;
+                        }
+                        else if (lx0 >= holeMin - 0.01f && lx0 + cell <= holeMax + 0.01f && lz0 >= holeMin - 0.01f && lz0 + cell <= holeMax + 0.01f) continue;
                         Vector3 a = P(x, z), bb = P(x, z + 1), c = P(x + 1, z + 1), d = P(x + 1, z);
                         if (((x + z) & 1) == 0)
                         {

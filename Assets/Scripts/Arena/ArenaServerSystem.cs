@@ -130,11 +130,6 @@ namespace FriendlyPersonShooter.Arena
 
         protected override void OnCreate()
         {
-            if (!NetTestSettings.IsFirstPerson)
-            {
-                Enabled = false;
-                return;
-            }
             RequireForUpdate<ArenaEnemyPrefab>();
             RequireForUpdate<NetworkTime>();
             _lobby = new LobbyCombat(_combat);

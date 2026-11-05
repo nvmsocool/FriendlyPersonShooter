@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using FriendlyPersonShooter.Core.Lobbies;
 
 namespace FriendlyPersonShooter.Core.Social
 {
@@ -97,9 +96,9 @@ namespace FriendlyPersonShooter.Core.Social
     /// </list>
     /// Party members may kudos each other: helping a friend is still helping, and rules 2–3 already
     /// hold a pair of friends to one kudos each per day, which isn't worth farming.
-    /// Kept per account on the backend; the matchmaker reads pair history through <see cref="IKudosLookup"/>.
+    /// Kept per account on the backend.
     /// </summary>
-    public sealed class KudosLedger : IKudosLookup
+    public sealed class KudosLedger
     {
         private readonly struct Interaction
         {

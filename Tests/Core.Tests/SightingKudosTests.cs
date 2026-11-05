@@ -10,7 +10,7 @@ namespace FriendlyPersonShooter.Core.Tests
 {
     public class SightingTests
     {
-        private static readonly LayerMap Map = LayerGenerator.Generate(42, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+        private static readonly LayerMap Map = LayerGenerator.Generate(42, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
 
         [Test]
         public void VisitingAZone_RevealsItsBias()
@@ -229,7 +229,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void InfoQuickChat_CountsForEveryStrangerWhoHeardIt()
         {
-            var map = LayerGenerator.Generate(42, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            var map = LayerGenerator.Generate(42, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             var channel = new QuickChatChannel(map);
             var t = new ExchangeTracker();
             t.Met(1, 2, 0);

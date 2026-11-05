@@ -9,7 +9,7 @@ namespace FriendlyPersonShooter.Core.Tests
 {
     public class WorldBossTests
     {
-        private static readonly LayerMap Map = LayerGenerator.Generate(2026, LayerSettings.MvpGrid(), LayerSettings.ForPlaytest());
+        private static readonly LayerMap Map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForPlaytest());
 
         [Test]
         public void LandsOnATimer_OneAtATime_AndAgainAfterItFalls()

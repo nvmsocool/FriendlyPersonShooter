@@ -15,7 +15,8 @@ namespace FriendlyPersonShooter.ZoneArt
     ///
     /// Every finished zone is split in two:
     /// - its colliders move to a collision hierarchy that never moves, at the zone's true position in the
-    ///   wrapping world (positions in [0, WorldSize)). Movement, shots and spawns query it.
+    ///   wrapping world (the canonical copy of every zone, see <see cref="ZoneTiling.WrapPoint"/>). Movement,
+    ///   shots and spawns query it.
     /// - its visuals move to the copy of the zone nearest the camera, so the world wraps seamlessly on screen.
     /// Each zone's sky, sun, ambient, fog and post-processing are captured, and the zone the camera is in sets
     /// the scene's look, blending when the camera crosses into another zone.
@@ -31,9 +32,9 @@ namespace FriendlyPersonShooter.ZoneArt
         /// <summary>Neighbouring zones start building once a point of interest is this close to them (metres).</summary>
         public static float PrefetchDistance = 150f;
         /// <summary>
-        /// The camera's point of view loads every neighbouring zone, so what you can see is always built; fog
-        /// (from <see cref="ViewFogStart"/> to <see cref="ViewFogEnd"/> metres) hides the edge of the loaded ground,
-        /// which is never nearer than one zone away.
+        /// The camera's point of view loads every zone within <see cref="ViewFogEnd"/> (plus a margin), so what you
+        /// can see is always built; fog (from <see cref="ViewFogStart"/> to <see cref="ViewFogEnd"/> metres) hides the
+        /// edge of the loaded ground.
         /// </summary>
         public static float ViewFogStart = 140f;
         public static float ViewFogEnd = 235f;
@@ -67,8 +68,7 @@ namespace FriendlyPersonShooter.ZoneArt
         public LayerMap Map { get; }
         public string GeneratorName { get; }
         public bool Headless { get; }
-        public float ZoneSize { get; }
-        public float WorldSize { get; }
+        public ZoneTiling Tiling => Map.Tiling;
 
         /// <summary>Where the camera is (true world position), or null when nothing renders. Set every frame by the view.</summary>
         public Vector3? ViewPoint { get; set; }
@@ -148,14 +148,9 @@ namespace FriendlyPersonShooter.ZoneArt
             Map = map;
             GeneratorName = generatorName;
             Headless = headless;
-            ZoneSize = map.Grid.ZoneSize;
-            WorldSize = map.Grid.Width * ZoneSize;
             _generator = ZoneGenerators.Find(generatorName);
-            _slots = new Slot[map.Grid.Width * map.Grid.Height];
-            for (int y = 0; y < map.Grid.Height; y++)
-            {
-                for (int x = 0; x < map.Grid.Width; x++) _slots[y * map.Grid.Width + x] = new Slot { Coord = new ZoneCoord(x, y) };
-            }
+            _slots = new Slot[map.Tiling.Count];
+            for (int i = 0; i < _slots.Length; i++) _slots[i] = new Slot { Coord = map.Tiling.Zones[i] };
             _root = new GameObject("Zone World");
             Object.DontDestroyOnLoad(_root);
             _visualRoot = new GameObject("Visual").transform;
@@ -174,7 +169,8 @@ namespace FriendlyPersonShooter.ZoneArt
 
         // ------------------------------------------------------------------ queries
 
-        public ZoneCoord ZoneAt(float x, float z) => Map.Grid.ZoneAt(x, z);
+        /// <summary>The zone under a position (any copy: it wraps).</summary>
+        public ZoneCoord ZoneAt(float x, float z) => Map.Tiling.ZoneAt(x, z);
 
         public bool IsReady(ZoneCoord c) => SlotOf(c).State == SlotState.Ready;
 
@@ -223,7 +219,8 @@ namespace FriendlyPersonShooter.ZoneArt
             // Built a few rows per frame by Tick once someone asks; null until then.
             if (slot.Nav == null && slot.NavBuilder == null)
             {
-                slot.NavBuilder = new ZoneNavGrid.Builder(new Vector3(slot.Coord.X * ZoneSize, 0f, slot.Coord.Y * ZoneSize), ZoneSize);
+                ZoneRequest.BoxFor(Map.Tiling, slot.Coord, out var origin, out float size);
+                slot.NavBuilder = new ZoneNavGrid.Builder(origin, size);
             }
             slot.LastWanted = Mathf.Max(slot.LastWanted, Time.unscaledTime - UnloadAfter * 0.5f);
             return slot.Nav;
@@ -253,8 +250,7 @@ namespace FriendlyPersonShooter.ZoneArt
 
         private Slot SlotOf(ZoneCoord c)
         {
-            c = Map.Grid.Wrap(c.X, c.Y);
-            return _slots[c.Y * Map.Grid.Width + c.X];
+            return _slots[Map.Tiling.IndexOf(Map.Tiling.Wrap(c))];
         }
 
         private void Tick()
@@ -269,19 +265,16 @@ namespace FriendlyPersonShooter.ZoneArt
             foreach (var (p, isUrgent) in _interest)
             {
                 bool isView = ViewPoint.HasValue && p == ViewPoint.Value;
-                var c = ZoneAt(Wrap(p.x), Wrap(p.z));
-                var own = SlotOf(c);
+                var own = SlotOf(ZoneAt(p.x, p.z));
                 Want(own, 0f, now);
                 if (isUrgent && own.State != SlotState.Ready) urgent = true;
-                for (int dy = -1; dy <= 1; dy++)
+                float reach = isView ? ViewFogEnd + 15f : PrefetchDistance;
+                var ground = new System.Numerics.Vector2(p.x, p.z);
+                foreach (var s in _slots)
                 {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx == 0 && dy == 0) continue;
-                        var n = Map.Grid.Wrap(c.X + dx, c.Y + dy);
-                        float d = DistanceToZone(p, n);
-                        if (isView || d < PrefetchDistance) Want(SlotOf(n), d, now);
-                    }
+                    if (s == own) continue;
+                    float d = Map.Tiling.DistanceToZone(ground, s.Coord);
+                    if (d < reach) Want(s, d, now);
                 }
             }
             _interest.Clear();
@@ -322,19 +315,6 @@ namespace FriendlyPersonShooter.ZoneArt
             s.LastWanted = now;
             if (priority < s.Priority) s.Priority = priority;
         }
-
-        private float Wrap(float v) => v - WorldSize * Mathf.Floor(v / WorldSize);
-
-        /// <summary>Distance from a point to a zone's square, the short way round the wrapping world.</summary>
-        private float DistanceToZone(Vector3 p, ZoneCoord c)
-        {
-            float cx = (c.X + 0.5f) * ZoneSize, cz = (c.Y + 0.5f) * ZoneSize;
-            float dx = Mathf.Abs(Near(p.x - cx)) - ZoneSize * 0.5f;
-            float dz = Mathf.Abs(Near(p.z - cz)) - ZoneSize * 0.5f;
-            return new Vector2(Mathf.Max(dx, 0f), Mathf.Max(dz, 0f)).magnitude;
-        }
-
-        private float Near(float delta) => delta - WorldSize * Mathf.Round(delta / WorldSize);
 
         private void Start(Slot slot)
         {
@@ -547,12 +527,12 @@ namespace FriendlyPersonShooter.ZoneArt
             foreach (var s in _slots)
             {
                 if (s.State != SlotState.Ready || s.Visual == null) continue;
-                float cx = (s.Coord.X + 0.5f) * ZoneSize, cz = (s.Coord.Y + 0.5f) * ZoneSize;
-                float ox = view.x + Near(cx - view.x) - cx, oz = view.z + Near(cz - view.z) - cz;
-                s.Visual.transform.position = new Vector3(ox, 0f, oz);
+                var centre = Map.Tiling.Centre(s.Coord);
+                var near = Map.Tiling.Near(centre, new System.Numerics.Vector2(view.x, view.z));
+                s.Visual.transform.position = new Vector3(near.X - centre.X, 0f, near.Y - centre.Y);
             }
 
-            var here = SlotOf(ZoneAt(Wrap(view.x), Wrap(view.z)));
+            var here = SlotOf(ZoneAt(view.x, view.z));
             if (here.State == SlotState.Ready && here.Look != null && here != _lookTo)
             {
                 _lookFrom = _lookTo != null && _lookTo.Look != null ? _lookTo : null;

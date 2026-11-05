@@ -10,7 +10,7 @@ namespace FriendlyPersonShooter.Core.Tests
     public class QuickChatTests
     {
         // 4x4 zones of 250 m: the world is 1000 m square.
-        private static readonly LayerMap Map = LayerGenerator.Generate(42, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+        private static readonly LayerMap Map = LayerGenerator.Generate(42, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
 
         [Test]
         public void Render_FillsColorAndLandmarkSlots()
@@ -20,7 +20,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(text, Is.EqualTo($"Purple past {landmark.Name}"));
             Assert.That(QuickChatCatalog.Render(QuickChatMessage.SeenAny(EssenceColor.Yellow), Map), Is.EqualTo("Seen any Yellow?"));
             Assert.That(QuickChatCatalog.Render(QuickChatMessage.Simple(QuickChatId.NeedRevive), Map), Is.EqualTo("Need a res!"));
-            Assert.That(QuickChatCatalog.Render(QuickChatMessage.HeadingTo(new ZoneCoord(2, 3)), Map), Is.EqualTo("Heading to zone (2,3)"));
+            Assert.That(QuickChatCatalog.Render(QuickChatMessage.HeadingTo(new ZoneCoord(2, 3)), Map), Is.EqualTo("Heading to zone 2.3"));
             Assert.That(QuickChatCatalog.Render(QuickChatMessage.PlayerNeedsRevive(7), Map, id => "Ana"), Is.EqualTo("Ana needs a res!"));
         }
 
@@ -113,7 +113,7 @@ namespace FriendlyPersonShooter.Core.Tests
             var channel = new QuickChatChannel(Map, new QuickChatSettings { Burst = 100, HistorySize = 3, RepeatCooldown = 0 });
             var listeners = new[] { new ChatListener(2, Vector2.Zero) };
             for (int i = 0; i < 5; i++)
-                channel.Send(1, Vector2.Zero, QuickChatMessage.HeadingTo(new ZoneCoord(i % 4, 0)), listeners, i);
+                channel.Send(1, Vector2.Zero, QuickChatMessage.HeadingTo(new ZoneCoord(i % 3, 0)), listeners, i);
             var history = channel.HistoryOf(2);
             Assert.That(history.Count, Is.EqualTo(3));
             Assert.That(history[0].Time, Is.EqualTo(2));

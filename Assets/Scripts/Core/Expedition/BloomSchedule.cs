@@ -87,7 +87,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         public Bloom BloomIn(ZoneCoord zone, long slot)
         {
             var info = _map.Zone(zone);
-            var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.BloomSalt, info.Coord.X, info.Coord.Y,
+            var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.BloomSalt, info.Coord.Key,
                 SeedHash.Low(slot), SeedHash.High(slot)));
             if (!random.Chance(_settings.ChancePerZonePerSlot)) return null;
 
@@ -102,7 +102,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             // Centre on one of the zone's spawn points when it has any, so blooms sit in fightable spots.
             MapPoint point;
             if (info.SpawnPoints.Count > 0) point = info.SpawnPoints[random.NextInt(info.SpawnPoints.Count)].Point;
-            else point = new MapPoint(info.Coord, new Vector2(_map.Grid.ZoneSize * 0.5f), _map.Grid.ZoneSize);
+            else point = new MapPoint(info.Coord, _map.ZoneCentre(info.Coord));
 
             return new Bloom(point, color, family, start, start + duration, slot);
         }
@@ -159,7 +159,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             float bestDistance = float.MaxValue;
             foreach (var bloom in ActiveAt(time))
             {
-                if (bloom.Color != color || _map.Grid.Distance(here, bloom.Zone) > maxZones) continue;
+                if (bloom.Color != color || _map.Tiling.Distance(here, bloom.Zone) > maxZones) continue;
                 float d = _map.Distance(world, bloom.Point.World);
                 if (d < bestDistance)
                 {

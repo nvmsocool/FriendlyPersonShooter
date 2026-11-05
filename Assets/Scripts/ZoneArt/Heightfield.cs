@@ -5,7 +5,9 @@ namespace FriendlyPersonShooter.ZoneArt
 {
     /// <summary>
     /// A height grid over one zone, built from your height function, turned into chunked terrain meshes
-    /// with colliders. Optional: you can build ground any way you like (meshes, voxels, floating islands).
+    /// with colliders. The grid covers the zone's square build box; meshes keep only the cells that touch the
+    /// zone's outline (a cell of overlap, which sits on the shared border height). Optional: you can build
+    /// ground any way you like (meshes, voxels, floating islands).
     /// </summary>
     public sealed class Heightfield
     {
@@ -15,10 +17,12 @@ namespace FriendlyPersonShooter.ZoneArt
         public readonly int Resolution;
         public readonly float Step;
         public readonly float[] Heights;
+        private readonly ZoneRequest _zone;
 
         /// <param name="cellSize">Metres between samples (1 to 2 is a good range for a 250 m zone).</param>
         public Heightfield(ZoneRequest zone, float cellSize, Func<float, float, float> heightAt)
         {
+            _zone = zone;
             Origin = zone.Origin;
             Size = zone.Size;
             Resolution = Mathf.RoundToInt(zone.Size / cellSize) + 1;
@@ -77,11 +81,15 @@ namespace FriendlyPersonShooter.ZoneArt
                     int ex = Mathf.Min(cx + chunkCells, cells), ez = Mathf.Min(cz + chunkCells, cells);
                     if (flat) BuildFlat(mb, cx, cz, ex, ez, colorAt);
                     else BuildSmooth(mb, cx, cz, ex, ez, colorAt);
+                    if (mb.TriangleCount == 0) continue;
                     mb.ToGameObject($"{name} {cx / chunkCells},{cz / chunkCells}", root.transform, material, collider: true);
                 }
             }
             return root;
         }
+
+        /// <summary>True for cells inside the zone or within one cell of its outline.</summary>
+        private bool KeepCell(int x, int z) => _zone.EdgeDistance(Origin.x + (x + 0.5f) * Step, Origin.z + (z + 0.5f) * Step) > -Step;
 
         private Vector3 P(int x, int z) => new Vector3(Origin.x + x * Step, this[x, z], Origin.z + z * Step);
 
@@ -101,6 +109,7 @@ namespace FriendlyPersonShooter.ZoneArt
             {
                 for (int x = 0; x < x1 - x0; x++)
                 {
+                    if (!KeepCell(x0 + x, z0 + z)) continue;
                     int i = z * w + x;
                     mb.Quad(i, i + w, i + w + 1, i + 1);
                 }
@@ -113,6 +122,7 @@ namespace FriendlyPersonShooter.ZoneArt
             {
                 for (int x = x0; x < x1; x++)
                 {
+                    if (!KeepCell(x, z)) continue;
                     var a = P(x, z);
                     var b = P(x, z + 1);
                     var c = P(x + 1, z + 1);

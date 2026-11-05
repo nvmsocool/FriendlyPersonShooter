@@ -85,7 +85,7 @@ namespace FriendlyPersonShooter.Arena
             _banking = new Banking(_map);
             _banking.AddSite(RaidDoorPoint, _raid.Settings.UseRadius);
             foreach (var g in _map.Gates) _banking.AddSite(g.Point.World, ExpeditionWorld.GateUseRadius);
-            Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} grid={_map.Grid.Width}x{_map.Grid.Height} zone={_map.Grid.ZoneSize}m " +
+            Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} tiling={_map.Tiling.Width}x{_map.Tiling.Height} cells, {_map.Tiling.Count} zones, edge={_map.Tiling.Edge}m " +
                       $"start={_map.StartZone} gate={_map.Gates[0].Point.Zone} landmarks={_map.Landmarks.Count} shrines={_map.Shrines.Count}");
         }
 
@@ -182,8 +182,8 @@ namespace FriendlyPersonShooter.Arena
             foreach (var kv in _players)
             {
                 var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
-                var zone = _map.Grid.ZoneAt(pos.x, pos.z);
-                foreach (var z in _map.Grid.Neighborhood(zone, 1)) zones.Add(z);
+                var zone = _map.Tiling.ZoneAt(pos.x, pos.z);
+                foreach (var z in _map.Tiling.Neighborhood(zone, 1)) zones.Add(z);
             }
 
             foreach (var zone in zones)

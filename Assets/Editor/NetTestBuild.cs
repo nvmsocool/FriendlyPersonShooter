@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace FriendlyPersonShooter.EditorTools
 {
-    /// <summary>Builds the standalone networking test, used to run a headless server and bot processes.</summary>
+    /// <summary>Dev build with Netcode's network simulator, for testing under lag. Skips the menu; use -fps-mode server|client to split processes.</summary>
     public static class NetTestBuild
     {
         public const string OutputPath = "Builds/NetTest/NetTest.exe";
@@ -14,12 +14,12 @@ namespace FriendlyPersonShooter.EditorTools
         {
             var options = new BuildPlayerOptions
             {
-                // -fps-game arena switches to the Arena scene at startup.
-                scenes = new[] { "Assets/Scenes/NetTest.unity", "Assets/Scenes/Arena.unity", "Assets/Scenes/Expedition.unity" },
+                // Starts straight in the expedition (no menu); -fps-game arena switches to the Arena scene.
+                scenes = new[] { "Assets/Scenes/Expedition.unity", "Assets/Scenes/Arena.unity" },
                 locationPathName = OutputPath,
                 target = BuildTarget.StandaloneWindows64,
                 options = BuildOptions.None,
-                // Enables Netcode's network simulator, so a bot process can run with lag:
+                // Enables Netcode's network simulator, so a client can run with lag:
                 // NetTest.exe ... --loadNetworkSimulatorJsonFile Tools/NetSim/laggy.json
                 extraScriptingDefines = new[] { "NETCODE_DEBUG" },
             };

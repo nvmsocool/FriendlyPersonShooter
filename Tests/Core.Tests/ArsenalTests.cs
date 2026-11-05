@@ -374,7 +374,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void LootBoxes_ClearOfLandmarksAndDeterministic()
         {
-            var map = LayerGenerator.Generate(2026, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            var map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             var boxes = LootBoxSites.For(map);
             var again = LootBoxSites.For(map);
             Assert.That(boxes.Count, Is.GreaterThan(map.Zones.Count));

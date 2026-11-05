@@ -174,7 +174,6 @@ namespace FriendlyPersonShooter.Arena
             foreach (var world in closing) world.Dispose();
             NetworkStreamReceiveSystem.DriverConstructor = null;
             ClientServerBootstrap.AutoConnectPort = 0;
-            NetTestSettings.Game = GameMode.Lobbies;
         }
 
         private static async Task SignInAsync()

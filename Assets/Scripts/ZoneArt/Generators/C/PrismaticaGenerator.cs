@@ -50,14 +50,18 @@ namespace FriendlyPersonShooter.ZoneArt.C
         {
             var oMask = ZoneNoise.Offset(zone.Seed, 21);
             var vals = new List<float>();
+            // Sampled over the zone itself (away from its edges), so the share of hex ground matches the zone.
+            float step = zone.Size / 50f;
             for (int z = 0; z < 50; z++)
             {
                 for (int x = 0; x < 50; x++)
                 {
-                    float wx = zone.Origin.x + 20f + x * 4.2f, wz = zone.Origin.z + 20f + z * 4.2f;
+                    float wx = zone.Origin.x + (x + 0.5f) * step, wz = zone.Origin.z + (z + 0.5f) * step;
+                    if (!zone.Contains(wx, wz, 15f)) continue;
                     vals.Add(ZoneNoise.Fbm(wx + oMask.x, wz + oMask.y, 1f / 65f, 3));
                 }
             }
+            if (vals.Count == 0) return 1f;
             vals.Sort();
             return vals[Mathf.Clamp((int)((1f - frac) * vals.Count), 0, vals.Count - 1)];
         }

@@ -101,7 +101,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
             if (map == null) throw new ArgumentNullException(nameof(map));
             var boxes = new List<LootBox>();
             var door = RaidSite.DoorFor(map);
-            float size = map.Grid.ZoneSize;
+            var tiling = map.Tiling;
             var avoid = new List<Vector2>();
             for (int index = 0; index < map.Zones.Count; index++)
             {
@@ -112,12 +112,16 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 foreach (var p in zone.SpawnPoints) avoid.Add(p.Point.World);
                 if (zone.HasGate) avoid.Add(zone.Gate.Point.World);
                 avoid.Add(door);
-                var origin = new Vector2(zone.Coord.X * size, zone.Coord.Y * size);
-                var rng = new CombatRandom(SeedHash.Of(map.Seed, Salt, zone.Coord.X, zone.Coord.Y));
+                tiling.Bounds(zone.Coord, out var min, out var max);
+                float margin = Math.Min(EdgeMargin, tiling.EdgeDistance(zone.Coord, tiling.Centre(zone.Coord)) * 0.5f);
+                // Boxes per zone scale with its area (a hexagon gets the full count).
+                int perZone = Math.Max(1, (int)Math.Round(PerZone * tiling.AreaShare(zone.Coord)));
+                var rng = new CombatRandom(SeedHash.Of(map.Seed, Salt, zone.Coord.Key));
                 int placed = 0;
-                for (int attempt = 0; attempt < 40 && placed < PerZone; attempt++)
+                for (int attempt = 0; attempt < 120 && placed < perZone; attempt++)
                 {
-                    var spot = origin + new Vector2(rng.Range(EdgeMargin, size - EdgeMargin), rng.Range(EdgeMargin, size - EdgeMargin));
+                    var spot = new Vector2(rng.Range(min.X, max.X), rng.Range(min.Y, max.Y));
+                    if (tiling.EdgeDistance(zone.Coord, spot) < margin) continue;
                     bool clear = true;
                     foreach (var a in avoid)
                     {

@@ -8,14 +8,14 @@ namespace FriendlyPersonShooter.Core.Tests
 {
     public class SpawnBloomTests
     {
-        private static LayerMap Map(uint seed = 42) => LayerGenerator.Generate(seed, new WorldGrid(6, 6, 250f));
+        private static LayerMap Map(uint seed = 42) => LayerGenerator.Generate(seed, new ZoneTiling(3, 3, 125f));
 
         [Test]
         public void SpawnSchedule_IsTheSameForTheSameSeedAndClock()
         {
             var a = new SpawnSchedule(Map(), new BloomSchedule(Map()));
             var b = new SpawnSchedule(Map(), new BloomSchedule(Map()));
-            var zone = new ZoneCoord(2, 3);
+            var zone = new ZoneCoord(2, 2);
             for (double t = 0; t < 3600; t += 97)
             {
                 Assert.That(a.ActiveAt(zone, t).Select(e => e.ToString()), Is.EqualTo(b.ActiveAt(zone, t).Select(e => e.ToString())));

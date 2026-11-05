@@ -27,7 +27,7 @@ namespace FriendlyPersonShooter.ZoneArt
             Heights = heights;
         }
 
-        /// <summary>Builds the grid all at once (about 0.1 s for a 250 m zone).</summary>
+        /// <summary>Builds the grid all at once (about 0.1 s for a hexagon zone). Covers the square Origin .. Origin + size.</summary>
         public static ZoneNavGrid Build(Vector3 origin, float size)
         {
             var b = new Builder(origin, size);
@@ -114,6 +114,8 @@ namespace FriendlyPersonShooter.ZoneArt
     /// Weighted A* over the built zones' nav grids, across zone borders and the world's wrap. Paths respect
     /// what a player can do: climb at most <see cref="MaxClimb"/> (a jump), drop at most <see cref="MaxDrop"/>.
     /// Searches are capped; a capped search returns the path to the explored node closest to the goal.
+    /// The search runs on a 1 m column grid that doesn't wrap, laid around the start: each column looks up the
+    /// zone under its (wrapped) position and that zone's nav grid.
     /// </summary>
     public sealed class ZoneNavigator
     {
@@ -130,25 +132,26 @@ namespace FriendlyPersonShooter.ZoneArt
         public ZoneNavigator(ZoneWorld world) => _world = world;
 
         /// <summary>
-        /// A path of world positions (true coordinates, feet height) from <paramref name="start"/> toward
-        /// <paramref name="goal"/>, empty if the start isn't on navigable ground. Positions near the world's
-        /// edge may be on the far side of it: move them to the copy nearest the bot before steering.
+        /// A path of world positions (feet height) from <paramref name="start"/> toward <paramref name="goal"/>,
+        /// empty if the start isn't on navigable ground. Positions run on from the start's copy of the world without
+        /// wrapping, so they may lie past the wrap seam: move them to the copy nearest the bot before steering.
         /// </summary>
         public List<Vector3> FindPath(Vector3 start, Vector3 goal, out bool complete)
         {
             complete = false;
             var path = new List<Vector3>();
             if (!Locate(start, out long s)) return path;
+            // The goal's copy nearest the start, so the search heads the short way round.
+            var g2 = _world.Tiling.Near(new System.Numerics.Vector2(goal.x, goal.z), new System.Numerics.Vector2(start.x, start.z));
+            goal = new Vector3(g2.X, goal.y, g2.Y);
             Locate(goal, out long goalId);
-            float size = _world.WorldSize;
-            int columns = Mathf.RoundToInt(size / ZoneNavGrid.Cell);
-            int gx = Mod(Mathf.FloorToInt(goal.x / ZoneNavGrid.Cell), columns), gz = Mod(Mathf.FloorToInt(goal.z / ZoneNavGrid.Cell), columns);
+            int gx = Mathf.FloorToInt(goal.x / ZoneNavGrid.Cell), gz = Mathf.FloorToInt(goal.z / ZoneNavGrid.Cell);
 
             _g.Clear();
             _from.Clear();
             _heap.Clear();
             _g[s] = 0f;
-            Push(H(s, gx, gz, goal.y, columns), s);
+            Push(H(s, gx, gz, goal.y), s);
             long best = s;
             float bestH = float.MaxValue;
             int expansions = 0;
@@ -157,7 +160,7 @@ namespace FriendlyPersonShooter.ZoneArt
                 var (_, cur) = Pop();
                 expansions++;
                 Decode(cur, out int cx, out int cz, out float cy, out var grid, out int node);
-                float h = Heuristic(cx, cz, gx, gz, columns) + Mathf.Abs(cy - goal.y) * 0.5f;
+                float h = Heuristic(cx, cz, gx, gz) + Mathf.Abs(cy - goal.y) * 0.5f;
                 if (h < bestH)
                 {
                     bestH = h;
@@ -173,10 +176,10 @@ namespace FriendlyPersonShooter.ZoneArt
                 for (int d = 0; d < 8; d++)
                 {
                     int dx = DX[d], dz = DZ[d];
-                    int nx = Mod(cx + dx, columns), nz = Mod(cz + dz, columns);
+                    int nx = cx + dx, nz = cz + dz;
                     if (!Column(nx, nz, out var ng, out int lx, out int lz)) continue;
                     // Diagonals only when both side columns are open at about this height (no corner cutting).
-                    if (dx != 0 && dz != 0 && (!Standable(Mod(cx + dx, columns), cz, cy) || !Standable(cx, Mod(cz + dz, columns), cy))) continue;
+                    if (dx != 0 && dz != 0 && (!Standable(cx + dx, cz, cy) || !Standable(cx, cz + dz, cy))) continue;
                     int col = lz * ng.N + lx;
                     for (int k = ng.First[col]; k < ng.First[col + 1]; k++)
                     {
@@ -188,7 +191,7 @@ namespace FriendlyPersonShooter.ZoneArt
                         if (_g.TryGetValue(id, out float old) && old <= g) continue;
                         _g[id] = g;
                         _from[id] = cur;
-                        Push(g + HeuristicWeight * (Heuristic(nx, nz, gx, gz, columns) + Mathf.Abs(ng.Heights[k] - goal.y) * 0.5f), id);
+                        Push(g + HeuristicWeight * (Heuristic(nx, nz, gx, gz) + Mathf.Abs(ng.Heights[k] - goal.y) * 0.5f), id);
                     }
                 }
             }
@@ -220,17 +223,15 @@ namespace FriendlyPersonShooter.ZoneArt
             return outPath;
         }
 
-        private float H(long id, int gx, int gz, float gy, int columns)
+        private float H(long id, int gx, int gz, float gy)
         {
             Decode(id, out int x, out int z, out float y, out _, out _);
-            return HeuristicWeight * (Heuristic(x, z, gx, gz, columns) + Mathf.Abs(y - gy) * 0.5f);
+            return HeuristicWeight * (Heuristic(x, z, gx, gz) + Mathf.Abs(y - gy) * 0.5f);
         }
 
-        private static float Heuristic(int x, int z, int gx, int gz, int columns)
+        private static float Heuristic(int x, int z, int gx, int gz)
         {
             int dx = Mathf.Abs(x - gx), dz = Mathf.Abs(z - gz);
-            dx = Mathf.Min(dx, columns - dx);
-            dz = Mathf.Min(dz, columns - dz);
             return Mathf.Max(dx, dz) + 0.414f * Mathf.Min(dx, dz);
         }
 
@@ -245,21 +246,31 @@ namespace FriendlyPersonShooter.ZoneArt
             return false;
         }
 
-        /// <summary>The nav grid holding world column (x, z), with the column's local coordinates.</summary>
+        /// <summary>
+        /// The nav grid holding column (x, z) (any copy of the world), with the column's coordinates in that grid.
+        /// False if the zone isn't built (or has no grid yet).
+        /// </summary>
         private bool Column(int x, int z, out ZoneNavGrid grid, out int lx, out int lz)
         {
-            int perZone = Mathf.RoundToInt(_world.ZoneSize / ZoneNavGrid.Cell);
-            grid = _world.NavGrid(new Core.World.ZoneCoord(x / perZone, z / perZone));
-            lx = x % perZone;
-            lz = z % perZone;
-            return grid != null;
+            var p = new System.Numerics.Vector2((x + 0.5f) * ZoneNavGrid.Cell, (z + 0.5f) * ZoneNavGrid.Cell);
+            var zone = _world.Tiling.Locate(p, out var canonical);
+            grid = _world.NavGrid(zone);
+            lx = lz = 0;
+            if (grid == null) return false;
+            lx = Mathf.FloorToInt((canonical.X - grid.Origin.x) / ZoneNavGrid.Cell);
+            lz = Mathf.FloorToInt((canonical.Y - grid.Origin.z) / ZoneNavGrid.Cell);
+            if (lx < 0 || lz < 0 || lx >= grid.N || lz >= grid.N)
+            {
+                grid = null;
+                return false;
+            }
+            return true;
         }
 
         private bool Locate(Vector3 p, out long id)
         {
             id = -1;
-            int columns = Mathf.RoundToInt(_world.WorldSize / ZoneNavGrid.Cell);
-            int x = Mod(Mathf.FloorToInt(p.x / ZoneNavGrid.Cell), columns), z = Mod(Mathf.FloorToInt(p.z / ZoneNavGrid.Cell), columns);
+            int x = Mathf.FloorToInt(p.x / ZoneNavGrid.Cell), z = Mathf.FloorToInt(p.z / ZoneNavGrid.Cell);
             for (int r = 0; r < 4; r++)
             {
                 for (int dz = -r; dz <= r; dz++)
@@ -267,7 +278,7 @@ namespace FriendlyPersonShooter.ZoneArt
                     for (int dx = -r; dx <= r; dx++)
                     {
                         if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dz)) != r) continue;
-                        int cx = Mod(x + dx, columns), cz = Mod(z + dz, columns);
+                        int cx = x + dx, cz = z + dz;
                         if (!Column(cx, cz, out var grid, out int lx, out int lz)) continue;
                         int k = grid.NodeNear(lx, lz, p.y);
                         if (k < 0 || Mathf.Abs(grid.Heights[k] - p.y) > 2.5f) continue;
@@ -279,19 +290,20 @@ namespace FriendlyPersonShooter.ZoneArt
             return false;
         }
 
-        // Node ids: world column x (16 bits), z (16 bits), node index inside its zone grid (32 bits).
-        private static long Encode(int x, int z, int node) => ((long)x << 48) | ((long)z << 32) | (uint)node;
+        // Node ids: column x and z (16 bits each, offset so -32768..32767 fit), node index inside its zone grid (32 bits).
+        private const int ColumnOffset = 32768;
+
+        private static long Encode(int x, int z, int node) =>
+            ((long)((x + ColumnOffset) & 0xFFFF) << 48) | ((long)((z + ColumnOffset) & 0xFFFF) << 32) | (uint)node;
 
         private void Decode(long id, out int x, out int z, out float y, out ZoneNavGrid grid, out int node)
         {
-            x = (int)((id >> 48) & 0xFFFF);
-            z = (int)((id >> 32) & 0xFFFF);
+            x = (int)((id >> 48) & 0xFFFF) - ColumnOffset;
+            z = (int)((id >> 32) & 0xFFFF) - ColumnOffset;
             node = (int)(id & 0xFFFFFFFF);
             Column(x, z, out grid, out _, out _);
             y = grid != null && node < grid.Count ? grid.Heights[node] : 0f;
         }
-
-        private static int Mod(int a, int m) => ((a % m) + m) % m;
 
         private void Push(float f, long id)
         {

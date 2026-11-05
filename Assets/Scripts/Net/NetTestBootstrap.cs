@@ -6,9 +6,8 @@ using UnityEngine;
 namespace FriendlyPersonShooter.Net
 {
     /// <summary>
-    /// Creates the netcode worlds for the networking test. Thin client worlds are the bots: real
-    /// clients that connect and send input through the network stack, without rendering or ghosts.
-    /// The server world is created first so in-process clients use the fast IPC transport.
+    /// Creates the netcode worlds: one player hosts (server plus their client) and friends join as clients.
+    /// Bot allies are full client worlds in the host's process.
     /// </summary>
     [UnityEngine.Scripting.Preserve]
     public class NetTestBootstrap : ClientServerBootstrap
@@ -38,9 +37,8 @@ namespace FriendlyPersonShooter.Net
                 Debug.Log("[NetTest] Starting at the main menu.");
                 return true;
             }
-            if (NetTestSettings.IsFirstPerson && !NetTestSettings.PortGiven) NetTestSettings.Port = NetTestSettings.ArenaPort;
-            AutoConnectPort = NetTestSettings.Port;
 
+            AutoConnectPort = NetTestSettings.Port;
             if (NetworkEndpoint.TryParse(NetTestSettings.ConnectAddress, NetTestSettings.Port, out var endpoint))
             {
                 DefaultConnectAddress = endpoint;
@@ -50,56 +48,16 @@ namespace FriendlyPersonShooter.Net
                 Debug.LogError($"[NetTest] Couldn't parse connect address '{NetTestSettings.ConnectAddress}'.");
             }
 
-            if (NetTestSettings.IsFirstPerson) return InitializeArena(defaultWorldName);
-
-            var mode = NetTestSettings.Mode;
-            if (mode == NetMode.All || mode == NetMode.Server)
-            {
-                CreateServerWorld("ServerWorld");
-            }
-            if (mode == NetMode.All || mode == NetMode.Bots)
-            {
-                // Bots connect when their simulated player logs on, not when their world is created.
-                // They're created before the human client, or they would copy its connection.
-                ushort port = AutoConnectPort;
-                AutoConnectPort = 0;
-                BotDirector.Create(NetTestSettings.BotCount);
-                for (int i = 0; i < NetTestSettings.BotCount; i++)
-                {
-                    var bot = CreateThinClientWorld();
-                    // Bots never load scenes; drop the idle background loading worlds each one gets.
-                    bot.GetExistingSystemManaged<SceneSectionStreamingSystem>().ConcurrentSectionStreamCount = 0;
-                    bot.EntityManager.CreateSingleton(new BotSeat { Index = i });
-                }
-                AutoConnectPort = port;
-            }
-            if (mode == NetMode.All || mode == NetMode.Client)
-            {
-                CreateClientWorld("ClientWorld");
-            }
-
+            CreateArenaWorlds(NetTestSettings.Mode);
             // A plain world for anything that isn't networked.
             CreateLocalWorld(defaultWorldName);
-
-            Debug.Log($"[NetTest] Game={NetTestSettings.Game} Mode={mode} bots={NetTestSettings.BotCount} port={NetTestSettings.Port} " +
-                      $"grid={NetTestSettings.GridSize}x{NetTestSettings.GridSize} zone={NetTestSettings.ZoneSize}m");
             return true;
         }
 
         /// <summary>
-        /// The arena: a server, the human's client and a few bot allies. Bot allies are full clients
-        /// (not thin clients) because they need to see enemies and players to aim.
-        /// </summary>
-        private bool InitializeArena(string defaultWorldName)
-        {
-            CreateArenaWorlds(NetTestSettings.Mode);
-            CreateLocalWorld(defaultWorldName);
-            return true;
-        }
-
-        /// <summary>
-        /// Creates the first-person game's worlds for <paramref name="mode"/>: the server, the human's client and
+        /// Creates the game's worlds for <paramref name="mode"/>: the server, the human's client and
         /// <see cref="NetTestSettings.ArenaBots"/> bot allies. Also used by the main menu when hosting or joining.
+        /// Bot allies are full clients (not thin clients) because they need to see enemies and players to aim.
         /// </summary>
         public static void CreateArenaWorlds(NetMode mode)
         {

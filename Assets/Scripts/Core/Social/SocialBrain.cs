@@ -81,7 +81,7 @@ namespace FriendlyPersonShooter.Core.Social
         {
             if (bloom == null) throw new ArgumentNullException(nameof(bloom));
             if (map == null) throw new ArgumentNullException(nameof(map));
-            long key = ((long)bloom.Zone.X << 40) ^ ((long)bloom.Zone.Y << 20) ^ bloom.Slot;
+            long key = ((long)bloom.Zone.Key << 32) ^ bloom.Slot;
             if (_lastBloom.TryGetValue(key, out double last) && now - last < _settings.BloomCooldown) return null;
             if (!Roll(_settings.AnnounceBloomChance)) return null;
             _lastBloom[key] = now;

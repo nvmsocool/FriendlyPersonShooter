@@ -34,6 +34,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             TileKind.Canyon, TileKind.Forest, TileKind.Lake, TileKind.Crater,
         };
 
+        // Feature counts are for a hexagon; squares and triangles get their share by area (at least one each).
         public int MinLandmarks { get; set; } = 1;
         public int MaxLandmarks { get; set; } = 3;
         public int MinShrines { get; set; } = 2;
@@ -44,13 +45,12 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Gate zones in the layer. The MVP has exactly one.</summary>
         public int GateCount { get; set; } = 1;
         /// <summary>
-        /// Gates sit at least this share of the farthest possible zone distance from the start zone.
-        /// On a wrapping grid the farthest zone is half the grid away, so 1 means "half the grid
-        /// away" (2 zones on a 4x4 grid).
+        /// Gates sit in zones whose centre is at least this share of the farthest zone centre's distance
+        /// (in metres, the short way around) from the start point.
         /// </summary>
-        public float GateDistanceShare { get; set; } = 1f;
+        public float GateDistanceShare { get; set; } = 0.85f;
 
-        /// <summary>Features stay this far inside a zone's edges (capped at a quarter of the zone).</summary>
+        /// <summary>Features stay this far inside a zone's edges (capped at half the zone's inner radius).</summary>
         public float EdgeMargin { get; set; } = 20f;
         /// <summary>Features try to stay at least this far apart within a zone.</summary>
         public float FeatureSpacing { get; set; } = 30f;
@@ -78,9 +78,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
-        /// Suggested MVP grid: 4x4 zones of 250 m. The gate is then 2 zones (500–700 m) from the
-        /// start, about 2–3 minutes of walking at 5 m/s, leaving most of 20 minutes for hunting.
+        /// The MVP world: 3x3 repeating cells of a tiling with 125 m edges (54 zones: 9 hexagons about 250 m
+        /// across, 27 squares, 18 triangles), about 1 km on a side. The farthest point is about 590 m from the
+        /// start, so the gate is 2–3 minutes of walking at 5 m/s, leaving most of 20 minutes for hunting.
         /// </summary>
-        public static WorldGrid MvpGrid() => new WorldGrid(4, 4, 250f);
+        public static ZoneTiling MvpTiling() => new ZoneTiling(3, 3, 125f);
     }
 }

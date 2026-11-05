@@ -106,7 +106,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
             foreach (var point in info.SpawnPoints)
             {
-                var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.SpawnSalt, coord.X, coord.Y, point.Id,
+                var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.SpawnSalt, coord.Key, point.Id,
                     SeedHash.Low(wave), SeedHash.High(wave)));
                 if (!random.Chance(_settings.ActiveShare)) continue;
                 int count = Count(point.Family, ref random);
@@ -124,7 +124,7 @@ namespace FriendlyPersonShooter.Core.Expedition
                 double end = Math.Min(waveEnd, bloom.End);
                 if (end <= start || start > to || end <= from) continue;
 
-                var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.BloomSalt + 100, coord.X, coord.Y,
+                var random = new CombatRandom(SeedHash.Of(_map.Seed, SeedHash.BloomSalt + 100, coord.Key,
                     SeedHash.Low(wave), SeedHash.High(wave)));
                 var settings = _blooms.Settings;
                 int count = _settings.MaxCount(bloom.Family) * Math.Max(1, settings.CountMultiplier);
@@ -132,10 +132,10 @@ namespace FriendlyPersonShooter.Core.Expedition
                 {
                     float angle = random.Angle();
                     float radius = settings.Radius * MathF.Sqrt(random.NextFloat());
-                    var local = bloom.Point.Local + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
-                    float size = _map.Grid.ZoneSize;
-                    local = Vector2.Clamp(local, Vector2.Zero, new Vector2(size * 0.999f));
-                    result.Add(new SpawnEvent(new MapPoint(coord, local, size), -1, bloom.Family, count, start, end, wave, true));
+                    var world = bloom.Point.World + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
+                    // Groups that would land outside the zone are pulled back to the bloom centre.
+                    if (_map.Tiling.EdgeDistance(coord, world) < 0f) world = bloom.Point.World;
+                    result.Add(new SpawnEvent(new MapPoint(coord, world), -1, bloom.Family, count, start, end, wave, true));
                 }
             }
         }

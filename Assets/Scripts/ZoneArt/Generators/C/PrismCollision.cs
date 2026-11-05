@@ -18,7 +18,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public const int TagTrunk = 4;
 
         private const float Margin = 16f;
-        private const int Bins = 282; // 1 m bins over -16 .. 266 local
+        private const int Bins = 300; // 1 m bins over -16 .. 284 local (build boxes are at most about 255 m)
 
         private readonly Vector3 _origin;
         private readonly List<Vector3> _a = new List<Vector3>(), _b = new List<Vector3>(), _c = new List<Vector3>();

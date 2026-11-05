@@ -1,13 +1,13 @@
 # FriendlyPersonShooter
 
-Co-op PvE FPS in Unity 6000.6.7f1, built with friends. Design: `Docs/GameDesignDocument.md` (pillars: every bullet helps someone, strangers are good news, hard honest aim, no PvP). Playtest notes: `Docs/Playtest.md`.
+Co-op PvE FPS in Unity 6000.6.7f1, built with friends. Design: `Docs/GameDesignDocument.md` (pillars: every bullet helps someone, friends are good news, hard honest aim, no PvP; one player hosts and friends join). Playtest notes: `Docs/Playtest.md`.
 
 ## Layout
 - `Assets/Scripts/Core`: engine-free game logic (combat, expedition, progression). Tested outside Unity.
-- `Assets/Scripts/Arena`, `Assets/Scripts/Net`: Unity/Netcode gameplay, server systems, bots.
+- `Assets/Scripts/Arena`, `Assets/Scripts/Net`: Unity/Netcode gameplay, host-and-join session, server systems, bot allies.
 - `Assets/Scripts/ZoneArt`: zone visuals.
 - `Assets/Editor`: build entry points (`PlaytestBuild`, `NetTestBuild`).
-- Scenes: `Menu`, `Expedition`, `Arena` (playtest build); `NetTest` (net test build).
+- Scenes: `Menu`, `Expedition`, `Arena`. `NetTestBuild` is a dev build of the same game with the network simulator (no menu).
 - `Tests/Core.Tests`: NUnit tests compiling `Assets/Scripts/Core` directly.
 
 ## Commands

@@ -96,7 +96,7 @@ namespace FriendlyPersonShooter.Arena
                 ecb.DestroyEntity(e);
                 int sender = EntityManager.GetComponentData<NetworkId>(source.ValueRO.SourceConnection).Value;
                 var r = request.ValueRO;
-                var message = QuickChatWire.ToMessage(r.Id, r.Color, r.LandmarkId, r.PlayerId, r.ZoneX, r.ZoneY);
+                var message = QuickChatWire.ToMessage(r.Id, r.Color, r.LandmarkId, r.PlayerId, r.Zone);
                 var from = default(System.Numerics.Vector2);
                 foreach (var l in _listeners) if (l.PlayerId == sender) from = l.Position;
                 var result = _chat.Send(sender, from, message, _listeners, _time);
@@ -113,7 +113,7 @@ namespace FriendlyPersonShooter.Arena
                     var rpc = ecb.CreateEntity();
                     ecb.AddComponent(rpc, new QuickChatLine
                     {
-                        SenderId = sender, Id = r.Id, Color = r.Color, LandmarkId = r.LandmarkId, PlayerId = r.PlayerId, ZoneX = r.ZoneX, ZoneY = r.ZoneY,
+                        SenderId = sender, Id = r.Id, Color = r.Color, LandmarkId = r.LandmarkId, PlayerId = r.PlayerId, Zone = r.Zone,
                     });
                     ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = connection });
                 }

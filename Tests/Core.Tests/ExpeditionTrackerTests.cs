@@ -16,7 +16,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [SetUp]
         public void SetUp()
         {
-            _map = LayerGenerator.Generate(2026, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            _map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             _gate = new Gate(_map.Gates[0], _map.Seed);
             _wallet = new EssenceWallet(1);
             _blooms = new BloomSchedule(_map);

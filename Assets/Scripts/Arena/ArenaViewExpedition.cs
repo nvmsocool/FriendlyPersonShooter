@@ -63,8 +63,8 @@ namespace FriendlyPersonShooter.Arena
         private void DrawExpeditionWorld()
         {
             var map = ExpeditionWorld.Map;
-            float zoneSize = map.Grid.ZoneSize;
-            var camZone = map.Grid.ZoneAt(_camRef.x, _camRef.z);
+            var tiling = map.Tiling;
+            var camZone = tiling.ZoneAt(_camRef.x, _camRef.z);
 
             bool terrain = ExpeditionTerrain.Active;
             var zones = terrain ? ExpeditionTerrain.World : null;
@@ -76,20 +76,19 @@ namespace FriendlyPersonShooter.Arena
 
             // Floors for the zones around the camera, a little apart so zone edges show
             // (on generated ground: only where a zone hasn't been built yet).
-            for (int dx = -1; dx <= 1; dx++)
+            // Each floor is a square that fits inside its zone (a hexagon, square or triangle).
+            foreach (var zone in tiling.Neighborhood(camZone, 2))
             {
-                for (int dz = -1; dz <= 1; dz++)
-                {
-                    var zone = map.Grid.Wrap(camZone.X + dx, camZone.Y + dz);
-                    if (zones != null && zones.IsReady(zone)) continue;
-                    var centre = ExpeditionWorld.ToFloat3(map.ZoneCentre(zone), -0.25f);
-                    _x.Clear();
-                    _x.Add(Matrix4x4.TRS(Near(centre), Quaternion.identity, new Vector3(zoneSize - 1f, 0.5f, zoneSize - 1f)));
-                    DrawList(_x, _tileMats[(int)map.Zone(zone).Tile % _tileMats.Length]);
-                }
+                if (zones != null && zones.IsReady(zone)) continue;
+                var c = map.ZoneCentre(zone);
+                float side = tiling.EdgeDistance(zone, c) * 2f - 1f;
+                var centre = ExpeditionWorld.ToFloat3(c, -0.25f);
+                _x.Clear();
+                _x.Add(Matrix4x4.TRS(Near(centre), Quaternion.identity, new Vector3(side, 0.5f, side)));
+                DrawList(_x, _tileMats[(int)map.Zone(zone).Tile % _tileMats.Length]);
             }
 
-            float range = zoneSize * 1.6f;
+            float range = tiling.Edge * 3.2f;
             _x.Clear();
             foreach (var l in map.Landmarks)
             {

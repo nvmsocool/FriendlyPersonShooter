@@ -15,7 +15,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [SetUp]
         public void SetUp()
         {
-            _map = LayerGenerator.Generate(2026, LayerSettings.MvpGrid(), LayerSettings.ForMvp());
+            _map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
             _door = RaidSite.DoorFor(_map);
             _banking = new Banking(_map);
             _banking.AddSite(_door, 7f);

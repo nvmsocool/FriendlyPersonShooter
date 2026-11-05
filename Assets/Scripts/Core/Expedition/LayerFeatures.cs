@@ -6,7 +6,7 @@ using FriendlyPersonShooter.Core.World;
 
 namespace FriendlyPersonShooter.Core.Expedition
 {
-    /// <summary>The hand-built tile a zone is stitched from. Decides which landmark words fit it.</summary>
+    /// <summary>The terrain theme a zone is built with. Decides which landmark words fit it.</summary>
     public enum TileKind : byte
     {
         Meadow = 0,
@@ -20,25 +20,22 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// A spot on the layer: its zone, its position inside the zone, and its world position. Ground
-    /// positions are <see cref="Vector2"/> with X = world x and Y = world z, in metres.
+    /// A spot on the layer: its zone and its world position. Ground positions are <see cref="Vector2"/>
+    /// with X = world x and Y = world z, in metres.
     /// </summary>
     public readonly struct MapPoint
     {
         public readonly ZoneCoord Zone;
-        /// <summary>Metres from the zone's corner, each axis in [0, ZoneSize).</summary>
-        public readonly Vector2 Local;
-        /// <summary>World ground position (x, z), inside the unwrapped first copy of the grid.</summary>
+        /// <summary>World ground position (x, z), in the canonical copy of the zone (see <see cref="ZoneTiling.WrapPoint"/>).</summary>
         public readonly Vector2 World;
 
-        public MapPoint(ZoneCoord zone, Vector2 local, float zoneSize)
+        public MapPoint(ZoneCoord zone, Vector2 world)
         {
             Zone = zone;
-            Local = local;
-            World = new Vector2(zone.X * zoneSize + local.X, zone.Y * zoneSize + local.Y);
+            World = world;
         }
 
-        public override string ToString() => $"{Zone} {Local}";
+        public override string ToString() => $"{Zone} ({World.X:0.#}, {World.Y:0.#})";
     }
 
     /// <summary>A named place players give directions by ("the Broken Tower", "Twin Falls").</summary>

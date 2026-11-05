@@ -208,7 +208,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
     }
 
-    /// <summary>Where a layer's raid door stands: by a shrine near the start, on open ground away from the world's edges.</summary>
+    /// <summary>Where a layer's raid door stands: by a shrine near the start, on open ground away from the world's wrap seam.</summary>
     public static class RaidSite
     {
         /// <summary>The door stands this far east of its shrine (shrines sit on flattened, open ground).</summary>
@@ -221,25 +221,33 @@ namespace FriendlyPersonShooter.Core.Expedition
         public static Vector2 DoorFor(LayerMap map)
         {
             if (map == null) throw new ArgumentNullException(nameof(map));
-            float size = map.Grid.Width * map.Grid.ZoneSize;
             var start = map.StartPoint.World;
             Vector2 best = default;
             float bestDistance = float.MaxValue;
             foreach (var s in map.Shrines)
             {
                 var door = s.Point.World + new Vector2(ShrineOffset, 0f);
-                if (door.X < EdgeMargin || door.Y < EdgeMargin || door.X > size - EdgeMargin || door.Y > size - EdgeMargin) continue;
+                if (!ClearOfSeam(map, door)) continue;
                 float d = map.Distance(start, door);
                 if (d < MinFromStart || d >= bestDistance) continue;
                 bestDistance = d;
                 best = door;
             }
             if (bestDistance < float.MaxValue) return best;
-            // No shrine fits: a spot a little way from the start, kept inside the margins.
-            var fallback = start + new Vector2(MinFromStart, 0f);
-            return new Vector2(Clamp(fallback.X, EdgeMargin, size - EdgeMargin), Clamp(fallback.Y, EdgeMargin, size - EdgeMargin));
+            // No shrine fits: a spot a little way from the start (wrapped into the world).
+            return map.Locate(start + new Vector2(MinFromStart, 0f)).World;
         }
 
-        private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
+        /// <summary>True when everything within <see cref="EdgeMargin"/> of the spot is on the same side of the wrap seam.</summary>
+        public static bool ClearOfSeam(LayerMap map, Vector2 spot)
+        {
+            if (!map.Tiling.IsCanonical(spot)) return false;
+            for (int i = 0; i < 16; i++)
+            {
+                float a = i * MathF.PI / 8f;
+                if (!map.Tiling.IsCanonical(spot + new Vector2(MathF.Cos(a), MathF.Sin(a)) * EdgeMargin)) return false;
+            }
+            return true;
+        }
     }
 }

@@ -18,8 +18,8 @@ namespace FriendlyPersonShooter.Arena
         public byte Color;
         public int LandmarkId;
         public int PlayerId;
-        public int ZoneX;
-        public int ZoneY;
+        /// <summary>A <see cref="ZoneCoord.Key"/>.</summary>
+        public int Zone;
     }
 
     /// <summary>Server-to-listener: a quick-chat line someone nearby said. Each client renders it from its own copy of the map.</summary>
@@ -30,8 +30,8 @@ namespace FriendlyPersonShooter.Arena
         public byte Color;
         public int LandmarkId;
         public int PlayerId;
-        public int ZoneX;
-        public int ZoneY;
+        /// <summary>A <see cref="ZoneCoord.Key"/>.</summary>
+        public int Zone;
     }
 
     /// <summary>Client-to-server: give kudos to a player (0 = whoever helped me last).</summary>
@@ -50,12 +50,12 @@ namespace FriendlyPersonShooter.Arena
 
     public static class QuickChatWire
     {
-        public static QuickChatMessage ToMessage(byte id, byte color, int landmark, int player, int zx, int zy) =>
-            new QuickChatMessage((QuickChatId)id, (EssenceColor)color, landmark, player, new ZoneCoord(zx, zy));
+        public static QuickChatMessage ToMessage(byte id, byte color, int landmark, int player, int zone) =>
+            new QuickChatMessage((QuickChatId)id, (EssenceColor)color, landmark, player, ZoneCoord.FromKey(zone));
 
         public static QuickChatRequest ToRequest(QuickChatMessage m) => new QuickChatRequest
         {
-            Id = (byte)m.Id, Color = (byte)m.Color, LandmarkId = m.LandmarkId, PlayerId = m.PlayerId, ZoneX = m.Zone.X, ZoneY = m.Zone.Y,
+            Id = (byte)m.Id, Color = (byte)m.Color, LandmarkId = m.LandmarkId, PlayerId = m.PlayerId, Zone = m.Zone.Key,
         };
     }
 
@@ -97,7 +97,7 @@ namespace FriendlyPersonShooter.Arena
                 ecb.DestroyEntity(e);
                 if (bot) continue;
                 var l = line.ValueRO;
-                Lines.Add((l.SenderId, QuickChatWire.ToMessage(l.Id, l.Color, l.LandmarkId, l.PlayerId, l.ZoneX, l.ZoneY), now));
+                Lines.Add((l.SenderId, QuickChatWire.ToMessage(l.Id, l.Color, l.LandmarkId, l.PlayerId, l.Zone), now));
                 if (Lines.Count > 20) Lines.RemoveAt(0);
             }
             foreach (var (notice, e) in SystemAPI.Query<RefRO<KudosNotice>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())

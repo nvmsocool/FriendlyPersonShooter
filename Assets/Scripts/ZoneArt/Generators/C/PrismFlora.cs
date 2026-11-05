@@ -736,7 +736,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var zone = ctx.Zone;
             var clock = System.Diagnostics.Stopwatch.StartNew();
             const int chunks = 4;
-            float chunkSize = 250f / chunks;
+            int size = ctx.Terrain.C;
+            float chunkSize = size / (float)chunks;
             var oMoist = ZoneNoise.Offset(zone.Seed, 31);
 
             // Trees first (stable order by layer, then as picked).
@@ -751,7 +752,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (species[si].Layer != Layer.Tree) continue;
                 var list = new List<Candidate>();
                 var rng = ZoneRandom.For(ZoneRandom.Hash(zone.Seed, 0x5CA7, si, (int)species[si].Type), "trees");
-                int n = Mathf.CeilToInt(250f / species[si].Spacing);
+                int n = Mathf.CeilToInt(size / species[si].Spacing);
                 for (int gz = 0; gz < n; gz++) Row(ctx, species, si, gz, ref rng, oMoist, chunkSize, chunks, list);
                 perSpecies[si] = list;
             }
@@ -759,7 +760,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var rowJobs = new List<(int si, int gz)>();
             foreach (int si in rest)
             {
-                int n = Mathf.CeilToInt(250f / species[si].Spacing);
+                int n = Mathf.CeilToInt(size / species[si].Spacing);
                 for (int gz = 0; gz < n; gz++) rowJobs.Add((si, gz));
             }
             var rowResults = new List<Candidate>[rowJobs.Count];
@@ -840,13 +841,15 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var t = ctx.Terrain;
             var sp = species[si];
             float step = sp.Spacing;
-            int n = Mathf.CeilToInt(250f / step);
+            int size = t.C;
+            int n = Mathf.CeilToInt(size / step);
             for (int gx = 0; gx < n; gx++)
             {
                 float lx = (gx + rng.Value()) * step, lz = (gz + rng.Value()) * step;
                 float roll = rng.Value();
-                if (lx < 0.5f || lz < 0.5f || lx > 249.5f || lz > 249.5f) continue;
                 float wx = zone.Origin.x + lx, wz = zone.Origin.z + lz;
+                // Inside the zone, trees far enough in that their crowns stay out of the neighbour.
+                if (!zone.Contains(wx, wz, sp.Layer == Layer.Tree ? 3f : 0.5f)) continue;
                 float density = Density(ctx, sp, lx, lz, wx, wz, oMoist);
                 if (roll > density) continue;
                 if (!ctx.World.Down(wx, wz, 600f, out float y, out var normal, out int tag)) continue;
@@ -860,14 +863,14 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     else if (y < t.WaterLevel + 0.05f) continue;
                 }
                 else if (sp.Layer == Layer.Reed) continue;
-                int ox = Mathf.Clamp((int)lx, 0, 249), oz = Mathf.Clamp((int)lz, 0, 249);
+                int ox = Mathf.Clamp((int)lx, 0, size - 1), oz = Mathf.Clamp((int)lz, 0, size - 1);
                 if (sp.Layer == Layer.Tree)
                 {
-                    if (ctx.NoTrees != null && ctx.NoTrees[oz * 250 + ox]) continue;
+                    if (ctx.NoTrees != null && ctx.NoTrees[oz * size + ox]) continue;
                     if (NearOccupied(ctx, ox, oz, 2)) continue;
-                    ctx.Occupied[oz * 250 + ox] = true;
+                    ctx.Occupied[oz * size + ox] = true;
                 }
-                else if (sp.Layer == Layer.Shrub && ctx.Occupied[oz * 250 + ox]) continue;
+                else if (sp.Layer == Layer.Shrub && ctx.Occupied[oz * size + ox]) continue;
 
                 float scale = rng.Range(sp.ScaleMin, sp.ScaleMax);
                 if (sp.Layer == Layer.Grass) scale *= Mathf.Lerp(0.8f, 1.3f, density);
@@ -896,8 +899,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 for (int dx = -r; dx <= r; dx++)
                 {
                     int xx = x + dx, zz = z + dz;
-                    if (xx < 0 || zz < 0 || xx >= 250 || zz >= 250) continue;
-                    if (ctx.Occupied[zz * 250 + xx]) return true;
+                    int size = ctx.Terrain.C;
+                    if (xx < 0 || zz < 0 || xx >= size || zz >= size) continue;
+                    if (ctx.Occupied[zz * size + xx]) return true;
                 }
             }
             return false;

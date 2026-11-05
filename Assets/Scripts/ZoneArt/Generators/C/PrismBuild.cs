@@ -70,6 +70,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         private Vector2 L(Vector3 w) => new Vector2(w.x - _o.x, w.z - _o.z);
 
+        /// <summary>Moves a local point toward the zone's middle until it is <paramref name="margin"/> metres inside the outline.</summary>
+        private Vector2 KeepInside(Vector2 p, float margin)
+        {
+            for (int i = 0; i < 40 && !_t.Inside(p.x, p.y, margin); i++) p = Vector2.Lerp(p, _t.Mid, 0.1f);
+            return p;
+        }
+
         // ================================================================== main thread
 
         // Main-thread step bookkeeping: the longest stretch between two yields, and what it was doing.
@@ -339,7 +346,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     case LandmarkKind.GiantTree: lp.Feature = lp.Local + dir * 7f; lp.PadR = 7f; break;
                     default: lp.Feature = lp.Local; lp.PadR = 21f; break;
                 }
-                lp.Feature = new Vector2(Mathf.Clamp(lp.Feature.x, 24f, 226f), Mathf.Clamp(lp.Feature.y, 24f, 226f));
+                lp.Feature = KeepInside(lp.Feature, lp.PadR + 8f);
                 lp.BaseY = SafeBase(lp.Feature);
                 t.Flatten(lp.Feature, lp.PadR, 6f, lp.BaseY, true);
                 if ((lp.Feature - lp.Local).sqrMagnitude > 1f) t.Flatten(lp.Local, 3f, 4f, t.HeightAt(lp.Local.x, lp.Local.y), true, 0.5f);
@@ -357,7 +364,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int attempt = 0; attempt < 200 && _towers.Count < towerCount; attempt++)
             {
                 float R = zone.Tile == TileKind.Tower ? prng.Range(7f, 11f) : prng.Range(6f, 9.5f);
-                var c = new Vector2(prng.Range(38f, 212f), prng.Range(38f, 212f));
+                var c = new Vector2(prng.Range(0f, t.C), prng.Range(0f, t.C));
+                if (!t.Inside(c.x, c.y, R + 12f)) continue;
                 bool ok = true;
                 foreach (var a in zone.Anchors) if ((L(a.World) - c).magnitude < R + 18f) ok = false;
                 foreach (var lp in _landmarks) if ((lp.Feature - c).magnitude < R + lp.PadR + 10f) ok = false;
@@ -367,7 +375,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (t.HasWater && baseY < t.WaterLevel + 0.6f) continue;
                 float hgt = zone.Tile == TileKind.Tower ? prng.Range(24f, 42f) : prng.Range(16f, 30f);
                 hgt = Mathf.Round(hgt / 0.6f) * 0.6f;
-                var toCenter = new Vector2(125f, 125f) - c;
+                var toCenter = t.Mid - c;
                 var plan = new TowerPlan
                 {
                     Local = c, R = R, BaseY = baseY, TopY = baseY + hgt,
@@ -431,9 +439,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private List<PrismCollider> GroundColliders()
         {
             var list = new List<PrismCollider>();
-            var terrain = new PrismCollider[25];
-            Parallel.For(0, 25, i => terrain[i] = _t.ChunkCollider(i % 5 * PrismTerrain.Chunk, i / 5 * PrismTerrain.Chunk));
-            list.AddRange(terrain);
+            var terrain = new PrismCollider[_t.ChunkCount];
+            Parallel.For(0, terrain.Length, i => terrain[i] = _t.ChunkCollider(i));
+            foreach (var c in terrain) if (c != null) list.Add(c);
             _hexChunks = _st.HexField();
             var hex = new PrismCollider[_hexChunks.Length];
             Parallel.For(0, hex.Length, i => hex[i] = _hexChunks[i].VertexCount > 0 ? PrismCollider.FromBuilder($"Hex {i}", _hexChunks[i], PrismCollision.TagGround) : null);
@@ -486,8 +494,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             // Props on open main ground.
             bool OpenGround(Vector2 p, float clear)
             {
-                if (p.x < 18f || p.y < 18f || p.x > 232f || p.y > 232f) return false;
-                int k = Mathf.Clamp((int)p.y, 0, 249) * 250 + Mathf.Clamp((int)p.x, 0, 249);
+                if (!t.Inside(p.x, p.y, Mathf.Max(clear, 10f))) return false;
+                int k = t.Cell(p.x, p.y);
                 if (t.CellHex[k] >= 0 || t.Comp[k] != t.MainComp) return false;
                 if (t.RampAt(p.x, p.y) > 0.05f || t.PadAt(p.x, p.y) > 0.05f) return false;
                 if (t.HasWater && t.HeightAt(p.x, p.y) < t.WaterLevel + 0.3f) return false;
@@ -499,7 +507,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             int slabs = zone.Tile switch { TileKind.Ruins => srng.Range(9, 14), TileKind.Canyon => srng.Range(4, 7), TileKind.Tower => srng.Range(3, 6), _ => srng.Range(2, 5) };
             for (int i = 0, tries = 0; i < slabs && tries < 300; tries++)
             {
-                var p = new Vector2(srng.Range(20f, 230f), srng.Range(20f, 230f));
+                var p = new Vector2(srng.Range(0f, t.C), srng.Range(0f, t.C));
                 if (!OpenGround(p, 14f)) continue;
                 float h = t.HeightAt(p.x, p.y);
                 bool flat = true;
@@ -520,8 +528,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 Vector2 p = zone.Tile == TileKind.Crater && i < clusters - 4
                     ? _shape.Feature + srng.InsideCircle() * _shape.FeatureR * 0.8f
-                    : new Vector2(srng.Range(20f, 230f), srng.Range(20f, 230f));
-                if (p.x < 20f || p.y < 20f || p.x > 230f || p.y > 230f) continue;
+                    : new Vector2(srng.Range(0f, t.C), srng.Range(0f, t.C));
+                if (!t.Inside(p.x, p.y, 8f)) continue;
                 if (t.RampAt(p.x, p.y) > 0.05f || t.PadAt(p.x, p.y) > 0.05f) continue;
                 bool near = false;
                 foreach (var a in zone.Anchors) if ((L(a.World) - p).magnitude < 10f) near = true;
@@ -537,7 +545,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             int boulders = srng.Range(15, 35);
             for (int i = 0, tries = 0; i < boulders && tries < 300; tries++)
             {
-                var p = new Vector2(srng.Range(20f, 230f), srng.Range(20f, 230f));
+                var p = new Vector2(srng.Range(0f, t.C), srng.Range(0f, t.C));
                 if (!OpenGround(p, 6f)) continue;
                 int b0 = st.Solid.Triangles.Count;
                 float bs = srng.Range(0.7f, 2.4f);
@@ -546,14 +554,16 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 i++;
             }
             int isles = zone.Tile == TileKind.Tower || zone.Tile == TileKind.Crater ? srng.Range(4, 7) : srng.Range(2, 5);
-            for (int i = 0; i < isles; i++)
+            for (int i = 0, tries = 0; i < isles && tries < 100; tries++)
             {
-                var p = new Vector2(srng.Range(30f, 220f), srng.Range(30f, 220f));
+                var p = new Vector2(srng.Range(0f, t.C), srng.Range(0f, t.C));
+                if (!t.Inside(p.x, p.y, 14f)) continue;
+                i++;
                 float hi = t.SurfaceAt(p.x, p.y);
                 for (int k = 0; k < 16; k++)
                 {
                     var q = p + srng.InsideCircle() * 22f;
-                    hi = Mathf.Max(hi, t.SurfaceAt(Mathf.Clamp(q.x, 0f, 250f), Mathf.Clamp(q.y, 0f, 250f)));
+                    hi = Mathf.Max(hi, t.SurfaceAt(Mathf.Clamp(q.x, 0f, t.C), Mathf.Clamp(q.y, 0f, t.C)));
                 }
                 foreach (var tw in _towers) if ((tw.Local - p).magnitude < tw.R + 25f) hi = Mathf.Max(hi, tw.TopY + 6f);
                 float y = Mathf.Max(hi + 20f, 30f + srng.Range(5f, 30f));
@@ -645,7 +655,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
         /// </summary>
         private bool[] LostFrontier(PrismWalk before, PrismWalk after, int pad)
         {
-            const int N = 250, MinPatch = 30;
+            int N = _t.C;
+            const int MinPatch = 30;
             var lost = new sbyte[N * N];
             for (int k = 0; k < N * N; k++) lost[k] = (sbyte)(before.Map[k] == 2 && after.Map[k] == 1 ? -1 : 0);
             var front = new bool[N * N];
@@ -724,7 +735,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     for (int dx = -r; dx <= r && !hit; dx++)
                     {
                         int x = (int)pr.Local.x + dx, z = (int)pr.Local.y + dz;
-                        if (x >= 0 && z >= 0 && x < 250 && z < 250 && dx * dx + dz * dz <= r * r) hit = front[z * 250 + x];
+                        if (x >= 0 && z >= 0 && x < _t.C && z < _t.C && dx * dx + dz * dz <= r * r) hit = front[z * _t.C + x];
                     }
                 }
                 if (hit) doomed.Add(i);
@@ -772,13 +783,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 float ang = k / 24f * Mathf.PI * 2f;
                 var dir = new Vector2(Mathf.Cos(ang), Mathf.Sin(ang));
                 var pa = anchor + dir * startR;
-                if (pa.x < 3f || pa.y < 3f || pa.x > 247f || pa.y > 247f) continue;
+                if (!t.Inside(pa.x, pa.y, 3f)) continue;
                 float ya = Ground(pa);
                 for (float d = 4f; d < 110f; d += 1.5f)
                 {
                     var pb = pa + dir * d;
-                    if (pb.x < 2f || pb.y < 2f || pb.x > 248f || pb.y > 248f) break;
-                    int cell = Mathf.Clamp((int)pb.y, 0, 249) * 250 + Mathf.Clamp((int)pb.x, 0, 249);
+                    if (!t.Inside(pb.x, pb.y, 3f)) break;
+                    int cell = t.Cell(pb.x, pb.y);
                     if (map[cell] != 2) continue;
                     float yb = Ground(pb);
                     int steps = Mathf.CeilToInt(d / spacing);
@@ -813,7 +824,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 float u = i / (float)n;
                 var q = bestA + ab * u;
                 float top = Mathf.Lerp(bestYa, bestYb, u) + 0.05f;
-                float bottom = Mathf.Min(t.HeightAt(Mathf.Clamp(q.x, 0f, 250f), Mathf.Clamp(q.y, 0f, 250f)), top) - 1.5f;
+                float bottom = Mathf.Min(t.HeightAt(Mathf.Clamp(q.x, 0f, t.C), Mathf.Clamp(q.y, 0f, t.C)), top) - 1.5f;
                 var col = Color.Lerp(_pal.HexTop[i % _pal.HexTop.Length], _pal.Strata[(i / 3) % _pal.Strata.Length], 0.35f);
                 _st.HexColumn(mb, new Vector3(o.x + q.x, 0f, o.z + q.y), colR, top, bottom, col);
                 t.MarkRamp(q, 2.2f);
@@ -850,7 +861,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             else
             {
-                target = zone.Center + Vector3.up * t.SurfaceAt(125f, 125f);
+                target = zone.Center + Vector3.up * t.SurfaceAt(t.Mid.x, t.Mid.y);
                 height = 10f;
             }
             ZoneView bestView = new ZoneView(target + new Vector3(-50f, 25f, -50f), target + Vector3.up * height * 0.5f, 60f);
@@ -860,8 +871,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 float a = k / 64f * Mathf.PI * 2f;
                 float d = Mathf.Max(26f, height * 1.5f + 14f) * rng.Range(0.8f, 1.8f);
                 var lp = new Vector2(target.x - o.x + Mathf.Cos(a) * d, target.z - o.z + Mathf.Sin(a) * d);
-                if (lp.x < 3f || lp.y < 3f || lp.x > 247f || lp.y > 247f) continue;
-                int cell = Mathf.Clamp((int)lp.y, 0, 249) * 250 + Mathf.Clamp((int)lp.x, 0, 249);
+                if (!t.Inside(lp.x, lp.y, 3f)) continue;
+                int cell = t.Cell(lp.x, lp.y);
                 if (t.Comp[cell] != t.MainComp) continue;
                 float y = t.SurfaceAt(lp.x, lp.y);
                 if (t.HasWater) y = Mathf.Max(y, t.WaterLevel);
@@ -893,7 +904,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     for (float dd2 = 3f; dd2 < Mathf.Min(fl * 0.7f, 40f); dd2 += 2f)
                     {
                         var q = lp + new Vector2(dir.x, dir.z) * dd2;
-                        if (q.x < 0f || q.y < 0f || q.x > 250f || q.y > 250f) break;
+                        if (!t.Inside(q.x, q.y)) break;
                         float lineY = eye.y + Mathf.Tan(pitch) * dd2;
                         if (t.SurfaceAt(q.x, q.y) > lineY) { score -= 6f; }
                     }
@@ -931,7 +942,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     Zone = _zone, Terrain = _t, Palette = _pal, World = bare,
                     GroundColor = GrassAt, LowY = heights[heights.Count / 20], HighY = heights[heights.Count * 19 / 20] + 0.01f,
-                    Occupied = new bool[250 * 250], NoTrees = noTrees,
+                    Occupied = new bool[_t.C * _t.C], NoTrees = noTrees,
                     HeroEye = new Vector2(_hero.Position.x, _hero.Position.z), HeroTarget = new Vector2(_hero.LookAt.x, _hero.LookAt.z),
                     Render = !_headless,
                 };
@@ -988,8 +999,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             c = PrismGeo.Shade(c, 0.94f + 0.1f * h);
             if (!inZone)
             {
-                float fx = Mathf.Max(0f, Mathf.Max(o.x - w.x, w.x - o.x - 250f)), fz = Mathf.Max(0f, Mathf.Max(o.z - w.z, w.z - o.z - 250f));
-                float fd = Mathf.Sqrt(fx * fx + fz * fz);
+                float fd = Mathf.Max(0f, -_zone.EdgeDistance(w.x, w.z));
                 c = Color.Lerp(c, pal.Fog, 0.12f + PrismTerrain.Smooth(10f, 500f, fd) * 0.5f);
             }
             if (inZone)
@@ -1030,12 +1040,12 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private void RenderData()
         {
             // Terrain chunks and hex chunks in parallel; everything else alongside.
-            var terrain = new PrismMesh[25];
+            var terrain = new PrismMesh[_t.ChunkCount];
             var hex = new PrismMesh[_hexChunks.Length];
             PrismMesh solid = null, tops = null, crystals = null, decor = null, decorRock = null, links = null, water = null, clouds = null;
             PrismFar.Lands far = null;
             Parallel.Invoke(
-                () => Parallel.For(0, 25, i => terrain[i] = _t.ChunkRender(i % 5 * PrismTerrain.Chunk, i / 5 * PrismTerrain.Chunk, (w, n) => ColorAt(w, n, true))),
+                () => Parallel.For(0, terrain.Length, i => terrain[i] = _t.ChunkRender(i, (w, n) => ColorAt(w, n, true))),
                 () => Parallel.For(0, hex.Length, i => hex[i] = _hexChunks[i].VertexCount > 0 ? Pack($"Hex {i}", _hexChunks[i]) : null),
                 () =>
                 {
@@ -1054,7 +1064,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     if (!_zone.InWorld) far = PrismFar.Build(_zone, _t, _pal, (w, n) => ColorAt(w, n, false), _t.HasWater ? _t.WaterLevel : -999f, _st, _species);
                 });
 
-            foreach (var m in terrain) _render.Add((m, "ground", true, "Terrain"));
+            foreach (var m in terrain) if (m != null) _render.Add((m, "ground", true, "Terrain"));
             foreach (var m in hex) if (m != null) _render.Add((m, "hex", true, "Hex columns"));
             void Add(PrismMesh m, string mat, bool shadows, string group)
             {
@@ -1083,26 +1093,30 @@ namespace FriendlyPersonShooter.ZoneArt.C
         {
             var t = _t;
             var o = _o;
-            const int cells = 50;
-            float cs = 250f / cells;
-            var w = new PrismMesh("Water", (cells + 1) * (cells + 1));
-            for (int z = 0; z <= cells; z++)
+            int cells = Mathf.CeilToInt(t.C / 5f);
+            float cs = t.C / (float)cells;
+            var w = new PrismMesh("Water", cells * cells * 6);
+            Color At(Vector3 p)
             {
-                for (int x = 0; x <= cells; x++)
-                {
-                    float lx = x * cs, lz = z * cs;
-                    float depth = Mathf.Clamp01((t.WaterLevel - t.HeightAt(lx, lz)) / 1.1f);
-                    float shore = PrismTerrain.Smooth(0.35f, 0f, depth);
-                    w.Vertex(new Vector3(o.x + lx, t.WaterLevel, o.z + lz), Vector3.up, new Color(depth, shore, 0f, 1f));
-                }
+                float depth = Mathf.Clamp01((t.WaterLevel - t.HeightAt(p.x - o.x, p.z - o.z)) / 1.1f);
+                float shore = PrismTerrain.Smooth(0.35f, 0f, depth);
+                return new Color(depth, shore, 0f, 1f);
             }
+            void Emit(Vector3 a, Vector3 b, Vector3 c)
+            {
+                int i = w.Vertex(a, Vector3.up, At(a));
+                w.Vertex(b, Vector3.up, At(b));
+                w.Vertex(c, Vector3.up, At(c));
+                w.Triangle(i, i + 1, i + 2);
+            }
+            Vector3 P(int x, int z) => new Vector3(o.x + x * cs, t.WaterLevel, o.z + z * cs);
+            // Clipped to the zone's outline: the neighbours have their own water (or none).
             for (int z = 0; z < cells; z++)
             {
                 for (int x = 0; x < cells; x++)
                 {
-                    int i = z * (cells + 1) + x;
-                    w.Triangle(i, i + cells + 1, i + cells + 2);
-                    w.Triangle(i, i + cells + 2, i + 1);
+                    t.ClipFlat(P(x, z), P(x, z + 1), P(x + 1, z + 1), Emit);
+                    t.ClipFlat(P(x, z), P(x + 1, z + 1), P(x + 1, z), Emit);
                 }
             }
             return w;

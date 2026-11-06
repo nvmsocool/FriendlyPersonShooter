@@ -90,6 +90,10 @@ namespace FriendlyPersonShooter.Arena
             public bool Raid;
             /// <summary>Never attacks (Wisp Storm targets: the room tests aim, the timer is the pressure).</summary>
             public bool Passive;
+            /// <summary>Hold the Core: a Skitter that runs straight at the core and bursts on it.</summary>
+            public bool CoreRunner;
+            /// <summary>The Twins boss: which twin (0 or 1), else -1.</summary>
+            public int Twin = -1;
             /// <summary>The Colossus, the open-world boss (Family Bulwark, but its own behavior).</summary>
             public bool WorldBoss;
             public ColossusBehavior Colossus;
@@ -469,9 +473,11 @@ namespace FriendlyPersonShooter.Arena
                         break;
                     case EnemyFamily.Skitter:
                         var before = s.Skitter.Position;
+                        if (s.CoreRunner) SteerRunner(ref s.Skitter);
                         s.Skitter.Step(moveDt, _skitter);
                         if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
                         if (s.Raid) KeepInRoom(ref s.Skitter, before);
+                        if (s.CoreRunner && RunnerBurst(s.Skitter.Position)) _expired.Add(e);
                         position = s.Skitter.Position;
                         break;
                     case EnemyFamily.Glimmer:
@@ -487,7 +493,9 @@ namespace FriendlyPersonShooter.Arena
                         }
                         float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
                         s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, _bulwark);
-                        int wave = s.Boss.TakeWaveDue(fraction, _bulwark);
+                        int wave = s.Twin >= 0 && _run?.Twins != null
+                            ? _run.Twins.TakeWaveDue(TwinsHealthFraction(), _bulwark.AddWaveAt)
+                            : s.Boss.TakeWaveDue(fraction, _bulwark);
                         if (wave > 0) _raidWaveDue = wave;
                         position = s.Boss.Position;
                         break;
@@ -561,7 +569,7 @@ namespace FriendlyPersonShooter.Arena
                 if (s.Family == EnemyFamily.Bulwark)
                 {
                     if (s.WorldBoss) WorldBossKilled(s, ecb);
-                    else RaidBossKilled();
+                    else RaidBossKilled(s);
                 }
                 if (s.Raid && s.Family == EnemyFamily.Wisp && _run != null && _run.Room == RaidRoomKind.WispStorm) _run.Storm.Kill();
                 ExpeditionKill(s);

@@ -7,10 +7,11 @@ using UnityEngine;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The raid run's rooms in the view (Docs/RaidDevPlan.md, phase 1): each room's platform, its
-    /// puzzle pieces in their live state (crystals and the altar's order, plates, sweepers), the portal,
-    /// and the room lines of the HUD. Room state comes from the local player's ExpeditionStatus, so only
-    /// the group inside sees it live; anyone else sees the rooms at rest.
+    /// The raid run's rooms in the view (Docs/RaidDevPlan.md): each room's platform in this run's shape
+    /// (its layout seed), its puzzle pieces in their live state (crystals and the altar's order, plates,
+    /// sweepers, runes, the core and its gates), the portal, and the room lines of the HUD. Room state
+    /// comes from the local player's ExpeditionStatus, so only the group inside sees it live; anyone else
+    /// sees the rooms at rest.
     /// </summary>
     public partial class ArenaView
     {
@@ -21,6 +22,18 @@ namespace FriendlyPersonShooter.Arena
 
         private Material[] _crystalMats, _crystalDimMats;
         private Material _plateHeldMat, _plateEmptyMat, _plateOffMat, _sweeperMat, _portalMat, _stoneTopMat;
+        /// <summary>Echo Runes: each set's color bright (lit in the show) and dim, and gold once a set is done.</summary>
+        private Material[] _echoBrightMats, _echoDimMats;
+        private Material _echoDoneMat, _coreCrystalMat, _coreHurtMat, _coreGateMat;
+        private static readonly Color[] EchoColors = { new Color(0.35f, 0.85f, 1f), new Color(1f, 0.45f, 0.9f) };
+        private static readonly string[] EchoHex = { "#5AD8FF", "#FF73E6" };
+        private static readonly string[] EchoSide = { "West wall", "East wall" };
+        private readonly List<Matrix4x4>[] _qEchoBright = { new List<Matrix4x4>(), new List<Matrix4x4>() };
+        private readonly List<Matrix4x4>[] _qEchoDim = { new List<Matrix4x4>(), new List<Matrix4x4>() };
+        private readonly List<Matrix4x4> _qEchoDone = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _qCore = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _qCoreHurt = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _qGate = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _qFloor = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _qTileA = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _qTileB = new List<Matrix4x4>();
@@ -54,6 +67,17 @@ namespace FriendlyPersonShooter.Arena
             _sweeperMat = MakeGlow(PlateWarnColor, 2.2f);
             _portalMat = MakeGlow(new Color(0.85f, 0.6f, 1f), 2.4f);
             _stoneTopMat = MakeMat(new Color(0.36f, 0.32f, 0.44f));
+            _echoBrightMats = new Material[2];
+            _echoDimMats = new Material[2];
+            for (int i = 0; i < 2; i++)
+            {
+                _echoBrightMats[i] = MakeGlow(EchoColors[i], 3f);
+                _echoDimMats[i] = MakeGlow(EchoColors[i] * 0.45f, 0.3f);
+            }
+            _echoDoneMat = MakeGlow(PlateOpenColor, 1.6f);
+            _coreCrystalMat = MakeGlow(new Color(0.45f, 1f, 0.75f), 2.6f);
+            _coreHurtMat = MakeGlow(KeyRedColor, 2.6f);
+            _coreGateMat = MakeGlow(new Color(1f, 0.55f, 0.25f), 1.8f);
         }
 
         /// <summary>Room platforms near the camera (they hang far above the ground, hidden in the fog).</summary>
@@ -62,8 +86,12 @@ namespace FriendlyPersonShooter.Arena
             if (_crystalMats == null) CreateRoomMaterials();
             foreach (var kind in RaidRoomLayout.Pool)
             {
+                // The room the group is in takes this run's shape, colliders included (the server built
+                // its own already; in a joined game this keeps the client's movement on the same ground).
+                bool live = LiveIn(kind, s);
+                if (live) RaidArena.UseRoom(kind, s.RaidRoomSeed);
                 var d = RaidArena.ToRoom(kind, _camRef);
-                if (math.abs(d.Y) < 220f && math.abs(d.X) < 150f && math.abs(d.Z) < 150f) DrawRoom(kind, s);
+                if (math.abs(d.Y) < 220f && math.abs(d.X) < 150f && math.abs(d.Z) < 150f) DrawRoom(kind, s, live ? s.RaidRoomSeed : RaidArena.SeedOf(kind));
             }
         }
 
@@ -80,15 +108,21 @@ namespace FriendlyPersonShooter.Arena
             return _roomClockBase + (Time.time - _roomClockAt);
         }
 
-        private void DrawRoom(RaidRoomKind kind, ExpeditionStatus s)
+        private void DrawRoom(RaidRoomKind kind, ExpeditionStatus s, uint seed)
         {
-            foreach (var l in new[] { _qFloor, _qTileA, _qTileB, _qWall, _qRock, _qGlow, _qStoneTop, _qPlateHeld, _qPlateEmpty, _qPlateOff, _qSweeper, _qPortal }) l.Clear();
+            foreach (var l in new[] { _qFloor, _qTileA, _qTileB, _qWall, _qRock, _qGlow, _qStoneTop, _qPlateHeld, _qPlateEmpty, _qPlateOff, _qSweeper, _qPortal,
+                         _qEchoDone, _qCore, _qCoreHurt, _qGate }) l.Clear();
             for (int i = 0; i < 3; i++)
             {
                 _qCrystal[i].Clear();
                 _qCrystalDim[i].Clear();
             }
-            var layout = RaidRoomLayout.For(kind);
+            for (int i = 0; i < 2; i++)
+            {
+                _qEchoBright[i].Clear();
+                _qEchoDim[i].Clear();
+            }
+            var layout = RaidRoomLayout.For(kind, seed);
             var c = Near(RaidArena.RoomCenter(kind));
             var id = Quaternion.identity;
             float t = Time.time;
@@ -148,6 +182,8 @@ namespace FriendlyPersonShooter.Arena
                 case RaidRoomKind.ColorLocks: DrawLocks(layout, c, s, live, t); break;
                 case RaidRoomKind.HoldPlates: DrawPlates(layout, c, s, live, t); break;
                 case RaidRoomKind.Gauntlet: DrawSweepers(layout, c, live ? RoomClock(s) : t); break;
+                case RaidRoomKind.EchoRunes: DrawRunes(layout, c, s, live, t); break;
+                case RaidRoomKind.HoldCore: DrawCore(layout, c, s, live, t); break;
             }
 
             // The portal: a ring standing at the far side, lit once the room is solved.
@@ -184,6 +220,76 @@ namespace FriendlyPersonShooter.Arena
             {
                 DrawList(_qCrystal[i], _crystalMats[i]);
                 DrawList(_qCrystalDim[i], _crystalDimMats[i]);
+            }
+            for (int i = 0; i < 2; i++)
+            {
+                DrawList(_qEchoBright[i], _echoBrightMats[i]);
+                DrawList(_qEchoDim[i], _echoDimMats[i]);
+            }
+            DrawList(_qEchoDone, _echoDoneMat);
+            DrawList(_qCore, _coreCrystalMat);
+            DrawList(_qCoreHurt, _coreHurtMat);
+            DrawList(_qGate, _coreGateMat);
+        }
+
+        /// <summary>
+        /// Runes as glowing diamonds on their slabs, west set blue and east set pink: dim at rest, big and
+        /// bright while the show lights them, gold once the set is done for the round. The sequence itself
+        /// is only ever shown by the show, so watching is the puzzle.
+        /// </summary>
+        private void DrawRunes(RaidRoomLayout layout, Vector3 c, ExpeditionStatus s, bool live, float t)
+        {
+            int packed = s.RaidRoomData;
+            for (int i = 0; i < layout.Targets.Count; i++)
+            {
+                int set = i / EchoRunes.RunesPerSet, rune = i % EchoRunes.RunesPerSet;
+                var p = c + new Vector3(layout.Targets[i].X, layout.Targets[i].Y, layout.Targets[i].Z);
+                bool done = live && s.RaidPortal < -1.5f && EchoRunes.DoneOf(packed, set);
+                bool lit = live && EchoRunes.LitOf(packed, set) == rune;
+                float size = RaidRoomLayout.RuneRadius * (lit ? 1.6f : 1.15f);
+                var rot = Quaternion.Euler(0f, 90f, 45f + (lit ? t * 200f : 0f));
+                var list = done ? _qEchoDone : lit ? _qEchoBright[set] : _qEchoDim[set];
+                Box(list, p, rot, new Vector3(0.25f, size, size));
+                if (lit) Box(_qEchoBright[set], p, Quaternion.Euler(0f, 90f, 0f), new Vector3(0.1f, size * 1.9f, 0.12f));
+            }
+            // A light over each slab while its set is showing, so players know to look now.
+            for (int set = 0; set < EchoRunes.Sets && live; set++)
+            {
+                if (!EchoRunes.ShowingOf(packed, set)) continue;
+                var first = layout.Targets[set * EchoRunes.RunesPerSet];
+                float x = first.X < 0f ? -RaidRoomLayout.SquareHalf + 1.5f : RaidRoomLayout.SquareHalf - 1.5f;
+                Box(_qEchoBright[set], c + new Vector3(x, 7.6f + 0.2f * Mathf.Sin(t * 6f), first.Z), Quaternion.identity, new Vector3(0.3f, 0.3f, 12f));
+            }
+        }
+
+        /// <summary>
+        /// The core: a big crystal spinning over its pillar, green when healthy and red as it cracks, with a
+        /// light column that shrinks with its health. Each gate is a glowing arch with a faint lane to the core.
+        /// </summary>
+        private void DrawCore(RaidRoomLayout layout, Vector3 c, ExpeditionStatus s, bool live, float t)
+        {
+            float health = live ? HoldCore.HealthOf(s.RaidRoomData) / 100f : 1f;
+            var core = c + new Vector3(layout.Targets[0].X, layout.Targets[0].Y, layout.Targets[0].Z);
+            var list = health < 0.4f ? _qCoreHurt : _qCore;
+            float size = 1.5f * (health < 0.4f ? 1f + 0.12f * Mathf.Sin(t * 12f) : 1f);
+            Box(list, core, Quaternion.Euler(45f, t * 50f, 45f), Vector3.one * size);
+            Box(list, core, Quaternion.Euler(0f, -t * 80f, 0f), new Vector3(0.5f, size * 1.8f, 0.5f));
+            float h = 0.3f + 14f * health;
+            Box(list, core + new Vector3(0f, 1.5f + h * 0.5f, 0f), Quaternion.identity, new Vector3(0.18f, h, 0.18f));
+            for (int g = 1; g < layout.Targets.Count; g++)
+            {
+                var gate = layout.Targets[g];
+                var at = c + new Vector3(gate.X, 0f, gate.Z);
+                var inward = new Vector3(-gate.X, 0f, -gate.Z).normalized;
+                var rot = Quaternion.LookRotation(inward);
+                Box(_qGate, at + Vector3.up * 1.6f + rot * new Vector3(-1.6f, 0f, 0f), rot, new Vector3(0.35f, 3.2f, 0.35f));
+                Box(_qGate, at + Vector3.up * 1.6f + rot * new Vector3(1.6f, 0f, 0f), rot, new Vector3(0.35f, 3.2f, 0.35f));
+                Box(_qGate, at + Vector3.up * 3.3f, rot, new Vector3(3.6f, 0.35f, 0.35f));
+                // The lane, faint on the floor.
+                var mid = (at + core) * 0.5f;
+                mid.y = c.y + 0.05f;
+                float len = new Vector2(gate.X, gate.Z).magnitude;
+                Box(_qEchoDone, mid, rot, new Vector3(0.12f, 0.03f, len - 2f));
             }
         }
 
@@ -266,7 +372,8 @@ namespace FriendlyPersonShooter.Arena
         {
             int t = (int)s.RaidTimer;
             string mod = s.RaidModifier != RaidModifier.None ? $"  <color=#FF9A40>{RaidRoomLayout.NameOf(s.RaidModifier)}</color>" : "";
-            e.Append($"<color=#D9B3FF><b>RAID</b> {s.RaidStage + 1}/{s.RaidStageCount}: <b>{RaidRoomLayout.NameOf(s.RaidRoom)}</b></color>{mod}" +
+            string name = s.RaidRoom == RaidRoomKind.Boss ? RaidRoomLayout.NameOf(s.RaidBoss) : RaidRoomLayout.NameOf(s.RaidRoom);
+            e.Append($"<color=#D9B3FF><b>RAID</b> {s.RaidStage + 1}/{s.RaidStageCount}: <b>{name}</b></color>{mod}" +
                      $"  <color=#D9B3FF>{t / 60}:{t % 60:00} left</color>\n");
             if (s.RaidPortal > -1.5f)
             {
@@ -311,6 +418,29 @@ namespace FriendlyPersonShooter.Arena
                     e.Append($"Wisps {kills}/{target}  {Bar(target > 0 ? (float)kills / target : 0f, 20)}  <color={(left < 15 ? "#FF6B5B" : "#D9B3FF")}>{left}s left</color>\n");
                     break;
                 }
+                case RaidRoomKind.EchoRunes:
+                {
+                    int packed = s.RaidRoomData;
+                    int length = EchoRunes.LengthOf(packed);
+                    e.Append($"Runes, round {EchoRunes.RoundOf(packed) + 1}/{EchoRunes.Rounds} ({length} long): ");
+                    for (int set = 0; set < EchoRunes.Sets; set++)
+                    {
+                        string state = EchoRunes.DoneOf(packed, set) ? "<color=#FFD84D>done</color>"
+                            : EchoRunes.ShowingOf(packed, set) ? "<b>WATCH!</b>"
+                            : $"{EchoRunes.IndexOf(packed, set)}/{length}";
+                        e.Append($"<color={EchoHex[set]}>{EchoSide[set]}</color> {state}   ");
+                    }
+                    e.Append('\n');
+                    break;
+                }
+                case RaidRoomKind.HoldCore:
+                {
+                    int health = HoldCore.HealthOf(s.RaidRoomData);
+                    int left = (int)s.RaidRoomTimer;
+                    e.Append($"Core {Bar(health / 100f, 20)} <color={(health < 40 ? "#FF6B5B" : "#7BE07B")}>{health}%</color>  hold for <b>{left}s</b>" +
+                             "  <color=#FF9A40>Skitters from the orange gates</color>\n");
+                    break;
+                }
             }
         }
 
@@ -328,14 +458,20 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Announcements about the run's rooms; shown only to the group inside. Null if it isn't one.</summary>
         private string RoomAnnouncement(ArenaAnnounce m)
         {
-            if (m.Kind != AnnounceKind.RaidStage && m.Kind != AnnounceKind.RaidRoomSolved && m.Kind != AnnounceKind.RaidSetback) return null;
+            if (m.Kind != AnnounceKind.RaidStage && m.Kind != AnnounceKind.RaidRoomSolved && m.Kind != AnnounceKind.RaidSetback &&
+                m.Kind != AnnounceKind.TwinDown && m.Kind != AnnounceKind.TwinRevived) return null;
             if (!TryGetStatus(out var s) || !s.InRaid) return "";
             var room = (RaidRoomKind)m.Value;
             switch (m.Kind)
             {
+                case AnnounceKind.TwinDown:
+                    return $"<color=#FFD84D><b>A TWIN FELL!</b> Kill the other within {m.Value}s or it comes back</color>\n";
+                case AnnounceKind.TwinRevived:
+                    return "<color=#FF8080>Too slow: the fallen twin is back</color>\n";
                 case AnnounceKind.RaidStage:
                 {
-                    string text = $"<color=#D9B3FF><b>{RaidRoomLayout.NameOf(room).ToUpperInvariant()}</b></color>";
+                    string stageName = room == RaidRoomKind.Boss ? RaidRoomLayout.NameOf(s.RaidBoss) : RaidRoomLayout.NameOf(room);
+                    string text = $"<color=#D9B3FF><b>{stageName.ToUpperInvariant()}</b></color>";
                     var mod = (RaidModifier)m.OtherNetworkId;
                     if (m.PlayerNetworkId == 0 && mod != RaidModifier.None)
                         text += $"  <color=#FF9A40>This run: {RaidRoomLayout.NameOf(mod)} ({ModifierHint(mod)})</color>";
@@ -348,7 +484,10 @@ namespace FriendlyPersonShooter.Arena
                     {
                         case 0: return $"<color=#FF8080>{PlayerColors.Tag(m.PlayerNetworkId)} hit the wrong crystal: the order starts over</color>\n";
                         case 1: return "<color=#FF8080>Too slow between crystals: the order starts over</color>\n";
-                        default: return "<color=#FF8080>The storm's timer ran out: the count starts over</color>\n";
+                        case 2: return "<color=#FF8080>The storm's timer ran out: the count starts over</color>\n";
+                        case 3: return $"<color=#FF8080>{PlayerColors.Tag(m.PlayerNetworkId)} hit the wrong rune: that wall shows its runes again</color>\n";
+                        case 4: return "<color=#FF8080>Too slow: the runes show again</color>\n";
+                        default: return "<color=#FF8080>The core broke! It's whole again, and the clock starts over</color>\n";
                     }
             }
         }

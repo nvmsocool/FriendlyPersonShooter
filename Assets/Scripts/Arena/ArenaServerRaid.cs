@@ -110,20 +110,34 @@ namespace FriendlyPersonShooter.Arena
         {
             var inside = _raid.Participants;
             int n = inside.Count;
-            _run = new RaidRun(NextSeed(), n, null, DebugRaidRoom, DebugRaidModifier);
+            _run = new RaidRun(NextSeed(), n, null, DebugRaidRoom, DebugRaidModifier, DebugRaidBoss);
             _run.Begin(_time);
             _raidWaveDue = 0;
             _raidBossDead = false;
             _raidsStarted++;
             _announce.Add((AnnounceKind.RaidStarted, n, 0, 0));
-            Debug.Log($"[Raid] started with {n} player(s): [{string.Join(",", inside)}], rooms {string.Join(" > ", _run.Rooms)} > Bulwark, modifier {_run.Modifier}");
+            Debug.Log($"[Raid] started with {n} player(s): [{string.Join(",", inside)}], rooms {string.Join(" > ", _run.Rooms)} > {_run.Boss}, modifier {_run.Modifier}");
             EnterStage();
         }
 
-        /// <summary>The run's last stage: the Bulwark, scaled to the group, on the raid arena.</summary>
+        /// <summary>The Twins' full health each (for the add waves on their combined health, and revivals).</summary>
+        private float _twinMaxHealth;
+
+        /// <summary>
+        /// The run's last stage on the raid arena: the Bulwark scaled to the group, or the Twins (two of them
+        /// either side of the middle, each with a share of that health, turning opposite ways).
+        /// </summary>
         private void SpawnRaidBoss(int players)
         {
             float health = BulwarkSettings.HealthFor(players, _combat);
+            if (_run.Boss == RaidBossKind.Twins)
+            {
+                _twinMaxHealth = health * RaidTwins.HealthShare;
+                SpawnTwin(0, 1f);
+                SpawnTwin(1, 1f);
+                Debug.Log($"[Raid] the Twins arrive with {_twinMaxHealth:0} health each");
+                return;
+            }
             var random = new Unity.Mathematics.Random(NextSeed() | 1u);
             var state = new EnemyState { Family = EnemyFamily.Bulwark, MaxHealth = health, Raid = true };
             state.Boss = BulwarkBehavior.Create(ToVec(RaidArena.Center), random.NextFloat(0f, 360f), _bulwark);
@@ -131,6 +145,26 @@ namespace FriendlyPersonShooter.Arena
             SpawnEnemy(state, state.Boss.Position);
             _spawned.Clear();
             Debug.Log($"[Raid] the Bulwark arrives with {health:0} health");
+        }
+
+        private void SpawnTwin(int twin, float healthShare)
+        {
+            var home = RaidArena.Center + new float3(twin == 0 ? -RaidTwins.Apart : RaidTwins.Apart, 0f, 0f);
+            var state = new EnemyState { Family = EnemyFamily.Bulwark, MaxHealth = _twinMaxHealth, Raid = true, Twin = twin };
+            // The two plates start facing opposite ways, so the group has to split to cover both.
+            state.Boss = BulwarkBehavior.Create(ToVec(home), twin * 180f, _bulwark);
+            _spawned.Clear();
+            SpawnEnemy(state, state.Boss.Position);
+            _spawned.Clear();
+            if (healthShare < 1f) state.Vitals.SetHealth(_twinMaxHealth * healthShare);
+        }
+
+        /// <summary>Both twins' health together, 0..1 (a fallen twin counts as empty).</summary>
+        private float TwinsHealthFraction()
+        {
+            float sum = 0f;
+            foreach (var s in _enemies.Values) if (s.Twin >= 0 && s.Raid) sum += s.Vitals.Health;
+            return sum / System.Math.Max(1f, 2f * _twinMaxHealth);
         }
 
         private void StepRaidRun(EntityCommandBuffer ecb)
@@ -173,6 +207,12 @@ namespace FriendlyPersonShooter.Arena
                 _roomPlayers.Add((id, RaidArena.ToRoom(room, pos), !st.Vitals.IsDown));
             }
             if (!_run.AtBoss) StepRoom(ecb);
+            else if (_run.Twins != null && _run.Twins.Step(_time, out int revived) == TwinEvent.Revived)
+            {
+                SpawnTwin(revived, RaidTwins.ReviveHealth);
+                _announce.Add((AnnounceKind.TwinRevived, revived, 0, 0));
+                Debug.Log($"[Raid] twin {revived} is back");
+            }
 
             if (_raidWaveDue > 0)
             {
@@ -207,10 +247,28 @@ namespace FriendlyPersonShooter.Arena
             Debug.Log($"[Raid] wave {wave}: {skitters} Skitters{(wave >= 2 ? " + a Mite swarm" : "")}");
         }
 
-        /// <summary>The boss died (called from KillEnemy, mid-shot): the run ends on the raid's next step.</summary>
-        private void RaidBossKilled()
+        /// <summary>
+        /// A boss died (called from KillEnemy, mid-shot): the run ends on the raid's next step, unless it was
+        /// the first of the Twins, which starts their clock.
+        /// </summary>
+        private void RaidBossKilled(EnemyState s)
         {
-            if (_raid != null && _raid.Phase == RaidPhase.Running && _run != null && _run.AtBoss) _raidBossDead = true;
+            if (_raid == null || _raid.Phase != RaidPhase.Running || _run == null || !_run.AtBoss) return;
+            if (_run.Twins == null || s.Twin < 0)
+            {
+                _raidBossDead = true;
+                return;
+            }
+            switch (_run.Twins.Killed(s.Twin, _time))
+            {
+                case TwinEvent.FirstDown:
+                    _announce.Add((AnnounceKind.TwinDown, (int)RaidTwins.Window, s.Twin, 0));
+                    Debug.Log($"[Raid] twin {s.Twin} fell; {RaidTwins.Window:0}s for the other");
+                    break;
+                case TwinEvent.Beaten:
+                    _raidBossDead = true;
+                    break;
+            }
         }
 
         private void EndRaid(RaidOutcome outcome, EntityCommandBuffer ecb)
@@ -222,7 +280,7 @@ namespace FriendlyPersonShooter.Arena
 
             // Whatever is left of the fight goes away (no drops).
             ClearRaidEnemies(ecb);
-            string reached = _run == null ? "" : $" at stage {_run.Stage + 1}/{_run.StageCount} ({RaidRoomLayout.NameOf(_run.Room)})";
+            string reached = _run == null ? "" : $" at stage {_run.Stage + 1}/{_run.StageCount} ({_run.StageName})";
             _run = null;
 
             // Everyone inside comes back down by the door. On a clear the downed get back up and everyone
@@ -321,7 +379,7 @@ namespace FriendlyPersonShooter.Arena
         {
             if (_raid == null) return "";
             float bossHealth = -1f;
-            foreach (var s in _enemies.Values) if (s.Family == EnemyFamily.Bulwark && s.Raid) bossHealth = s.Vitals.Health;
+            foreach (var s in _enemies.Values) if (s.Family == EnemyFamily.Bulwark && s.Raid) bossHealth = System.Math.Max(0f, bossHealth) + s.Vitals.Health;
             return $"phase={_raid.Phase} key=R{_raid.Pledged(EssenceColor.Red)}/G{_raid.Pledged(EssenceColor.Green)} pledged={_raidPledged} " +
                    $"inside=[{(_raid.Phase == RaidPhase.Running ? string.Join(",", _raid.Participants) : "")}] boss={bossHealth:0} started={_raidsStarted} cleared={_raidsCleared} " +
                    $"failed={_raidsFailed} results=[{_raidResults}] {RunLog()}";

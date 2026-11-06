@@ -185,9 +185,14 @@ namespace FriendlyPersonShooter.Arena
         RaidRoomSolved = 19,
         /// <summary>
         /// Raid run: a room set the group back. Value = (int)RaidRoomKind, Other = why (0 wrong crystal,
-        /// 1 too slow, 2 storm timer), Player = who hit the wrong crystal.
+        /// 1 too slow, 2 storm timer, 3 wrong rune, 4 runes too slow, 5 the core broke), Player = who hit
+        /// the wrong crystal or rune.
         /// </summary>
         RaidSetback = 20,
+        /// <summary>The Twins: one fell. Value = seconds the group has to kill the other.</summary>
+        TwinDown = 21,
+        /// <summary>The Twins: too slow, the fallen twin is back.</summary>
+        TwinRevived = 22,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

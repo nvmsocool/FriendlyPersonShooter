@@ -6,7 +6,8 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>
     /// How a bot plays the raid run's rooms (Docs/RaidDevPlan.md), from what its HUD status shows:
     /// shoot the next crystal unless it lit the last one, hold its plate, hop the gauntlet stones
-    /// (jumping sweepers that are about to reach it), and walk into an open portal.
+    /// (jumping sweepers that are about to reach it), watch its wall's runes and shoot them back, guard
+    /// the core, and walk into an open portal. Layouts come from the status's room seed.
     /// </summary>
     public partial class ArenaBotSystem
     {
@@ -18,6 +19,12 @@ namespace FriendlyPersonShooter.Arena
         private double _lockSeenAt;
         private float _clockSeen = -1f, _clockBase;
         private double _clockAt;
+        /// <summary>Echo Runes: the sequence this bot watched its wall flash, and what it last saw.</summary>
+        private readonly System.Collections.Generic.List<int> _runeSeq = new System.Collections.Generic.List<int>();
+        private int _runeLitSeen = -1;
+        private bool _runeShowSeen;
+        private int _runeIndexSeen = -1;
+        private double _runeIndexAt;
 
         private static bool InRoom(in ExpeditionStatus s, RaidRoomKind kind) => s.InRaid && s.RaidStageCount > 0 && s.RaidRoom == kind;
 
@@ -27,6 +34,7 @@ namespace FriendlyPersonShooter.Arena
         /// </summary>
         private bool CrystalAim(float dt, float3 eye, in ExpeditionStatus s, ref ArenaInput input)
         {
+            if (InRoom(s, RaidRoomKind.EchoRunes)) return RuneAim(dt, eye, s, ref input);
             if (!InRoom(s, RaidRoomKind.ColorLocks) || s.RaidPortal > -1.5f || s.RaidYouHitLast) return false;
             int packed = s.RaidRoomData;
             if (ColorLocks.LengthOf(packed) == 0) return false;
@@ -38,12 +46,52 @@ namespace FriendlyPersonShooter.Arena
             }
             if (now - _lockSeenAt < 0.5 + 0.35 * (_seat % 4)) return false;
             int next = ColorLocks.CrystalOf(packed, ColorLocks.IndexOf(packed));
-            var layout = RaidRoomLayout.For(RaidRoomKind.ColorLocks);
+            var layout = RaidRoomLayout.For(RaidRoomKind.ColorLocks, s.RaidRoomSeed);
             var p = RaidArena.FromRoom(RaidRoomKind.ColorLocks, layout.Targets[next]);
             var aim = _aim.Step(dt, ToVec(eye), -1000 - next, ToVec(p), RaidRoomLayout.CrystalRadius * 0.8f);
             input.Yaw = aim.Yaw;
             input.Pitch = aim.Pitch;
             bool clear = ArenaLayout.RaycastCover(eye, math.normalize(p - eye), math.distance(eye, p) - RaidRoomLayout.CrystalRadius) == float.MaxValue;
+            input.Fire = aim.Fire && clear ? 1 : 0;
+            return true;
+        }
+
+        /// <summary>The Echo Runes wall a bot looks after: even seats west, odd seats east.</summary>
+        private int RuneSet => _seat % 2;
+
+        /// <summary>
+        /// Echo Runes: watch this bot's wall during its show and note each rune as it lights; once the show
+        /// is over, shoot the noted sequence back, the next rune a moment after the last one counted.
+        /// </summary>
+        private bool RuneAim(float dt, float3 eye, in ExpeditionStatus s, ref ArenaInput input)
+        {
+            if (s.RaidPortal > -1.5f) return false;
+            int packed = s.RaidRoomData;
+            int set = RuneSet;
+            int length = EchoRunes.LengthOf(packed);
+            bool showing = EchoRunes.ShowingOf(packed, set);
+            if (showing && !_runeShowSeen) _runeSeq.Clear();
+            _runeShowSeen = showing;
+            int lit = EchoRunes.LitOf(packed, set);
+            if (showing && lit >= 0 && lit != _runeLitSeen) _runeSeq.Add(lit);
+            _runeLitSeen = lit;
+            if (showing || EchoRunes.DoneOf(packed, set) || length == 0 || _runeSeq.Count != length) return false;
+
+            int index = EchoRunes.IndexOf(packed, set);
+            double now = World.Time.ElapsedTime;
+            if (index != _runeIndexSeen)
+            {
+                _runeIndexSeen = index;
+                _runeIndexAt = now;
+            }
+            if (index >= length || now - _runeIndexAt < 0.45 + 0.3 * ((_seat / 2) % 3)) return false;
+            int rune = _runeSeq[index];
+            var layout = RaidRoomLayout.For(RaidRoomKind.EchoRunes, s.RaidRoomSeed);
+            var p = RaidArena.FromRoom(RaidRoomKind.EchoRunes, layout.Targets[set * EchoRunes.RunesPerSet + rune]);
+            var aim = _aim.Step(dt, ToVec(eye), -2000 - rune - 10 * set, ToVec(p), RaidRoomLayout.RuneRadius * 0.7f);
+            input.Yaw = aim.Yaw;
+            input.Pitch = aim.Pitch;
+            bool clear = ArenaLayout.RaycastCover(eye, math.normalize(p - eye), math.distance(eye, p) - RaidRoomLayout.RuneRadius) == float.MaxValue;
             input.Fire = aim.Fire && clear ? 1 : 0;
             return true;
         }
@@ -58,7 +106,7 @@ namespace FriendlyPersonShooter.Arena
             jump = false;
             if (!s.InRaid || s.RaidStageCount == 0 || s.RaidRoom == RaidRoomKind.Boss) return false;
             var room = s.RaidRoom;
-            var layout = RaidRoomLayout.For(room);
+            var layout = RaidRoomLayout.For(room, s.RaidRoomSeed);
             if (s.RaidPortal > -1.5f)
             {
                 anchor = RaidArena.FromRoom(room, layout.Portal);
@@ -83,6 +131,21 @@ namespace FriendlyPersonShooter.Arena
                     anchor = GauntletAnchor(pos, grounded, s, layout, out jump);
                     straight = true;
                     return true;
+                case RaidRoomKind.EchoRunes:
+                {
+                    // In front of this bot's wall, in its half of the room.
+                    var rune = layout.Targets[RuneSet * EchoRunes.RunesPerSet];
+                    float x = rune.X < 0f ? -11f - (_seat / 2) % 3 * 2f : 11f + (_seat / 2) % 3 * 2f;
+                    anchor = RaidArena.FromRoom(room, new System.Numerics.Vector3(x, 0f, rune.Z + ((_seat / 2) % 2 == 0 ? -2f : 2f)));
+                    return true;
+                }
+                case RaidRoomKind.HoldCore:
+                {
+                    // Around the core, spread out, to shoot the runners coming in.
+                    float a = _seat * 2.4f;
+                    anchor = RaidArena.FromRoom(room, new System.Numerics.Vector3(math.sin(a) * 5.5f, 0f, math.cos(a) * 5.5f));
+                    return true;
+                }
                 default:
                     return false;
             }
@@ -107,9 +170,12 @@ namespace FriendlyPersonShooter.Arena
             if (grounded && on == _gauntletStone)
             {
                 // A sweeper about to reach us: hop it in place (heading on mid-hop would land in the gap).
+                // Right by a pivot the arm always clips you, so there it's better to walk off than to hop.
                 float clock = Clock(s);
                 foreach (var sw in layout.Sweepers)
                 {
+                    float px = local.X - sw.Pivot.X, pz = local.Z - sw.Pivot.Z;
+                    if (px * px + pz * pz < 1.1f * 1.1f) continue;
                     if (!GauntletRun.Swept(sw, local, clock, clock + 0.3)) continue;
                     jump = true;
                     _hopping = true;

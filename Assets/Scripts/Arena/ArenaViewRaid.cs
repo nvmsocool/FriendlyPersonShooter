@@ -61,6 +61,10 @@ namespace FriendlyPersonShooter.Arena
         private static readonly RaidSettings RaidRules = new RaidSettings();
         private static readonly BulwarkSettings BossLook = new BulwarkSettings();
         private float _bossHealth, _bossMax;
+        private readonly float[] _twinPlateAnim = new float[2];
+        private readonly float[] _twinHealth = new float[2];
+        private readonly bool[] _twinOpen = new bool[2];
+        private float _twinMax;
         private bool _bossSeen, _bossOpen, _bossWarn;
         /// <summary>Last frame's boss state, for the arena's state-colored glow (drawn before the enemies).</summary>
         private bool _bossVisible, _bossTele, _bossEnraged;
@@ -399,7 +403,16 @@ namespace FriendlyPersonShooter.Arena
                 AddWorldBoss(en, p);
                 return;
             }
-            AddBossShape(en, p, ref _plateAnim, Near(RaidArena.Center).y);
+            if (TryGetStatus(out var st) && st.RaidBoss == RaidBossKind.Twins)
+            {
+                // The Twins: west of the middle is twin 0, east is twin 1.
+                int twin = p.x < Near(RaidArena.Center).x ? 0 : 1;
+                AddBossShape(en, p, ref _twinPlateAnim[twin], Near(RaidArena.Center).y);
+                _twinHealth[twin] = en.Health;
+                _twinMax = en.MaxHealth;
+                _twinOpen[twin] = en.PlateOpen;
+            }
+            else AddBossShape(en, p, ref _plateAnim, Near(RaidArena.Center).y);
             _bossSeen = true;
             _bossHealth = en.Health;
             _bossMax = en.MaxHealth;
@@ -588,7 +601,19 @@ namespace FriendlyPersonShooter.Arena
             if (s.InRaid)
             {
                 if (s.RaidStageCount > 0) WriteRoomHud(s, e);
-                if (_bossSeen && _bossMax > 0f && s.RaidRoom == RaidRoomKind.Boss)
+                if (_bossSeen && _twinMax > 0f && s.RaidRoom == RaidRoomKind.Boss && s.RaidBoss == RaidBossKind.Twins)
+                {
+                    for (int twin = 0; twin < 2; twin++)
+                    {
+                        bool down = (s.RaidRoomData & (1 << twin)) != 0;
+                        float f = down ? 0f : math.saturate(_twinHealth[twin] / _twinMax);
+                        int bars = Mathf.RoundToInt(f * 16f);
+                        string state = down ? $"<color=#FFD84D><b>DOWN</b>: kill the other in {Mathf.CeilToInt(s.RaidRoomTimer)}s!</color>"
+                            : _twinOpen[twin] ? "<color=#FFD84D>PLATE OPEN</color>" : "";
+                        e.Append($"<color=#D9B3FF><b>{(twin == 0 ? "WEST" : "EAST")} TWIN</b></color> [{new string('|', bars)}{new string('.', 16 - bars)}] {f * 100f:0}%  {state}\n");
+                    }
+                }
+                else if (_bossSeen && _bossMax > 0f && s.RaidRoom == RaidRoomKind.Boss)
                 {
                     float f = math.saturate(_bossHealth / _bossMax);
                     int bars = Mathf.RoundToInt(f * 24f);
@@ -639,7 +664,7 @@ namespace FriendlyPersonShooter.Arena
                         ? "<color=#FF8080>The raid ran out of time</color>\n"
                         : "<color=#FF8080>The raid group was wiped</color>\n";
                 case AnnounceKind.RaidAdds:
-                    return "<color=#FF9A40>The Bulwark calls for help: adds incoming!</color>\n";
+                    return "<color=#FF9A40>The boss calls for help: adds incoming!</color>\n";
                 case AnnounceKind.RaidPledged:
                     return $"{PlayerColors.Tag(m.PlayerNetworkId)} pledged {m.Value} to the raid key\n";
                 case AnnounceKind.GateUnlocked:

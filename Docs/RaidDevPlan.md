@@ -63,9 +63,14 @@ order and status.
 Tuning after the first Editor runs: the storm needs 8 + 2 per player kills in 90 s (was 10 + 3 in 75 s) and its Wisps don't shoot. Gauntlet hits are 6 and 5 (was 10 and 8) and can't take anyone below 10 health. Every portal heals everyone, so a hard room doesn't doom the next. Sweepers turn around their stone's centre, and standing on the pivot always gets you hit, so cross beside it (bots aim 1.3 m off centre).
 
 ### Phase 2: more variety
-- Echo Runes and Hold the Core rooms.
-- The Twins boss; the boss is picked per run.
-- Room layout variants (seeded placement of crystals, plates and stones), so a room repeats with a new shape.
+- [x] Core: `EchoRunes` and `HoldCore` room rules, `RaidTwins`, the boss rolled per run, with tests.
+- [x] Core: seeded layout variants for every room (pillar spots, plate spots, which stones sweep and how, rune patterns, gate spots and cover), with a playability test over 40 seeds.
+- [x] Server: rune hits from shots, core runners and bursts, the Twins (spawn, revive, combined add waves), per-room colliders rebuilt for each run's seed.
+- [x] Client: rune walls and the core drawn, HUD lines, Twin health bars with a revive countdown, announcements.
+- [x] Bots: watch their wall's runes and shoot them back, guard the core, cross varied gauntlets.
+- [x] Editor runs with 3 bots: Echo Runes about 30 s with no mistakes, a varied gauntlet and storm solved. Hold the Core breaks often for bots (they reached 70% with Swarming but never finished), and they reached a third of the Twins' health before wiping. Both are left to the playtest.
+
+Tuning after the Editor runs: core runners do 10 damage (10 reach it and it breaks) and Swarming adds half again to a core wave instead of doubling it. Runners are leashed to themselves, not their spawn, so they reach the core.
 
 ### Phase 3: the strange rooms
 - Lanterns and Sentinel Eye rooms.

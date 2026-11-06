@@ -34,6 +34,9 @@ namespace FriendlyPersonShooter.Core.Combat
         public EffectSet Debuffs { get; }
         public bool IsDead => Health <= 0f;
 
+        /// <summary>Sets health directly, within 0..max (a raid twin that comes back part-healed).</summary>
+        public void SetHealth(float health) => Health = Math.Max(0f, Math.Min(MaxHealth, health));
+
         /// <summary>Damage multiplier from Expose (1 when not exposed).</summary>
         public float DamageTakenMultiplier => 1f + Debuffs.StrengthOf(EffectKind.Expose);
 

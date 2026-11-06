@@ -4,7 +4,7 @@ using FriendlyPersonShooter.Core.Combat;
 
 namespace FriendlyPersonShooter.Core.Expedition
 {
-    /// <summary>Tunables for a raid run's stages (Docs/RaidDevPlan.md, phase 1).</summary>
+    /// <summary>Tunables for a raid run's stages (Docs/RaidDevPlan.md).</summary>
     public sealed class RaidRunSettings
     {
         public int RoomCount { get; set; } = 3;
@@ -22,9 +22,11 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     /// <summary>
     /// One raid run: <see cref="RaidRunSettings.RoomCount"/> different rooms picked at random from the
-    /// pool, then the boss, plus one run modifier. The current room's rules live in the matching property
-    /// (<see cref="Locks"/>, <see cref="Plates"/>, <see cref="Gauntlet"/>, <see cref="Storm"/>); the caller
-    /// feeds them and calls <see cref="MarkSolved"/>. A solved room opens a portal; once someone steps in,
+    /// pool, then a boss (the Bulwark or the Twins), plus one run modifier. Each room gets its own layout
+    /// seed (<see cref="RoomSeed"/>), so a room comes back in a new shape. The current room's rules live in
+    /// the matching property (<see cref="Locks"/>, <see cref="Plates"/>, <see cref="Gauntlet"/>,
+    /// <see cref="Storm"/>, <see cref="Runes"/>, <see cref="Core"/>); the caller feeds them and calls
+    /// <see cref="MarkSolved"/>. A solved room opens a portal; once someone steps in,
     /// <see cref="StepPortal"/> counts down and then says to move everyone to the next stage.
     /// </summary>
     public sealed class RaidRun
@@ -33,7 +35,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         private readonly uint _seed;
 
         public RaidRun(uint seed, int players, RaidRunSettings settings = null, RaidRoomKind first = RaidRoomKind.Boss,
-            RaidModifier modifier = RaidModifier.None)
+            RaidModifier modifier = RaidModifier.None, RaidBossKind? boss = null)
         {
             Settings = settings ?? new RaidRunSettings();
             Players = Math.Max(1, players);
@@ -48,18 +50,25 @@ namespace FriendlyPersonShooter.Core.Expedition
                 pool.RemoveAt(i);
             }
             Modifier = modifier != RaidModifier.None ? modifier : (RaidModifier)(1 + random.NextInt(3));
+            int bossRoll = random.NextInt(2);
+            Boss = boss ?? (RaidBossKind)bossRoll;
         }
 
         public RaidRunSettings Settings { get; }
         public int Players { get; }
         public IReadOnlyList<RaidRoomKind> Rooms => _rooms;
         public RaidModifier Modifier { get; }
+        public RaidBossKind Boss { get; }
         /// <summary>0..Rooms.Count-1 are rooms; Rooms.Count is the boss.</summary>
         public int Stage { get; private set; } = -1;
         public int StageCount => _rooms.Count + 1;
         public bool AtBoss => Stage >= _rooms.Count;
         public RaidRoomKind Room => Stage < 0 || AtBoss ? RaidRoomKind.Boss : _rooms[Stage];
-        public RaidRoomLayout Layout => RaidRoomLayout.For(Room);
+        /// <summary>The current room's layout seed (never 0, the plain layout).</summary>
+        public uint RoomSeed { get; private set; }
+        public RaidRoomLayout Layout => RaidRoomLayout.For(Room, RoomSeed);
+        /// <summary>The current stage's name: the room's, or the boss's.</summary>
+        public string StageName => AtBoss ? RaidRoomLayout.NameOf(Boss) : RaidRoomLayout.NameOf(Room);
         public double StageStartedAt { get; private set; }
         /// <summary>The current room is solved and its portal is open.</summary>
         public bool Solved { get; private set; }
@@ -70,6 +79,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         public HoldPlates Plates { get; private set; }
         public GauntletRun Gauntlet { get; private set; }
         public WispStorm Storm { get; private set; }
+        public EchoRunes Runes { get; private set; }
+        public HoldCore Core { get; private set; }
+        /// <summary>The boss stage with the Twins: their shared rule.</summary>
+        public RaidTwins Twins { get; private set; }
 
         public bool Swarming => Modifier == RaidModifier.Swarming;
         public int AddsMultiplier => Swarming ? 2 : 1;
@@ -90,10 +103,17 @@ namespace FriendlyPersonShooter.Core.Expedition
                     case RaidRoomKind.HoldPlates: return Plates.Progress;
                     case RaidRoomKind.Gauntlet: return Gauntlet.Progress;
                     case RaidRoomKind.WispStorm: return Storm.Progress;
+                    case RaidRoomKind.EchoRunes: return Runes.Progress;
+                    case RaidRoomKind.HoldCore: return Core.Progress(_now);
                     default: return 0f;
                 }
             }
         }
+
+        private double _now;
+
+        /// <summary>Tells the run the time, for <see cref="Progress"/> (Hold the Core runs on the clock).</summary>
+        public void Tick(double now) => _now = now;
 
         /// <summary>Enters the first stage.</summary>
         public void Begin(double now) => Enter(0, now);
@@ -108,13 +128,21 @@ namespace FriendlyPersonShooter.Core.Expedition
             Plates = null;
             Gauntlet = null;
             Storm = null;
+            Runes = null;
+            Core = null;
+            Twins = null;
+            _now = now;
             uint roomSeed = _seed * 2654435761u + (uint)stage * 40503u;
+            RoomSeed = (roomSeed ^ 0x9E3779B9u) | 1u;
+            if (AtBoss && Boss == RaidBossKind.Twins) Twins = new RaidTwins();
             switch (Room)
             {
                 case RaidRoomKind.ColorLocks: Locks = new ColorLocks(roomSeed, Players); break;
                 case RaidRoomKind.HoldPlates: Plates = new HoldPlates(Players); break;
                 case RaidRoomKind.Gauntlet: Gauntlet = new GauntletRun(Layout); break;
                 case RaidRoomKind.WispStorm: Storm = new WispStorm(Players, Swarming, now); break;
+                case RaidRoomKind.EchoRunes: Runes = new EchoRunes(roomSeed, Players, now); break;
+                case RaidRoomKind.HoldCore: Core = new HoldCore(Players, Swarming, now); break;
             }
         }
 

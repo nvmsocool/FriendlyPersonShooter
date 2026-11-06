@@ -106,7 +106,7 @@ namespace FriendlyPersonShooter.Arena
             kind = RaidRoomKind.Boss;
             if (!InRaidSpace(p)) return false;
             int k = (int)math.round((p.y - FloorY) / RoomSpacing);
-            if (k < 0 || k > (int)RaidRoomKind.WispStorm) return false;
+            if (k < 0 || k > (int)RaidRoomLayout.LastKind) return false;
             kind = (RaidRoomKind)k;
             return true;
         }
@@ -119,15 +119,8 @@ namespace FriendlyPersonShooter.Arena
             return FromRoom(kind, spawns[((i % spawns.Count) + spawns.Count) % spawns.Count]) + new float3(0f, 0.05f, 0f);
         }
 
-        /// <summary>Every room's boxes in world space (the boss arena's are in <see cref="Boxes"/>).</summary>
-        public static IEnumerable<(RaidRoomKind Kind, RaidBox Box, Vector3 Center)> RoomBoxes()
-        {
-            foreach (var kind in RaidRoomLayout.Pool)
-            {
-                var c = (Vector3)RoomCenter(kind);
-                foreach (var b in RaidRoomLayout.For(kind).Boxes) yield return (kind, b, c + new Vector3(b.Center.X, b.Center.Y, b.Center.Z));
-            }
-        }
+        /// <summary>Each room's collider root and the layout seed it was built with.</summary>
+        private static readonly Dictionary<RaidRoomKind, (GameObject Root, uint Seed)> _rooms = new Dictionary<RaidRoomKind, (GameObject, uint)>();
 
         /// <summary>Builds the arena's colliders once per scene (server and clients in one process share them).</summary>
         public static void Ensure()
@@ -135,6 +128,7 @@ namespace FriendlyPersonShooter.Arena
             if (!ExpeditionWorld.Active) return;
             if (_root != null && _boxesSeed == ExpeditionWorld.Map.Seed) return;
             if (_root != null) Object.Destroy(_root);
+            _rooms.Clear();
             _root = new GameObject("Raid Arena");
             _root.layer = 0;
             foreach (var b in Boxes)
@@ -145,15 +139,42 @@ namespace FriendlyPersonShooter.Arena
                 go.transform.position = b.Center;
                 go.AddComponent<BoxCollider>().size = b.Size;
             }
-            foreach (var (kind, b, center) in RoomBoxes())
+            foreach (var kind in RaidRoomLayout.Pool) BuildRoom(kind, 0u);
+            Physics.SyncTransforms();
+        }
+
+        /// <summary>
+        /// Makes a room's colliders match a layout seed (a run's shape of that room). Called by the server as
+        /// a stage begins and by each client from its status; a no-op once they match.
+        /// </summary>
+        public static void UseRoom(RaidRoomKind kind, uint seed)
+        {
+            if (kind == RaidRoomKind.Boss) return;
+            Ensure();
+            if (_root == null || (_rooms.TryGetValue(kind, out var built) && built.Seed == seed)) return;
+            BuildRoom(kind, seed);
+            Physics.SyncTransforms();
+        }
+
+        /// <summary>The layout seed a room's colliders were last built with (0 for the plain layout).</summary>
+        public static uint SeedOf(RaidRoomKind kind) => _rooms.TryGetValue(kind, out var built) ? built.Seed : 0u;
+
+        private static void BuildRoom(RaidRoomKind kind, uint seed)
+        {
+            if (_rooms.TryGetValue(kind, out var old) && old.Root != null) Object.Destroy(old.Root);
+            var root = new GameObject($"{kind} room");
+            root.layer = 0;
+            root.transform.SetParent(_root.transform, false);
+            var c = (Vector3)RoomCenter(kind);
+            foreach (var b in RaidRoomLayout.For(kind, seed).Boxes)
             {
                 var go = new GameObject($"{kind} {b.Kind}");
                 go.layer = 0;
-                go.transform.SetParent(_root.transform, false);
-                go.transform.position = center;
+                go.transform.SetParent(root.transform, false);
+                go.transform.position = c + new Vector3(b.Center.X, b.Center.Y, b.Center.Z);
                 go.AddComponent<BoxCollider>().size = new Vector3(b.Size.X, b.Size.Y, b.Size.Z);
             }
-            Physics.SyncTransforms();
+            _rooms[kind] = (root, seed);
         }
 
         /// <summary>True for a point over the platform (inside its walls) and near its height.</summary>

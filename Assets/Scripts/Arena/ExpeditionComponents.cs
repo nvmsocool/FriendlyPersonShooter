@@ -50,6 +50,9 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public int RaidStage;
         [GhostField] public int RaidStageCount;
         [GhostField] public Core.Expedition.RaidRoomKind RaidRoom;
+        /// <summary>The current room's layout seed (see RaidRoomLayout.For), and the run's boss.</summary>
+        [GhostField] public uint RaidRoomSeed;
+        [GhostField] public Core.Expedition.RaidBossKind RaidBoss;
         [GhostField] public Core.Expedition.RaidModifier RaidModifier;
         [GhostField] public int RaidRoomData;
         [GhostField(Quantization = 100)] public float RaidRoomProgress;

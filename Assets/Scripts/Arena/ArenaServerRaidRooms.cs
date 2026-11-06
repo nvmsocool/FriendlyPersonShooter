@@ -10,14 +10,16 @@ using Vector3 = System.Numerics.Vector3;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The rooms of a raid run on the server (Docs/RaidDevPlan.md, phase 1): which room the group is in,
-    /// feeding its rules (<see cref="RaidRun"/>), adds, room pay, and the portal to the next stage.
+    /// The rooms of a raid run on the server (Docs/RaidDevPlan.md): which room the group is in, feeding
+    /// its rules (<see cref="RaidRun"/>), adds, room pay, and the portal to the next stage.
     /// </summary>
     public partial class ArenaServerSystem
     {
         /// <summary>Debug: make the next run start with this room (Boss = random), and use this modifier.</summary>
         public static RaidRoomKind DebugRaidRoom = RaidRoomKind.Boss;
         public static RaidModifier DebugRaidModifier = RaidModifier.None;
+        /// <summary>Debug: the next run's boss (null = random).</summary>
+        public static RaidBossKind? DebugRaidBoss;
         /// <summary>Debug: solve the current room on the next raid step.</summary>
         public static bool DebugSolveRoom;
 
@@ -25,7 +27,7 @@ namespace FriendlyPersonShooter.Arena
         private double _roomStepAt;
         private double _nextRoomAdds;
         private int _roomAddWave;
-        private int _roomsSolved, _setbacks, _crystalHits, _sweeperHits, _falls;
+        private int _roomsSolved, _setbacks, _crystalHits, _sweeperHits, _falls, _runeHits, _coreBursts;
         private readonly List<(int Id, Vector3 Feet, bool Up)> _roomPlayers = new List<(int, Vector3, bool)>();
         private readonly List<int> _swept = new List<int>();
         private readonly List<int> _fell = new List<int>();
@@ -40,9 +42,11 @@ namespace FriendlyPersonShooter.Arena
             _nextRoomAdds = _time + 10.0;
             _roomAddWave = 0;
             if (_run.AtBoss) SpawnRaidBoss(n);
+            // This run's shape of the room: its colliders before anyone lands in it.
+            else RaidArena.UseRoom(_run.Room, _run.RoomSeed);
             for (int i = 0; i < n; i++) TeleportPlayer(inside[i], RaidArena.RoomSpawn(_run.Room, i, n));
             _announce.Add((AnnounceKind.RaidStage, (int)_run.Room, _run.Stage, (int)_run.Modifier));
-            Debug.Log($"[Raid] stage {_run.Stage + 1}/{_run.StageCount}: {RaidRoomLayout.NameOf(_run.Room)} ({_run.Modifier})");
+            Debug.Log($"[Raid] stage {_run.Stage + 1}/{_run.StageCount}: {_run.StageName} seed {_run.RoomSeed} ({_run.Modifier})");
         }
 
         /// <summary>The current room, at the raid's 10 Hz step. <see cref="_roomPlayers"/> holds who is inside.</summary>
@@ -51,6 +55,7 @@ namespace FriendlyPersonShooter.Arena
             double t0 = _run.StageTime(_roomStepAt), t1 = _run.StageTime(_time);
             float dt = (float)(_time - _roomStepAt);
             _roomStepAt = _time;
+            _run.Tick(_time);
             if (DebugSolveRoom)
             {
                 DebugSolveRoom = false;
@@ -107,7 +112,78 @@ namespace FriendlyPersonShooter.Arena
                     if (_run.Storm.Solved) RoomSolved(ecb);
                     else KeepStormUp();
                     break;
+                case RaidRoomKind.EchoRunes:
+                    if (_run.Runes.Step(_time)) Setback(4, 0);
+                    if (_run.Runes.Solved) RoomSolved(ecb);
+                    else RoomAdds(26.0, 1 + _run.Players / 4, false);
+                    break;
+                case RaidRoomKind.HoldCore:
+                    switch (_run.Core.Step(_time))
+                    {
+                        case CoreEvent.Wave:
+                            SpawnRunners(_run.Core.WaveSize);
+                            break;
+                        case CoreEvent.Broke:
+                            ClearRaidEnemies(ecb);
+                            Setback(5, 0);
+                            break;
+                        case CoreEvent.Solved:
+                            RoomSolved(ecb);
+                            break;
+                    }
+                    break;
             }
+        }
+
+        /// <summary>Hold the Core: a wave of runners, spread over the three gates.</summary>
+        private void SpawnRunners(int count)
+        {
+            var targets = _run.Layout.Targets;
+            var random = new Unity.Mathematics.Random(NextSeed() | 1u);
+            _spawned.Clear();
+            int first = random.NextInt(HoldCore.Gates);
+            for (int i = 0; i < count; i++)
+            {
+                var gate = targets[1 + (first + i) % HoldCore.Gates];
+                var o = random.NextFloat2Direction() * random.NextFloat(0f, 1.5f);
+                var at = RaidArena.FromRoom(RaidRoomKind.HoldCore, new Vector3(gate.X + o.x, gate.Y, gate.Z + o.y));
+                SpawnSkitter(new Vector3(at.x, at.y + _skitter.BodyRadius, at.z));
+            }
+            foreach (var s in _spawned)
+            {
+                s.Raid = true;
+                s.CoreRunner = true;
+            }
+            _spawned.Clear();
+        }
+
+        /// <summary>A runner heads for the core, weaving a little so it isn't a straight-line shot.</summary>
+        private void SteerRunner(ref SkitterBehavior k)
+        {
+            k.TimeToTurn = 99f;
+            // Skitters are leashed to where they spawned; a runner's leash goes with it.
+            k.Home = k.Position;
+            if (_run == null || _run.Room != RaidRoomKind.HoldCore) return;
+            var c = RaidArena.RoomCenter(RaidRoomKind.HoldCore);
+            float dx = c.x - k.Position.X, dz = c.z - k.Position.Z;
+            float len = math.sqrt(dx * dx + dz * dz);
+            if (len < 0.01f) return;
+            float weave = 0.45f * math.sin((float)_time * 2.3f + _run.Core.Waves * 1.7f);
+            float cs = math.cos(weave), sn = math.sin(weave);
+            float hx = dx / len, hz = dz / len;
+            k.Heading = new Vector3(hx * cs - hz * sn, 0f, hx * sn + hz * cs);
+        }
+
+        /// <summary>True when a runner reached the core: it bursts (the caller removes it) and cracks the core.</summary>
+        private bool RunnerBurst(Vector3 p)
+        {
+            if (_run == null || _run.Room != RaidRoomKind.HoldCore || _run.Core == null || _run.Solved) return false;
+            var c = RaidArena.RoomCenter(RaidRoomKind.HoldCore);
+            float dx = p.X - c.x, dz = p.Z - c.z;
+            if (dx * dx + dz * dz > HoldCore.BurstRadius * HoldCore.BurstRadius) return false;
+            _coreBursts++;
+            _run.Core.Burst();
+            return true;
         }
 
         /// <summary>A sweeper or a fall: stings, but never takes anyone below <see cref="GauntletRun.HealthFloor"/>.</summary>
@@ -234,23 +310,27 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// Color Locks: the distance along a shot to the nearest crystal it passes through (and which), or
-        /// -1 for none. Called before the shot looks for enemies, so a crystal in front stops it.
+        /// Color Locks and Echo Runes: the distance along a shot to the nearest crystal or rune it passes
+        /// through (and which), or -1 for none. Called before the shot looks for enemies, so a crystal or
+        /// rune in front stops it.
         /// </summary>
         private int CrystalOnShot(int shooterId, float3 eye, float3 dir, float range, out float distance)
         {
             distance = range;
-            if (_run == null || _run.Room != RaidRoomKind.ColorLocks || _run.Solved || !InsideRaid(shooterId)) return -1;
+            if (_run == null || _run.Solved || !InsideRaid(shooterId)) return -1;
+            var room = _run.Room;
+            if (room != RaidRoomKind.ColorLocks && room != RaidRoomKind.EchoRunes) return -1;
+            float radius = room == RaidRoomKind.EchoRunes ? RaidRoomLayout.RuneRadius : RaidRoomLayout.CrystalRadius;
             int best = -1;
             var targets = _run.Layout.Targets;
             for (int i = 0; i < targets.Count; i++)
             {
-                var c = RaidArena.FromRoom(RaidRoomKind.ColorLocks, targets[i]);
+                var c = RaidArena.FromRoom(room, targets[i]);
                 var oc = c - eye;
                 float along = math.dot(oc, dir);
                 if (along < 0f || along > distance) continue;
                 float miss2 = math.lengthsq(oc - dir * along);
-                float r2 = RaidRoomLayout.CrystalRadius * RaidRoomLayout.CrystalRadius;
+                float r2 = radius * radius;
                 if (miss2 > r2) continue;
                 float d = along - math.sqrt(r2 - miss2);
                 if (d < distance)
@@ -264,6 +344,13 @@ namespace FriendlyPersonShooter.Arena
 
         private void CrystalHit(int crystal, int shooterId)
         {
+            if (_run.Room == RaidRoomKind.EchoRunes)
+            {
+                _runeHits++;
+                var hit = _run.Runes.Hit(crystal / EchoRunes.RunesPerSet, crystal % EchoRunes.RunesPerSet, _time);
+                if (hit == RuneHit.Wrong) Setback(3, shooterId);
+                return;
+            }
             int up = 0;
             foreach (int id in _raid.Participants)
             {
@@ -291,6 +378,8 @@ namespace FriendlyPersonShooter.Arena
             status.RaidStage = _run.Stage;
             status.RaidStageCount = _run.StageCount;
             status.RaidRoom = _run.Room;
+            status.RaidRoomSeed = _run.AtBoss ? 0u : _run.RoomSeed;
+            status.RaidBoss = _run.Boss;
             status.RaidModifier = _run.Modifier;
             status.RaidRoomProgress = _run.Progress;
             status.RaidRoomClock = (float)_run.StageTime(_time);
@@ -313,8 +402,17 @@ namespace FriendlyPersonShooter.Arena
                     status.RaidRoomData = _run.Storm.Kills | (_run.Storm.Target << 8);
                     status.RaidRoomTimer = (float)_run.Storm.TimeLeft(_time);
                     break;
+                case RaidRoomKind.EchoRunes:
+                    status.RaidRoomData = _run.Runes.Pack(_time);
+                    break;
+                case RaidRoomKind.HoldCore:
+                    status.RaidRoomData = _run.Core.Pack(_time);
+                    status.RaidRoomTimer = (float)_run.Core.TimeLeft(_time);
+                    break;
                 default:
-                    status.RaidRoomData = 0;
+                    // The Twins: bit i set while twin i is down, and the time left to kill the other.
+                    status.RaidRoomData = _run.Twins == null ? 0 : (_run.Twins.IsDown(0) ? 1 : 0) | (_run.Twins.IsDown(1) ? 2 : 0);
+                    status.RaidRoomTimer = _run.Twins == null ? 0f : (float)System.Math.Max(0, _run.Twins.TimeLeft(_time));
                     break;
             }
         }
@@ -342,13 +440,22 @@ namespace FriendlyPersonShooter.Arena
                     return $"{stage} Sweeper Gauntlet: jump the stones and the sweepers. Everyone up must reach the far pad";
                 case RaidRoomKind.WispStorm:
                     return $"{stage} Wisp Storm: kill {_run.Storm.Target} Wisps before the timer runs out";
+                case RaidRoomKind.EchoRunes:
+                    return $"{stage} Echo Runes: watch each wall's runes flash, then shoot them back in order. Split up: one wall each side";
+                case RaidRoomKind.HoldCore:
+                    return $"{stage} Hold the Core: keep the core alive for {HoldCore.Duration:0}s. Kill the Skitters running at it";
                 default:
-                    return $"{stage} Break the Bulwark: shoot its plate while it's open (gold)";
+                    return _run.Boss == RaidBossKind.Twins
+                        ? $"{stage} Break the Twins: shoot their gold plates, and kill both within {RaidTwins.Window:0}s of each other"
+                        : $"{stage} Break the Bulwark: shoot its plate while it's open (gold)";
             }
         }
 
         private string RunLog() => _run == null ? "run=none" :
             $"run=[{string.Join(">", _run.Rooms)}] mod={_run.Modifier} stage={_run.Stage}/{_run.StageCount} solved={_run.Solved} progress={_run.Progress:0.00} " +
-            $"roomsSolved={_roomsSolved} setbacks={_setbacks} crystalHits={_crystalHits} sweeperHits={_sweeperHits} falls={_falls}";
+            $"boss={_run.Boss} seed={_run.RoomSeed} roomsSolved={_roomsSolved} setbacks={_setbacks} crystalHits={_crystalHits} sweeperHits={_sweeperHits} " +
+            $"falls={_falls} runeHits={_runeHits} coreBursts={_coreBursts}" +
+            (_run.Core != null ? $" core={_run.Core.HealthFraction:0.00}" : "") +
+            (_run.Twins != null ? $" twinsDown={(_run.Twins.IsDown(0) ? 1 : 0) + (_run.Twins.IsDown(1) ? 1 : 0)} revivals={_run.Twins.Revivals}" : "");
     }
 }

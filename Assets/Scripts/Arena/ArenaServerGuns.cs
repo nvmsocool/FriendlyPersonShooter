@@ -464,7 +464,10 @@ namespace FriendlyPersonShooter.Arena
             foreach (var (state, feet) in _interacts) Interact(state, feet, ecb);
         }
 
-        /// <summary>E: take the nearest item you may take; failing that, open the nearest box you haven't opened.</summary>
+        /// <summary>
+        /// E: take the nearest item you may take; failing that, start the raid countdown if you're at the door
+        /// with a full key; failing that, open the nearest box you haven't opened.
+        /// </summary>
         private void Interact(PlayerState state, float3 feet, EntityCommandBuffer ecb)
         {
             int id = state.Vitals.Id;
@@ -496,6 +499,7 @@ namespace FriendlyPersonShooter.Arena
                 return;
             }
 
+            if (TryStartRaid(id, feet)) return;
             if (_boxes == null) return;
             int box = -1;
             float3 boxPos = default;

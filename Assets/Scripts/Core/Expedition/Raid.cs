@@ -13,9 +13,9 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// </summary>
         public int RedCost { get; set; } = 20;
         public int GreenCost { get; set; } = 12;
-        /// <summary>Stand this close to the door to pledge and to be counted in.</summary>
+        /// <summary>Stand this close to the door to pledge, to start the countdown (E), and to be counted in.</summary>
         public float UseRadius { get; set; } = 7f;
-        /// <summary>Once the key is full: seconds everyone has to reach the door before it takes them in.</summary>
+        /// <summary>Once someone starts it: seconds everyone has to reach the door before it takes them in.</summary>
         public float GatherSeconds { get; set; } = 20f;
         /// <summary>A run (three rooms and the boss) ends as a loss after this long.</summary>
         public float TimeLimit { get; set; } = 720f;
@@ -31,9 +31,9 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     public enum RaidPhase : byte
     {
-        /// <summary>Taking pledges toward the key.</summary>
+        /// <summary>Taking pledges toward the key; with a full key, waiting for someone at the door to press E.</summary>
         Collecting = 0,
-        /// <summary>The key is full: a countdown, then whoever stands at the door goes in.</summary>
+        /// <summary>Someone started the countdown; when it ends, whoever stands at the door goes in.</summary>
         Gathering = 1,
         /// <summary>A group is inside fighting the boss.</summary>
         Running = 2,
@@ -54,9 +54,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     public enum RaidDoorEvent : byte
     {
         None = 0,
-        /// <summary>The key just filled with someone at the door: the countdown started.</summary>
-        GatherStarted,
-        /// <summary>The countdown ended with nobody at the door; the key stays full for next time.</summary>
+        /// <summary>The countdown ended with nobody at the door; the key stays full until someone starts it again.</summary>
         GatherCancelled,
         /// <summary>The countdown ended and <see cref="RaidDoor.Participants"/> went in.</summary>
         Started,
@@ -66,8 +64,9 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     /// <summary>
     /// A raid door (MVP step 6). Players standing at it pledge Red and Green essence toward its key,
-    /// carried first, then from their party bank; strangers pool into the same key. When the key is
-    /// full a short countdown starts, and whoever is standing at the door when it ends goes in together
+    /// carried first, then from their party bank; strangers pool into the same key. Once the key is
+    /// full, anyone at the door can press E to start a short countdown (<see cref="Begin"/>), so the
+    /// group decides when it is ready; whoever is standing at the door when it ends goes in together
     /// (up to 8). The run ends when the boss dies, when everyone inside is down at once, or at the time
     /// limit; then the door resets and takes pledges for a new key. One run at a time per door.
     /// </summary>
@@ -104,6 +103,18 @@ namespace FriendlyPersonShooter.Core.Expedition
             }
         }
 
+        /// <summary>The key is full and the door waits for someone at it to start the countdown.</summary>
+        public bool Ready => Phase == RaidPhase.Collecting && KeyFull;
+
+        /// <summary>Someone at the door pressed E: with a full key, the countdown starts. Returns true if it did.</summary>
+        public bool Begin(double now)
+        {
+            if (!Ready) return false;
+            Phase = RaidPhase.Gathering;
+            PhaseEnds = now + Settings.GatherSeconds;
+            return true;
+        }
+
         /// <summary>
         /// Moves what the key still needs from the wallet (carried first, then banked) into the key.
         /// Only while collecting. Returns how much essence moved.
@@ -132,14 +143,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         {
             switch (Phase)
             {
-                case RaidPhase.Collecting:
-                    if (KeyFull && atDoor.Count > 0)
-                    {
-                        Phase = RaidPhase.Gathering;
-                        PhaseEnds = now + Settings.GatherSeconds;
-                        return RaidDoorEvent.GatherStarted;
-                    }
-                    return RaidDoorEvent.None;
                 case RaidPhase.Gathering:
                     if (now < PhaseEnds) return RaidDoorEvent.None;
                     if (atDoor.Count == 0)

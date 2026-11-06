@@ -12,8 +12,8 @@ namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
     /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Red and Green
-    /// toward its key (carried first, then the party bank), strangers into the same key. A full key starts
-    /// a countdown; whoever stands at the door when it ends goes up together for a run (see
+    /// toward its key (carried first, then the party bank), strangers into the same key. With a full key,
+    /// anyone at the door presses E to start a countdown; whoever stands at the door when it ends goes up together for a run (see
     /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
     /// group on the raid arena (<see cref="RaidArena"/>). Clearing it gives everyone inside a level's
     /// worth of XP and some Yellow; a wipe or the time limit sends them back down.
@@ -26,7 +26,7 @@ namespace FriendlyPersonShooter.Arena
         private const float RaidCallRadius = 300f;
 
         /// <summary>
-        /// Debug and bot runs: fill the key and take every player in at the end of the countdown.
+        /// Debug and bot runs: fill the key, start the countdown, and take every player in at its end.
         /// Set it from the Editor, or start a build with -fps-raid-now.
         /// </summary>
         public static bool DebugStartRaid = System.Environment.CommandLine.Contains("-fps-raid-now");
@@ -66,6 +66,7 @@ namespace FriendlyPersonShooter.Arena
                 {
                     _raid.FillKey();
                     _raidTakeEveryone = true;
+                    if (_raid.Begin(_time)) AnnounceGather(0);
                 }
             }
 
@@ -91,10 +92,6 @@ namespace FriendlyPersonShooter.Arena
 
             switch (_raid.Update(_time, _atDoor))
             {
-                case RaidDoorEvent.GatherStarted:
-                    _announce.Add((AnnounceKind.RaidGathering, (int)_raid.Settings.GatherSeconds, 0, 0));
-                    Debug.Log($"[Raid] key full; gathering for {_raid.Settings.GatherSeconds:0}s");
-                    break;
                 case RaidDoorEvent.GatherCancelled:
                     Debug.Log("[Raid] nobody at the door when the countdown ended; the key waits");
                     break;
@@ -104,6 +101,23 @@ namespace FriendlyPersonShooter.Arena
                     break;
             }
             if (_raid.Phase == RaidPhase.Running) StepRaidRun(ecb);
+        }
+
+        /// <summary>E at the raid door (called from Interact): with a full key, starts the countdown.</summary>
+        private bool TryStartRaid(int id, float3 feet)
+        {
+            if (_raid == null || !_raid.Ready || RaidArena.InRaidSpace(feet)) return false;
+            if (_map.Distance(ExpeditionWorld.Ground(feet), RaidDoorPoint) > _raid.Settings.UseRadius) return false;
+            if (!_raid.Begin(_time)) return false;
+            AnnounceGather(id);
+            return true;
+        }
+
+        /// <summary><paramref name="id"/> started the countdown (0 for a debug start).</summary>
+        private void AnnounceGather(int id)
+        {
+            _announce.Add((AnnounceKind.RaidGathering, (int)_raid.Settings.GatherSeconds, id, 0));
+            Debug.Log($"[Raid] player {id} started the countdown; gathering for {_raid.Settings.GatherSeconds:0}s");
         }
 
         private void StartRaid()
@@ -363,6 +377,12 @@ namespace FriendlyPersonShooter.Arena
             {
                 objective = new ExpeditionObjective(phase,
                     $"RAID DOOR OPEN: stand at the door to go in! {left}s ({toDoor:0} m)", true, door, "raid door");
+                return true;
+            }
+            if (_raid.Ready && toDoor <= RaidNoticeRadius)
+            {
+                objective = new ExpeditionObjective(phase,
+                    $"Raid key full: press E at the door to start the {_raid.Settings.GatherSeconds:0}s countdown", true, door, "raid door");
                 return true;
             }
             if (_raid.Phase == RaidPhase.Collecting && toDoor <= RaidNoticeRadius)

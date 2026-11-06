@@ -35,12 +35,27 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void FullKeyGathersWhoeverIsAtTheDoorThenRuns()
+        public void FullKeyWaitsForSomeoneToStartTheCountdown()
+        {
+            var door = new RaidDoor();
+            Assert.That(door.Begin(0), Is.False, "the key isn't full");
+            door.FillKey();
+            Assert.That(door.Ready, Is.True);
+            Assert.That(door.Update(1, new[] { 5, 6 }), Is.EqualTo(RaidDoorEvent.None), "standing at the door doesn't start it");
+            Assert.That(door.Phase, Is.EqualTo(RaidPhase.Collecting));
+            Assert.That(door.Begin(2), Is.True);
+            Assert.That(door.Phase, Is.EqualTo(RaidPhase.Gathering));
+            Assert.That(door.Ready, Is.False);
+            Assert.That(door.Begin(3), Is.False, "pressing again doesn't restart the countdown");
+            Assert.That(door.TimeLeft(3), Is.EqualTo(door.Settings.GatherSeconds - 1).Within(1e-9));
+        }
+
+        [Test]
+        public void StartedCountdownGathersWhoeverIsAtTheDoorThenRuns()
         {
             var door = new RaidDoor();
             door.FillKey();
-            Assert.That(door.Update(0, None), Is.EqualTo(RaidDoorEvent.None), "waits for someone at the door");
-            Assert.That(door.Update(1, new[] { 5 }), Is.EqualTo(RaidDoorEvent.GatherStarted));
+            door.Begin(1);
             Assert.That(door.Update(5, new[] { 5, 6 }), Is.EqualTo(RaidDoorEvent.None));
             Assert.That(door.Pledge(new EssenceWallet(9)), Is.EqualTo(0), "no pledges while gathering");
             Assert.That(door.Update(1 + door.Settings.GatherSeconds, new[] { 5, 6, 7 }), Is.EqualTo(RaidDoorEvent.Started));
@@ -54,10 +69,11 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var door = new RaidDoor();
             door.FillKey();
-            door.Update(0, new[] { 1 });
+            door.Begin(0);
             Assert.That(door.Update(100, None), Is.EqualTo(RaidDoorEvent.GatherCancelled));
             Assert.That(door.Phase, Is.EqualTo(RaidPhase.Collecting));
             Assert.That(door.KeyFull, Is.True);
+            Assert.That(door.Ready, Is.True, "someone can start it again");
         }
 
         [Test]
@@ -65,7 +81,7 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var door = new RaidDoor();
             door.FillKey();
-            door.Update(0, new[] { 1 });
+            door.Begin(0);
             var crowd = new List<int>();
             for (int i = 1; i <= 12; i++) crowd.Add(i);
             door.Update(100, crowd);
@@ -77,7 +93,7 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var door = new RaidDoor();
             door.FillKey();
-            door.Update(0, new[] { 1, 2 });
+            door.Begin(0);
             door.Update(20, new[] { 1, 2 });
             Assert.That(door.Check(30, 2), Is.EqualTo(RaidOutcome.None));
             Assert.That(door.Check(30, 0), Is.EqualTo(RaidOutcome.Wiped), "everyone down at once");

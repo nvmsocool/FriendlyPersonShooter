@@ -138,6 +138,7 @@ namespace FriendlyPersonShooter.Arena
             bool hasStatus = ExpeditionWorld.Active && EntityManager.HasComponent<ExpeditionStatus>(me);
             var raidStatus = hasStatus ? EntityManager.GetComponentData<ExpeditionStatus>(me) : default;
             bool grounded = EntityManager.GetComponentData<ArenaMotion>(me).Grounded;
+            if (hasStatus) DoorPress(pos, raidStatus, ref input);
             float3 anchor;
             // Raid Color Locks: when it's this bot's turn, the next crystal comes before any enemy.
             if (hasStatus && CrystalAim(dt, eye, raidStatus, ref input))

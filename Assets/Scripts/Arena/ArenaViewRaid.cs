@@ -649,6 +649,9 @@ namespace FriendlyPersonShooter.Arena
             string where = $"{distance:0} m {Direction(Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing))}";
             switch (s.RaidPhase)
             {
+                case RaidPhase.Collecting when s.KeyRed >= RaidRules.RedCost && s.KeyGreen >= RaidRules.GreenCost:
+                    e.Append($"<color=#D9B3FF><b>Raid key full</b></color> {where}: anyone at the door can press <color=#FFD84D>E</color> to start the countdown\n");
+                    break;
                 case RaidPhase.Collecting:
                     e.Append($"<color=#D9B3FF>Raid door</color> {where}: key <color=#FF6B5B>Red {s.KeyRed}/{RaidRules.RedCost}</color> " +
                              $"<color=#7BE07B>Green {s.KeyGreen}/{RaidRules.GreenCost}</color>\n");
@@ -674,7 +677,9 @@ namespace FriendlyPersonShooter.Arena
             switch (m.Kind)
             {
                 case AnnounceKind.RaidGathering:
-                    return $"<color=#D9B3FF>RAID KEY FULL! Stand at the raid door: going in in {m.Value}s</color>\n";
+                    return m.PlayerNetworkId != 0
+                        ? $"{PlayerColors.Tag(m.PlayerNetworkId)} <color=#D9B3FF>started the raid! Stand at the raid door: going in in {m.Value}s</color>\n"
+                        : $"<color=#D9B3FF>RAID STARTING! Stand at the raid door: going in in {m.Value}s</color>\n";
                 case AnnounceKind.RaidStarted:
                     return $"<color=#D9B3FF>{m.Value} player{(m.Value == 1 ? "" : "s")} went into the raid</color>\n";
                 case AnnounceKind.RaidCleared:

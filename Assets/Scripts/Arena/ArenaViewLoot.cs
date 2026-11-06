@@ -276,7 +276,17 @@ namespace FriendlyPersonShooter.Arena
 
             if (!alive) return;
             if (hasItem) _prompt = ItemPrompt(lo, nearItem, nearOwner);
+            else if (_wrap && CanStartRaid(feet)) _prompt = "<color=#FFD84D>E</color>  start the raid countdown";
             else if (nearBox >= 0) _prompt = "<color=#FFD84D>E</color>  open the loot box";
+        }
+
+        /// <summary>At the raid door with a full key, outside the raid: E starts the countdown (the server checks the same).</summary>
+        private bool CanStartRaid(Vector3 feet)
+        {
+            if (!TryGetStatus(out var s) || s.InRaid || s.RaidPhase != RaidPhase.Collecting) return false;
+            if (s.KeyRed < RaidRules.RedCost || s.KeyGreen < RaidRules.GreenCost || RaidArena.InRaidSpace(feet)) return false;
+            var door = ExpeditionWorld.Near(ExpeditionWorld.ToFloat3(RaidArena.Door), feet);
+            return math.distance(door.xz, ((float3)feet).xz) <= RaidRules.UseRadius;
         }
 
         /// <summary>What taking this item would do, before you take it: what it is and what it would swap out.</summary>

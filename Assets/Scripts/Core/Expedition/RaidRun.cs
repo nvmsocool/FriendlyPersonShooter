@@ -18,14 +18,16 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float BrittlePay { get; set; } = 1.5f;
         /// <summary>Swift Bolts: enemy bolt speed.</summary>
         public float SwiftBoltSpeed { get; set; } = 1.4f;
+        /// <summary>Low Gravity: players' gravity (jumps go about twice as high and hang longer).</summary>
+        public float LowGravity { get; set; } = 0.5f;
     }
 
     /// <summary>
     /// One raid run: <see cref="RaidRunSettings.RoomCount"/> different rooms picked at random from the
-    /// pool, then a boss (the Bulwark or the Twins), plus one run modifier. Each room gets its own layout
+    /// pool, then a boss (the Bulwark, the Twins or the Weaver), plus one run modifier. Each room gets its own layout
     /// seed (<see cref="RoomSeed"/>), so a room comes back in a new shape. The current room's rules live in
     /// the matching property (<see cref="Locks"/>, <see cref="Plates"/>, <see cref="Gauntlet"/>,
-    /// <see cref="Storm"/>, <see cref="Runes"/>, <see cref="Core"/>); the caller feeds them and calls
+    /// <see cref="Storm"/>, <see cref="Runes"/>, <see cref="Core"/>, <see cref="Lanterns"/>, <see cref="Eye"/>); the caller feeds them and calls
     /// <see cref="MarkSolved"/>. A solved room opens a portal; once someone steps in,
     /// <see cref="StepPortal"/> counts down and then says to move everyone to the next stage.
     /// </summary>
@@ -49,8 +51,8 @@ namespace FriendlyPersonShooter.Core.Expedition
                 _rooms.Add(pool[i]);
                 pool.RemoveAt(i);
             }
-            Modifier = modifier != RaidModifier.None ? modifier : (RaidModifier)(1 + random.NextInt(3));
-            int bossRoll = random.NextInt(2);
+            Modifier = modifier != RaidModifier.None ? modifier : (RaidModifier)(1 + random.NextInt(5));
+            int bossRoll = random.NextInt(3);
             Boss = boss ?? (RaidBossKind)bossRoll;
         }
 
@@ -81,13 +83,19 @@ namespace FriendlyPersonShooter.Core.Expedition
         public WispStorm Storm { get; private set; }
         public EchoRunes Runes { get; private set; }
         public HoldCore Core { get; private set; }
+        public Lanterns Lanterns { get; private set; }
+        public SentinelEye Eye { get; private set; }
         /// <summary>The boss stage with the Twins: their shared rule.</summary>
         public RaidTwins Twins { get; private set; }
+        /// <summary>The boss stage with the Weaver: its floor and threads.</summary>
+        public RaidWeaver Weaver { get; private set; }
 
         public bool Swarming => Modifier == RaidModifier.Swarming;
         public int AddsMultiplier => Swarming ? 2 : 1;
         public float DamageTakenMultiplier => Modifier == RaidModifier.Brittle ? Settings.BrittleDamage : 1f;
         public float BoltSpeedMultiplier => Modifier == RaidModifier.SwiftBolts ? Settings.SwiftBoltSpeed : 1f;
+        /// <summary>Players' gravity inside the run (Low Gravity lowers it).</summary>
+        public float GravityMultiplier => Modifier == RaidModifier.LowGravity ? Settings.LowGravity : 1f;
         public int RoomYellow => Modifier == RaidModifier.Brittle ? (int)Math.Round(Settings.RoomYellow * Settings.BrittlePay) : Settings.RoomYellow;
         public int RoomXp => Modifier == RaidModifier.Brittle ? (int)Math.Round(Settings.RoomXp * Settings.BrittlePay) : Settings.RoomXp;
 
@@ -105,6 +113,8 @@ namespace FriendlyPersonShooter.Core.Expedition
                     case RaidRoomKind.WispStorm: return Storm.Progress;
                     case RaidRoomKind.EchoRunes: return Runes.Progress;
                     case RaidRoomKind.HoldCore: return Core.Progress(_now);
+                    case RaidRoomKind.Lanterns: return Lanterns.Progress;
+                    case RaidRoomKind.SentinelEye: return Eye.Progress;
                     default: return 0f;
                 }
             }
@@ -130,11 +140,15 @@ namespace FriendlyPersonShooter.Core.Expedition
             Storm = null;
             Runes = null;
             Core = null;
+            Lanterns = null;
+            Eye = null;
             Twins = null;
+            Weaver = null;
             _now = now;
             uint roomSeed = _seed * 2654435761u + (uint)stage * 40503u;
             RoomSeed = (roomSeed ^ 0x9E3779B9u) | 1u;
             if (AtBoss && Boss == RaidBossKind.Twins) Twins = new RaidTwins();
+            if (AtBoss && Boss == RaidBossKind.Weaver) Weaver = new RaidWeaver(RoomSeed, Players, now);
             switch (Room)
             {
                 case RaidRoomKind.ColorLocks: Locks = new ColorLocks(roomSeed, Players); break;
@@ -143,6 +157,8 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case RaidRoomKind.WispStorm: Storm = new WispStorm(Players, Swarming, now); break;
                 case RaidRoomKind.EchoRunes: Runes = new EchoRunes(roomSeed, Players, now); break;
                 case RaidRoomKind.HoldCore: Core = new HoldCore(Players, Swarming, now); break;
+                case RaidRoomKind.Lanterns: Lanterns = new Lanterns(Players); break;
+                case RaidRoomKind.SentinelEye: Eye = new SentinelEye(roomSeed, Players, now); break;
             }
         }
 

@@ -88,6 +88,7 @@ namespace FriendlyPersonShooter.Arena
                 // Sprint only while moving forward and not aiming down the sights.
                 if (i.Sprint != 0 && i.Vertical > 0 && i.Zoom == 0) speedMul *= ArenaSettings.SprintMultiplier;
                 float jumpMul = math.max(buffs.ValueRO.JumpMultiplier, 0.1f);
+                float gravity = ArenaSettings.Gravity * (buffs.ValueRO.GravityMultiplier > 0.05f ? buffs.ValueRO.GravityMultiplier : 1f);
                 if (down)
                 {
                     i.Horizontal = 0;
@@ -113,11 +114,11 @@ namespace FriendlyPersonShooter.Arena
                 {
                     // The generated zones: collide, climb slopes and steps, fall off ledges.
                     var p = transform.ValueRO.Position;
-                    ExpeditionTerrain.Move(ref p, ref m, move, ArenaSettings.Gravity, dt);
+                    ExpeditionTerrain.Move(ref p, ref m, move, gravity, dt);
                     transform.ValueRW.Position = p;
                     continue;
                 }
-                m.VerticalSpeed -= ArenaSettings.Gravity * dt;
+                m.VerticalSpeed -= gravity * dt;
 
                 var pos = transform.ValueRO.Position + move * dt;
                 pos.y += m.VerticalSpeed * dt;

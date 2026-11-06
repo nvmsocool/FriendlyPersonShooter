@@ -39,7 +39,7 @@ namespace FriendlyPersonShooter.Arena
             var inside = _raid.Participants;
             int n = inside.Count;
             _roomStepAt = _time;
-            _nextRoomAdds = _time + 10.0;
+            _nextRoomAdds = _time + (_run.Room == RaidRoomKind.Lanterns ? 4.0 : 10.0);
             _roomAddWave = 0;
             if (_run.AtBoss) SpawnRaidBoss(n);
             // This run's shape of the room: its colliders before anyone lands in it.
@@ -116,6 +116,20 @@ namespace FriendlyPersonShooter.Arena
                     if (_run.Runes.Step(_time)) Setback(4, 0);
                     if (_run.Runes.Solved) RoomSolved(ecb);
                     else RoomAdds(26.0, 1 + _run.Players / 4, false);
+                    break;
+                case RaidRoomKind.Lanterns:
+                    if (_run.Lanterns.Solved) RoomSolved(ecb);
+                    else KeepShadesUp();
+                    break;
+                case RaidRoomKind.SentinelEye:
+                    _run.Eye.Step(_time);
+                    if (_run.Eye.Solved)
+                    {
+                        RoomSolved(ecb);
+                        break;
+                    }
+                    if (_run.Eye.TakeBoltDue(_time)) EyeBolt(ecb);
+                    RoomAdds(30.0, 1 + _run.Players / 4, false);
                     break;
                 case RaidRoomKind.HoldCore:
                     switch (_run.Core.Step(_time))
@@ -310,15 +324,17 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// Color Locks and Echo Runes: the distance along a shot to the nearest crystal or rune it passes
-        /// through (and which), or -1 for none. Called before the shot looks for enemies, so a crystal or
-        /// rune in front stops it.
+        /// Room targets on a shot: the distance along it to the nearest crystal, rune, open eye or thread it
+        /// passes through (and which), or -1 for none. Called before the shot looks for enemies, so a target
+        /// in front stops it. The Sentinel's shell stops shots too (shortening the distance, no target).
         /// </summary>
         private int CrystalOnShot(int shooterId, float3 eye, float3 dir, float range, out float distance)
         {
             distance = range;
             if (_run == null || _run.Solved || !InsideRaid(shooterId)) return -1;
             var room = _run.Room;
+            if (_run.AtBoss) return _run.Weaver != null ? TetherOnShot(eye, dir, ref distance) : -1;
+            if (room == RaidRoomKind.SentinelEye) return EyeOnShot(eye, dir, ref distance);
             if (room != RaidRoomKind.ColorLocks && room != RaidRoomKind.EchoRunes) return -1;
             float radius = room == RaidRoomKind.EchoRunes ? RaidRoomLayout.RuneRadius : RaidRoomLayout.CrystalRadius;
             int best = -1;
@@ -342,14 +358,16 @@ namespace FriendlyPersonShooter.Arena
             return best;
         }
 
-        private void CrystalHit(int crystal, int shooterId)
+        /// <summary>A shot reached a room target. Returns 1 to show a hit marker, 2 for a refused one, 0 for none.</summary>
+        private int CrystalHit(int crystal, int shooterId)
         {
+            if (_run.AtBoss || _run.Room == RaidRoomKind.SentinelEye) return StrangeHit(crystal, shooterId);
             if (_run.Room == RaidRoomKind.EchoRunes)
             {
                 _runeHits++;
                 var hit = _run.Runes.Hit(crystal / EchoRunes.RunesPerSet, crystal % EchoRunes.RunesPerSet, _time);
                 if (hit == RuneHit.Wrong) Setback(3, shooterId);
-                return;
+                return 0;
             }
             int up = 0;
             foreach (int id in _raid.Participants)
@@ -358,6 +376,7 @@ namespace FriendlyPersonShooter.Arena
             }
             _crystalHits++;
             if (_run.Locks.Hit(crystal, shooterId, up, _time) == LockHit.Wrong) Setback(0, shooterId);
+            return 0;
         }
 
         /// <summary>Keeps a raid Skitter in its room: a step past the walls turns it back.</summary>
@@ -386,6 +405,9 @@ namespace FriendlyPersonShooter.Arena
             status.RaidPortal = !_run.Solved ? -2f : _run.PortalAt < 0 ? -1f : (float)_run.PortalLeft(_time);
             status.RaidRoomTimer = 0f;
             status.RaidYouHitLast = false;
+            status.RaidTilesFallen = 0;
+            status.RaidTilesCracking = 0;
+            status.RaidTethers = 0;
             switch (_run.Room)
             {
                 case RaidRoomKind.ColorLocks:
@@ -409,7 +431,22 @@ namespace FriendlyPersonShooter.Arena
                     status.RaidRoomData = _run.Core.Pack(_time);
                     status.RaidRoomTimer = (float)_run.Core.TimeLeft(_time);
                     break;
+                case RaidRoomKind.Lanterns:
+                    status.RaidRoomData = _run.Lanterns.Pack();
+                    status.RaidRoomTimer = _run.Lanterns.GlowLeft(id, _time);
+                    break;
+                case RaidRoomKind.SentinelEye:
+                    status.RaidRoomData = _run.Eye.Pack();
+                    break;
                 default:
+                    if (_run.Weaver != null)
+                    {
+                        status.RaidTilesFallen = _run.Weaver.Fallen;
+                        status.RaidTilesCracking = _run.Weaver.Cracking;
+                        status.RaidTethers = _run.Weaver.PackTethers();
+                        status.RaidRoomData = 0;
+                        break;
+                    }
                     // The Twins: bit i set while twin i is down, and the time left to kill the other.
                     status.RaidRoomData = _run.Twins == null ? 0 : (_run.Twins.IsDown(0) ? 1 : 0) | (_run.Twins.IsDown(1) ? 2 : 0);
                     status.RaidRoomTimer = _run.Twins == null ? 0f : (float)System.Math.Max(0, _run.Twins.TimeLeft(_time));
@@ -444,7 +481,13 @@ namespace FriendlyPersonShooter.Arena
                     return $"{stage} Echo Runes: watch each wall's runes flash, then shoot them back in order. Split up: one wall each side";
                 case RaidRoomKind.HoldCore:
                     return $"{stage} Hold the Core: keep the core alive for {HoldCore.Duration:0}s. Kill the Skitters running at it";
+                case RaidRoomKind.Lanterns:
+                    return $"{stage} Lanterns: payload hits make allies glow; shades only take hits near a glowing player";
+                case RaidRoomKind.SentinelEye:
+                    return $"{stage} Sentinel Eye: spread around the shell and shoot the eye while it's open ({_run.Eye.Target} hits)";
                 default:
+                    if (_run.Boss == RaidBossKind.Weaver)
+                        return $"{stage} Break the Weaver: shoot its gold plate, cut the threads tying others, stay off cracking tiles";
                     return _run.Boss == RaidBossKind.Twins
                         ? $"{stage} Break the Twins: shoot their gold plates, and kill both within {RaidTwins.Window:0}s of each other"
                         : $"{stage} Break the Bulwark: shoot its plate while it's open (gold)";
@@ -456,6 +499,7 @@ namespace FriendlyPersonShooter.Arena
             $"boss={_run.Boss} seed={_run.RoomSeed} roomsSolved={_roomsSolved} setbacks={_setbacks} crystalHits={_crystalHits} sweeperHits={_sweeperHits} " +
             $"falls={_falls} runeHits={_runeHits} coreBursts={_coreBursts}" +
             (_run.Core != null ? $" core={_run.Core.HealthFraction:0.00}" : "") +
-            (_run.Twins != null ? $" twinsDown={(_run.Twins.IsDown(0) ? 1 : 0) + (_run.Twins.IsDown(1) ? 1 : 0)} revivals={_run.Twins.Revivals}" : "");
+            (_run.Twins != null ? $" twinsDown={(_run.Twins.IsDown(0) ? 1 : 0) + (_run.Twins.IsDown(1) ? 1 : 0)} revivals={_run.Twins.Revivals}" : "") +
+            StrangeLog();
     }
 }

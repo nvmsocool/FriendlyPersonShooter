@@ -24,7 +24,7 @@ namespace FriendlyPersonShooter.Core.Tests
                 modifiers.Add(run.Modifier);
             }
             Assert.That(seen.Count, Is.GreaterThan(10), "runs differ");
-            Assert.That(modifiers.Count, Is.EqualTo(3));
+            Assert.That(modifiers.Count, Is.EqualTo(5));
         }
 
         [Test]

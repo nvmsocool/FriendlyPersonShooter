@@ -43,6 +43,9 @@ namespace FriendlyPersonShooter.Arena
         }
 
         private static GameObject _root;
+        /// <summary>The boss arena's floor, one collider per tile of the Weaver's grid (<see cref="RaidWeaver"/>).</summary>
+        private static GameObject[] _tiles;
+        private static ulong _fallen;
         private static Box[] _boxes;
         private static uint _boxesSeed;
 
@@ -131,9 +134,24 @@ namespace FriendlyPersonShooter.Arena
             _rooms.Clear();
             _root = new GameObject("Raid Arena");
             _root.layer = 0;
+            // The floor as tiles, so the Weaver can drop them one by one.
+            int count = RaidWeaver.Grid * RaidWeaver.Grid;
+            _tiles = new GameObject[count];
+            _fallen = 0;
+            for (int i = 0; i < count; i++)
+            {
+                var c = RaidWeaver.TileCenter(i);
+                var go = new GameObject($"Floor tile {i}");
+                go.layer = 0;
+                go.transform.SetParent(_root.transform, false);
+                go.transform.position = (Vector3)Center + new Vector3(c.X, -1f, c.Z);
+                go.AddComponent<BoxCollider>().size = new Vector3(RaidWeaver.TileSize, 2f, RaidWeaver.TileSize);
+                _tiles[i] = go;
+            }
             foreach (var b in Boxes)
             {
-                var go = new GameObject(b.IsFloor ? "Floor" : "Wall");
+                if (b.IsFloor) continue;
+                var go = new GameObject("Wall");
                 go.layer = 0;
                 go.transform.SetParent(_root.transform, false);
                 go.transform.position = b.Center;
@@ -155,6 +173,22 @@ namespace FriendlyPersonShooter.Arena
             BuildRoom(kind, seed);
             Physics.SyncTransforms();
         }
+
+        /// <summary>
+        /// The Weaver's floor: tiles whose bit is set are gone (no collider). Called by the server as tiles
+        /// fall and by each client from its status; a no-op when nothing changed.
+        /// </summary>
+        public static void SetBossFloor(ulong fallen)
+        {
+            Ensure();
+            if (_tiles == null || fallen == _fallen) return;
+            _fallen = fallen;
+            for (int i = 0; i < _tiles.Length; i++) _tiles[i].SetActive(!RaidWeaver.IsSet(fallen, i));
+            Physics.SyncTransforms();
+        }
+
+        /// <summary>The boss arena's fallen tiles (0 when the floor is whole).</summary>
+        public static ulong BossFloorFallen => _fallen;
 
         /// <summary>The layout seed a room's colliders were last built with (0 for the plain layout).</summary>
         public static uint SeedOf(RaidRoomKind kind) => _rooms.TryGetValue(kind, out var built) ? built.Seed : 0u;

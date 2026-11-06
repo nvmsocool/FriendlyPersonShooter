@@ -174,7 +174,18 @@ namespace FriendlyPersonShooter.Arena
                     var end = eye + dir * range;
                     bool landed = HitScan.Cast(ToVec(eye), d, range, _targets, out var hit, shooter.Vitals.Id);
                     if (landed) end = ToFloat3(hit.Point);
-                    else if (crystal >= 0) CrystalHit(crystal, shooter.Vitals.Id);
+                    else if (crystal >= 0)
+                    {
+                        int marker = CrystalHit(crystal, shooter.Vitals.Id);
+                        if (marker != 0)
+                        {
+                            Confirm(shooterId, new HitConfirm
+                            {
+                                Point = end, WeakPoint = (byte)(marker == 1 ? 1 : 0), Refused = (byte)(marker == 2 ? 1 : 0),
+                                TargetIsPlayer = (byte)(marker == 2 ? 1 : 0),
+                            }, ecb);
+                        }
+                    }
 
                     if (stats.Mode == FireMode.Projectile)
                     {
@@ -259,6 +270,7 @@ namespace FriendlyPersonShooter.Arena
                 bool helped = result.Refused == RefuseReason.None && (fx.HasPayload || result.Relayed);
                 if (helped)
                 {
+                    LanternLit(target.Vitals.Id);
                     SocialBuff(shooter.Vitals.Id, target.Vitals.Id, result);
                     AddXp(shooter.Vitals.Id, XpRewards.AllyBuff);
                     _ledger?.RecordBuff(shooter.Vitals.Id, target.Vitals.Id, _time);
@@ -318,6 +330,12 @@ namespace FriendlyPersonShooter.Arena
             {
                 return false;
             }
+            // Lanterns: a shade out of the light can't be hurt.
+            if (ShadeInDark(enemyEntity, enemy))
+            {
+                confirm.Refused = 1;
+                return false;
+            }
             // The raid boss's shell shrugs off most damage; only its open plate takes full hits.
             float baseDamage = damage;
             if (enemy.Family == EnemyFamily.Bulwark && enemy.WorldBoss)
@@ -330,6 +348,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 enemy.Boss.HitOutcome(weakPoint, _bulwark, out float armor, out weakPoint);
                 baseDamage *= armor;
+                // The Weaver's threads shield it.
+                if (enemy.Raid && _run?.Weaver != null) baseDamage *= _run.Weaver.DamageMultiplier;
             }
             var hitResult = _lobby.HitEnemy(shooter.Vitals, enemy.Vitals, fx, baseDamage, weakPoint, _time, _combos);
             _ledger?.RecordHit(enemy.Vitals.Id, shooter.Vitals.Id, _time);
@@ -379,6 +399,7 @@ namespace FriendlyPersonShooter.Arena
             var r = _lobby.HitPlayer(shooter.Vitals, best.Vitals, fx, _time, _combos, stats.Conductor);
             if (r.Refused != RefuseReason.None) return 0f;
             _ricochets++;
+            LanternLit(best.Vitals.Id);
             SocialBuff(shooter.Vitals.Id, best.Vitals.Id, r);
             _ledger?.RecordBuff(shooter.Vitals.Id, best.Vitals.Id, _time);
             SendShot(0, ToFloat3(from), ToFloat3(bestCenter), fx.Payload, stats.Frame.Kind, ecb);

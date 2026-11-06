@@ -184,6 +184,7 @@ namespace FriendlyPersonShooter.Arena
                 case RaidRoomKind.Gauntlet: DrawSweepers(layout, c, live ? RoomClock(s) : t); break;
                 case RaidRoomKind.EchoRunes: DrawRunes(layout, c, s, live, t); break;
                 case RaidRoomKind.HoldCore: DrawCore(layout, c, s, live, t); break;
+                case RaidRoomKind.SentinelEye: DrawEye(c, s, live, t); break;
             }
 
             // The portal: a ring standing at the far side, lit once the room is solved.
@@ -441,6 +442,9 @@ namespace FriendlyPersonShooter.Arena
                              "  <color=#FF9A40>Skitters from the orange gates</color>\n");
                     break;
                 }
+                default:
+                    WriteStrangeHud(s, e);
+                    break;
             }
         }
 
@@ -451,6 +455,8 @@ namespace FriendlyPersonShooter.Arena
                 case RaidModifier.Swarming: return "twice the adds";
                 case RaidModifier.SwiftBolts: return "enemy bolts fly faster";
                 case RaidModifier.Brittle: return "you take more damage, rooms pay more";
+                case RaidModifier.LowGravity: return "higher, floatier jumps";
+                case RaidModifier.Fog: return "short sight lines";
                 default: return "";
             }
         }

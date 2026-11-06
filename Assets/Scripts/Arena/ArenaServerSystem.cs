@@ -289,6 +289,8 @@ namespace FriendlyPersonShooter.Arena
                     HasteRemaining = v.Buffs.RemainingOf(EffectKind.Hasted),
                     MoveMultiplier = v.MoveSpeedMultiplier,
                     JumpMultiplier = v.JumpMultiplier,
+                    GravityMultiplier = RaidGravity(id),
+                    Glow = LanternGlow(id),
                     RelayHits = v.HasRelay ? v.RelayHitsLeft : 0,
                     RelayPayload = v.RelayPayload,
                     ChainLinks = holding ? chain.Links : 0,
@@ -493,7 +495,9 @@ namespace FriendlyPersonShooter.Arena
                         }
                         float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
                         s.Boss.Step(dt, fraction, s.Vitals.MoveMultiplier, _bulwark);
-                        int wave = s.Twin >= 0 && _run?.Twins != null
+                        // The Weaver calls no adds (they'd fall through its floor): its threads are the pressure.
+                        int wave = s.Raid && _run?.Weaver != null ? 0
+                            : s.Twin >= 0 && _run?.Twins != null
                             ? _run.Twins.TakeWaveDue(TwinsHealthFraction(), _bulwark.AddWaveAt)
                             : s.Boss.TakeWaveDue(fraction, _bulwark);
                         if (wave > 0) _raidWaveDue = wave;
@@ -572,6 +576,7 @@ namespace FriendlyPersonShooter.Arena
                     else RaidBossKilled(s);
                 }
                 if (s.Raid && s.Family == EnemyFamily.Wisp && _run != null && _run.Room == RaidRoomKind.WispStorm) _run.Storm.Kill();
+                if (s.Raid && InLanterns && !_run.Solved) _run.Lanterns.Killed();
                 ExpeditionKill(s);
                 return;
             }

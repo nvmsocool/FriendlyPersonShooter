@@ -44,6 +44,10 @@ namespace FriendlyPersonShooter.Arena
         [GhostField(Quantization = 10)] public float ChainTimeLeft;
         /// <summary>Haste + Might combo: Empower doubled.</summary>
         [GhostField] public bool Blitz;
+        /// <summary>Raid Low Gravity: players' gravity multiplier (0 is read as 1). Read by predicted movement.</summary>
+        [GhostField(Quantization = 100)] public float GravityMultiplier;
+        /// <summary>Raid Lanterns: seconds this player still glows (an ally's payload lit them).</summary>
+        [GhostField(Quantization = 10)] public float Glow;
     }
 
     /// <summary>
@@ -193,6 +197,12 @@ namespace FriendlyPersonShooter.Arena
         TwinDown = 21,
         /// <summary>The Twins: too slow, the fallen twin is back.</summary>
         TwinRevived = 22,
+        /// <summary>The Weaver tied players together. Value = how many threads.</summary>
+        TetherTied = 23,
+        /// <summary>A thread was left too long and snapped. Player and Other = its ends (Other 0 = the Weaver).</summary>
+        TetherSnapped = 24,
+        /// <summary>Player shot a thread apart.</summary>
+        TetherCut = 25,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

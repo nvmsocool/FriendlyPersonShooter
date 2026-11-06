@@ -37,6 +37,7 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Matrix4x4> _rGlow = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _rState = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _rBeam = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _rCrack = new List<Matrix4x4>();
         // Door
         private readonly List<Matrix4x4> _dStone = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _dGlow = new List<Matrix4x4>();
@@ -99,6 +100,7 @@ namespace FriendlyPersonShooter.Arena
             _plateShutMat = MakeMat(new Color(0.55f, 0.5f, 0.45f));
             _plateWarnMat = MakeGlow(PlateWarnColor, 1.8f);
             _plateOpenMat = MakeGlow(PlateOpenColor, 2.2f);
+            CreateStrangeMaterials();
         }
 
         /// <summary>An emissive material (bloom makes it glow); a plain one if the glow material is missing.</summary>
@@ -135,6 +137,7 @@ namespace FriendlyPersonShooter.Arena
         {
             RaidArena.Ensure();
             TryGetStatus(out var status);
+            DrawStrange(status);
 
             // The arena's state glow follows the boss's plate (last frame's state).
             Color state = RaidViolet;
@@ -148,28 +151,31 @@ namespace FriendlyPersonShooter.Arena
             SetGlow(_raidStateMat, state, stateGlow);
 
             // Hidden in the fog from the ground anyway, so only drawn when the camera is near.
-            if (RaidArena.Contains(_camRef, 200f, 200f)) DrawArena();
+            if (RaidArena.Contains(_camRef, 200f, 200f)) DrawArena(status);
             if (RaidArena.InRaidSpace(_camRef)) DrawRooms(status);
             DrawDoor(status);
         }
 
-        private void DrawArena()
+        private void DrawArena(ExpeditionStatus s)
         {
-            foreach (var l in new[] { _rFloor, _rTileA, _rTileB, _rWall, _rRock, _rGlow, _rState, _rBeam }) l.Clear();
+            foreach (var l in new[] { _rFloor, _rTileA, _rTileB, _rWall, _rRock, _rGlow, _rState, _rBeam, _rCrack }) l.Clear();
             var c = Near(RaidArena.Center);
             float t = Time.time;
             float hs = RaidArena.HalfSize;
             var id = Quaternion.identity;
+            // The Weaver's floor comes in pieces, some cracking, some gone.
+            bool tiles = DrawWeaverFloor(s, c, _rFloor, _rTileA, _rTileB, _rCrack);
 
             foreach (var b in RaidArena.Boxes)
             {
+                if (b.IsFloor && tiles) continue;
                 Box(b.IsFloor ? _rFloor : _rWall, Near(b.Center), id, b.Size);
             }
 
             // Checkered floor tiles with dark grout between them.
             const int n = 8;
             float ts = 2f * hs / n;
-            for (int i = 0; i < n; i++)
+            for (int i = 0; i < n && !tiles; i++)
             {
                 for (int j = 0; j < n; j++)
                 {
@@ -184,17 +190,22 @@ namespace FriendlyPersonShooter.Arena
             for (int k = 0; k < ringSegments; k++)
             {
                 float a = 2f * Mathf.PI * (k + 0.5f) / ringSegments;
-                var pos = c + new Vector3(Mathf.Sin(a) * RaidArena.SpawnRing, 0.05f, Mathf.Cos(a) * RaidArena.SpawnRing);
-                Box(_rGlow, pos, Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f), new Vector3(ringLength, 0.05f, 0.25f));
+                var local = new Vector3(Mathf.Sin(a) * RaidArena.SpawnRing, 0.05f, Mathf.Cos(a) * RaidArena.SpawnRing);
+                if (OverHole(s, local)) continue;
+                Box(_rGlow, c + local, Quaternion.Euler(0f, a * Mathf.Rad2Deg, 0f), new Vector3(ringLength, 0.05f, 0.25f));
             }
 
             // The dais under the boss: an octagon of two slabs and a slowly turning rune ring in the plate's color.
-            Box(_rWall, c + new Vector3(0f, 0.06f, 0f), id, new Vector3(9f, 0.12f, 9f));
-            Box(_rWall, c + new Vector3(0f, 0.06f, 0f), Quaternion.Euler(0f, 45f, 0f), new Vector3(9f, 0.12f, 9f));
-            Box(_rTileA, c + new Vector3(0f, 0.1f, 0f), id, new Vector3(6f, 0.12f, 6f));
-            Box(_rTileA, c + new Vector3(0f, 0.1f, 0f), Quaternion.Euler(0f, 45f, 0f), new Vector3(6f, 0.12f, 6f));
+            // (The Weaver hangs in its web over open air instead.)
+            if (!tiles)
+            {
+                Box(_rWall, c + new Vector3(0f, 0.06f, 0f), id, new Vector3(9f, 0.12f, 9f));
+                Box(_rWall, c + new Vector3(0f, 0.06f, 0f), Quaternion.Euler(0f, 45f, 0f), new Vector3(9f, 0.12f, 9f));
+                Box(_rTileA, c + new Vector3(0f, 0.1f, 0f), id, new Vector3(6f, 0.12f, 6f));
+                Box(_rTileA, c + new Vector3(0f, 0.1f, 0f), Quaternion.Euler(0f, 45f, 0f), new Vector3(6f, 0.12f, 6f));
+            }
             const int runes = 16;
-            for (int k = 0; k < runes; k++)
+            for (int k = 0; k < runes && !tiles; k++)
             {
                 float a = 2f * Mathf.PI * k / runes + t * 0.25f;
                 var pos = c + new Vector3(Mathf.Sin(a) * 5.4f, 0.14f, Mathf.Cos(a) * 5.4f);
@@ -249,7 +260,7 @@ namespace FriendlyPersonShooter.Arena
             float[] widths = { 50f, 42f, 32f, 21f, 10f };
             float[] heights = { 3f, 4f, 5f, 6f, 6f };
             float y0 = -2f;
-            for (int k = 0; k < widths.Length; k++)
+            for (int k = 0; k < widths.Length && !tiles; k++)
             {
                 float yaw = k * 11f;
                 Box(_rRock, c + new Vector3(0f, y0 - heights[k] / 2f, 0f), Quaternion.Euler(0f, yaw, 0f), new Vector3(widths[k], heights[k], widths[k]));
@@ -287,6 +298,7 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_rGlow, _raidGlowMat);
             DrawList(_rState, _raidStateMat);
             DrawList(_rBeam, _raidBeamMat);
+            DrawList(_rCrack, _crackMat);
         }
 
         /// <summary>
@@ -413,6 +425,7 @@ namespace FriendlyPersonShooter.Arena
                 _twinOpen[twin] = en.PlateOpen;
             }
             else AddBossShape(en, p, ref _plateAnim, Near(RaidArena.Center).y);
+            _bossPos = p;
             _bossSeen = true;
             _bossHealth = en.Health;
             _bossMax = en.MaxHealth;
@@ -554,10 +567,14 @@ namespace FriendlyPersonShooter.Arena
             _bossVisible = _bossSeen;
             if (!_bossSeen) _plateAnim = 0f;
             float t = Time.time;
+            // The Weaver: the same armored shell in pale silk and dark stone.
+            var calm = _weaverLive ? SilkColor : RaidViolet;
+            _bossMat.color = _weaverLive ? new Color(0.1f, 0.12f, 0.16f) : new Color(0.3f, 0.2f, 0.4f);
+            _bossArmorMat.color = _weaverLive ? new Color(0.3f, 0.33f, 0.4f) : new Color(0.48f, 0.42f, 0.56f);
             if (_bossTele) SetGlow(_bossSeamMat, PlateWarnColor, 1.6f + 1.2f * Mathf.Abs(Mathf.Sin(t * 14f)));
             else if (_bossEnraged) SetGlow(_bossSeamMat, EnragedColor, 1.5f + 0.6f * Mathf.Sin(t * 6f));
-            else SetGlow(_bossSeamMat, RaidViolet, 1.4f + 0.3f * Mathf.Sin(t * 2f));
-            SetGlow(_bossThrustMat, _bossEnraged ? EnragedColor : RaidViolet, 1.4f + 0.4f * Mathf.Sin(t * 7f));
+            else SetGlow(_bossSeamMat, calm, 1.4f + 0.3f * Mathf.Sin(t * 2f));
+            SetGlow(_bossThrustMat, _bossEnraged ? EnragedColor : calm, 1.4f + 0.4f * Mathf.Sin(t * 7f));
             SetGlow(_plateWarnMat, PlateWarnColor, 1.2f + 1.3f * Mathf.Abs(Mathf.Sin(t * 10f)));
 
             DrawList(_bossBodies, _bossMat);
@@ -619,7 +636,8 @@ namespace FriendlyPersonShooter.Arena
                     int bars = Mathf.RoundToInt(f * 24f);
                     string plate = _bossOpen ? "<color=#FFD84D>PLATE OPEN: shoot it!</color>"
                         : _bossWarn ? "<color=#FF9A40>plate opening...</color>" : "<color=#B8B0D8>plate shut (hits do 1/5)</color>";
-                    e.Append($"<color=#D9B3FF><b>BULWARK</b></color>  [{new string('|', bars)}{new string('.', 24 - bars)}]  {f * 100f:0}%   {plate}\n");
+                    string bossName = s.RaidBoss == RaidBossKind.Weaver ? "WEAVER" : "BULWARK";
+                    e.Append($"<color=#D9B3FF><b>{bossName}</b></color>  [{new string('|', bars)}{new string('.', 24 - bars)}]  {f * 100f:0}%   {plate}\n");
                 }
                 if (s.RaidStageCount == 0) e.Append($"<color=#D9B3FF>Raid time left {t / 60}:{t % 60:00}</color>\n");
                 return;
@@ -651,6 +669,8 @@ namespace FriendlyPersonShooter.Arena
         {
             var room = RoomAnnouncement(m);
             if (room != null) return room;
+            var strange = StrangeAnnouncement(m);
+            if (strange != null) return TryGetStatus(out var st) && st.InRaid ? strange : "";
             switch (m.Kind)
             {
                 case AnnounceKind.RaidGathering:

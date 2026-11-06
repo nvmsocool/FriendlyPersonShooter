@@ -293,6 +293,9 @@ namespace FriendlyPersonShooter.Arena
                 }
             }
 
+            // Raid Lanterns: light allies up, and only shoot shades in someone's light.
+            if (LanternsTarget(myId, eye)) return;
+
             switch (_profile)
             {
                 case Profile.Medic:

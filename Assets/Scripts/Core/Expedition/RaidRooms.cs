@@ -21,6 +21,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         EchoRunes = 5,
         /// <summary>Skill: keep the core alive for a minute while Skitters run at it from three gates.</summary>
         HoldCore = 6,
+        /// <summary>Puzzle: a dark room; enemies can only be hurt near a player an ally's payload made glow.</summary>
+        Lanterns = 7,
+        /// <summary>Skill: an eye opens for a moment somewhere on a turning shell; hit it, under fire.</summary>
+        SentinelEye = 8,
     }
 
     /// <summary>One twist per run.</summary>
@@ -33,6 +37,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         SwiftBolts = 2,
         /// <summary>Players take more damage; rooms pay more.</summary>
         Brittle = 3,
+        /// <summary>Higher, floatier jumps (gravity at <see cref="RaidRunSettings.LowGravity"/>).</summary>
+        LowGravity = 4,
+        /// <summary>Short sight lines: fog closes in on every room.</summary>
+        Fog = 5,
     }
 
     public enum RaidBoxKind : byte
@@ -132,6 +140,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>
         /// Color Locks: crystal centres (Yellow, Red, Green). Hold the Plates: plate centres. Echo Runes: rune
         /// centres, set 0 (west) then set 1 (east). Hold the Core: the core crystal, then the three gates.
+        /// Sentinel Eye: the shell's centre.
         /// </summary>
         public IReadOnlyList<Vector3> Targets { get; }
         /// <summary>Gauntlet: the stones in walking order, start pad first and end pad last.</summary>
@@ -178,11 +187,11 @@ namespace FriendlyPersonShooter.Core.Expedition
         public static readonly RaidRoomKind[] Pool =
         {
             RaidRoomKind.ColorLocks, RaidRoomKind.HoldPlates, RaidRoomKind.Gauntlet, RaidRoomKind.WispStorm,
-            RaidRoomKind.EchoRunes, RaidRoomKind.HoldCore,
+            RaidRoomKind.EchoRunes, RaidRoomKind.HoldCore, RaidRoomKind.Lanterns, RaidRoomKind.SentinelEye,
         };
 
         /// <summary>The highest room kind (platforms are stacked by kind).</summary>
-        public const RaidRoomKind LastKind = RaidRoomKind.HoldCore;
+        public const RaidRoomKind LastKind = RaidRoomKind.SentinelEye;
 
         public static string NameOf(RaidRoomKind kind)
         {
@@ -194,11 +203,14 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case RaidRoomKind.WispStorm: return "Wisp Storm";
                 case RaidRoomKind.EchoRunes: return "Echo Runes";
                 case RaidRoomKind.HoldCore: return "Hold the Core";
+                case RaidRoomKind.Lanterns: return "Lanterns";
+                case RaidRoomKind.SentinelEye: return "Sentinel Eye";
                 default: return "The Boss";
             }
         }
 
-        public static string NameOf(RaidBossKind boss) => boss == RaidBossKind.Twins ? "The Twins" : "The Bulwark";
+        public static string NameOf(RaidBossKind boss) =>
+            boss == RaidBossKind.Twins ? "The Twins" : boss == RaidBossKind.Weaver ? "The Weaver" : "The Bulwark";
 
         public static string NameOf(RaidModifier modifier)
         {
@@ -207,6 +219,8 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case RaidModifier.Swarming: return "Swarming";
                 case RaidModifier.SwiftBolts: return "Swift Bolts";
                 case RaidModifier.Brittle: return "Brittle";
+                case RaidModifier.LowGravity: return "Low Gravity";
+                case RaidModifier.Fog: return "Fog";
                 default: return "";
             }
         }
@@ -311,6 +325,40 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case RaidRoomKind.HoldCore:
                     BuildHoldCore(vary, r, boxes, targets);
                     break;
+                case RaidRoomKind.Lanterns:
+                {
+                    // Tall pillars to break up the dark, so the light has corners to look around.
+                    float turn = vary ? r.Angle() : 0f;
+                    int count = vary ? 5 + r.NextInt(3) : 6;
+                    for (int i = 0; i < count; i++)
+                    {
+                        float a = turn + (float)(2 * Math.PI * (i + 0.5f) / count) + (vary ? r.Range(-0.25f, 0.25f) : 0f);
+                        float radius = vary ? r.Range(10f, 17f) : 13f;
+                        float width = vary ? r.Range(1.8f, 3.2f) : 2.4f;
+                        var at = Ring(a, radius);
+                        boxes.Add(new RaidBox(at + new Vector3(0f, 3f, 0f), new Vector3(width, 6f, width), RaidBoxKind.Pillar));
+                    }
+                    break;
+                }
+                case RaidRoomKind.SentinelEye:
+                {
+                    // The shell floats over the middle; low walls around it to duck its bolts behind.
+                    targets.Add(new Vector3(0f, SentinelEye.ShellHeight, 0f));
+                    float turn = vary ? r.Angle() : (float)(Math.PI / 4);
+                    int count = vary ? 4 + r.NextInt(3) : 4;
+                    for (int i = 0; i < count; i++)
+                    {
+                        float a = turn + (float)(2 * Math.PI * i / count) + (vary ? r.Range(-0.3f, 0.3f) : 0f);
+                        float radius = vary ? r.Range(11f, 17f) : 14f;
+                        var at = Ring(a, radius);
+                        // Lying across the line to the middle, so it covers someone facing the shell.
+                        float yaw = a + (float)(Math.PI / 2);
+                        bool alongX = Math.Abs(Math.Sin(yaw)) > Math.Abs(Math.Cos(yaw));
+                        var size = alongX ? new Vector3(4f, 1.3f, 1f) : new Vector3(1f, 1.3f, 4f);
+                        boxes.Add(new RaidBox(at + new Vector3(0f, 0.65f, 0f), size, RaidBoxKind.Pillar));
+                    }
+                    break;
+                }
             }
             return new RaidRoomLayout(kind, seed, boxes, new Vector2(SquareHalf, SquareHalf), portal, spawns, targets, path, sweepers, adds);
         }

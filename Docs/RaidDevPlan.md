@@ -73,9 +73,13 @@ Tuning after the first Editor runs: the storm needs 8 + 2 per player kills in 90
 Tuning after the Editor runs: core runners do 10 damage (10 reach it and it breaks) and Swarming adds half again to a core wave instead of doubling it. Runners are leashed to themselves, not their spawn, so they reach the core.
 
 ### Phase 3: the strange rooms
-- Lanterns and Sentinel Eye rooms.
-- The Weaver boss.
-- Client-side modifiers: Low Gravity and Fog.
+- [x] Core: `Lanterns`, `SentinelEye` and `RaidWeaver` (falling tiles, threads), Low Gravity and Fog in the modifier roll, the Weaver in the boss roll, with tests.
+- [x] Server: lantern glow from payload hits and dark hits refused, the eye's openings and bolts with the shell blocking shots, the Weaver's tile colliders, falls, threads (tie, cut, snap) and its damage shield, raid gravity.
+- [x] Client: the dark and fog looks, lanterns and light rings, the turning shell and eye, cracking and missing tiles, threads and silk, HUD lines and announcements.
+- [x] Bots: light allies and shoot shades in the light, ring the shell and shoot the open eye, cut others' threads and keep to whole tiles.
+- [x] Editor runs with 3 bots: Lanterns 32 s, Sentinel Eye (Fog) 59 s, Low Gravity gauntlet crossed with no falls. The Weaver (Low Gravity): 16 of 18 threads cut, about 73% dealt before wiping; its clear is left to the playtest.
+
+Tuning after the Editor runs: bots that kept their usual 6–14 m from shades lit each other over and over but stood outside their own light, so a glowing bot now closes to 4 m of the nearest shade.
 
 ### Phase 4: tuning from playtests
 - Room timings, payouts and group scaling from playtest notes.

@@ -1,5 +1,8 @@
 using FriendlyPersonShooter.Core.Expedition;
+using Unity.Entities;
 using Unity.Mathematics;
+using Unity.NetCode;
+using Unity.Transforms;
 
 namespace FriendlyPersonShooter.Arena
 {
@@ -7,7 +10,9 @@ namespace FriendlyPersonShooter.Arena
     /// How a bot plays the raid run's rooms (Docs/RaidDevPlan.md), from what its HUD status shows:
     /// shoot the next crystal unless it lit the last one, hold its plate, hop the gauntlet stones
     /// (jumping sweepers that are about to reach it), watch its wall's runes and shoot them back, guard
-    /// the core, and walk into an open portal. Layouts come from the status's room seed.
+    /// the core, light allies up in the dark and shoot only lit shades, shoot the Sentinel's eye when it
+    /// opens on their side, cut the Weaver's threads and keep off its cracking tiles, and walk into an open
+    /// portal. Layouts come from the status's room seed.
     /// </summary>
     public partial class ArenaBotSystem
     {
@@ -35,6 +40,8 @@ namespace FriendlyPersonShooter.Arena
         private bool CrystalAim(float dt, float3 eye, in ExpeditionStatus s, ref ArenaInput input)
         {
             if (InRoom(s, RaidRoomKind.EchoRunes)) return RuneAim(dt, eye, s, ref input);
+            if (InRoom(s, RaidRoomKind.SentinelEye)) return EyeAim(dt, eye, s, ref input);
+            if (InRoom(s, RaidRoomKind.Boss) && s.RaidBoss == RaidBossKind.Weaver) return TetherAim(dt, eye, s, ref input);
             if (!InRoom(s, RaidRoomKind.ColorLocks) || s.RaidPortal > -1.5f || s.RaidYouHitLast) return false;
             int packed = s.RaidRoomData;
             if (ColorLocks.LengthOf(packed) == 0) return false;
@@ -104,7 +111,8 @@ namespace FriendlyPersonShooter.Arena
         {
             straight = false;
             jump = false;
-            if (!s.InRaid || s.RaidStageCount == 0 || s.RaidRoom == RaidRoomKind.Boss) return false;
+            if (!s.InRaid || s.RaidStageCount == 0) return false;
+            if (s.RaidRoom == RaidRoomKind.Boss) return s.RaidBoss == RaidBossKind.Weaver && WeaverAnchor(pos, s, ref anchor);
             var room = s.RaidRoom;
             var layout = RaidRoomLayout.For(room, s.RaidRoomSeed);
             if (s.RaidPortal > -1.5f)
@@ -144,6 +152,25 @@ namespace FriendlyPersonShooter.Arena
                     // Around the core, spread out, to shoot the runners coming in.
                     float a = _seat * 2.4f;
                     anchor = RaidArena.FromRoom(room, new System.Numerics.Vector3(math.sin(a) * 5.5f, 0f, math.cos(a) * 5.5f));
+                    return true;
+                }
+                case RaidRoomKind.Lanterns:
+                {
+                    // Carry this bot's light to its shade: close enough that the shade stands in it.
+                    if (_targetIsPlayer || _target == Entity.Null || !EntityManager.Exists(_target)) return false;
+                    if (EntityManager.GetComponentData<ArenaBuffs>(_me).Glow <= 0.5f) return false;
+                    var shade = ExpeditionWorld.Near(EntityManager.GetComponentData<LocalTransform>(_target).Position, pos);
+                    var away = pos - shade;
+                    away.y = 0f;
+                    float len = math.length(away);
+                    anchor = len > 0.1f ? shade + away / len * 4f : pos;
+                    return true;
+                }
+                case RaidRoomKind.SentinelEye:
+                {
+                    // Spread around the shell, so some bot sees whichever side the eye opens on.
+                    float a = _seat * 2.1f + 0.4f;
+                    anchor = RaidArena.FromRoom(room, new System.Numerics.Vector3(math.sin(a) * 9f, 0f, math.cos(a) * 9f));
                     return true;
                 }
                 default:
@@ -193,6 +220,182 @@ namespace FriendlyPersonShooter.Arena
                 if (math.abs(sw.Pivot.X - next.Center.X) < 0.1f && math.abs(sw.Pivot.Z - next.Center.Z) < 0.1f) side = 1.3f;
             return RaidArena.FromRoom(RaidRoomKind.Gauntlet, new System.Numerics.Vector3(next.Center.X + side, next.Top, next.Center.Z));
         }
+
+        /// <summary>
+        /// Sentinel Eye: aim at the spot that's glowing (so the bot is on it when it opens) if it faces this
+        /// bot, and fire while it's open.
+        /// </summary>
+        private bool EyeAim(float dt, float3 eye, in ExpeditionStatus s, ref ArenaInput input)
+        {
+            if (s.RaidPortal > -1.5f) return false;
+            int packed = s.RaidRoomData;
+            bool open = SentinelEye.OpenOf(packed), warn = SentinelEye.WarningOf(packed);
+            if (!open && !warn) return false;
+            int az = SentinelEye.AzimuthOf(packed), el = SentinelEye.ElevationOf(packed);
+            var p = RaidArena.FromRoom(RaidRoomKind.SentinelEye, SentinelEye.EyeAt(az, el, Clock(s)));
+            var center = RaidArena.FromRoom(RaidRoomKind.SentinelEye, SentinelEye.ShellCenter);
+            if (math.dot(math.normalize(p - center), math.normalize(eye - p)) < 0.2f) return false;
+            var aim = _aim.Step(dt, ToVec(eye), -3000 - az * 4 - el, ToVec(p), SentinelEye.EyeRadius * 0.7f);
+            input.Yaw = aim.Yaw;
+            input.Pitch = aim.Pitch;
+            bool clear = ArenaLayout.RaycastCover(eye, math.normalize(p - eye), math.distance(eye, p) - SentinelEye.EyeRadius) == float.MaxValue;
+            input.Fire = open && aim.Fire && clear ? 1 : 0;
+            return true;
+        }
+
+        /// <summary>A player's chest by network id (from their ghost), or false.</summary>
+        private bool ChestOf(int id, float3 near, out float3 chest)
+        {
+            chest = default;
+            if (!_entityById.TryGetValue(id, out var e) || !EntityManager.Exists(e)) return false;
+            chest = ExpeditionWorld.Near(EntityManager.GetComponentData<LocalTransform>(e).Position, near) + new float3(0f, 1.1f, 0f);
+            return true;
+        }
+
+        /// <summary>The Weaver: shoot apart the nearest thread that doesn't hold this bot.</summary>
+        private bool TetherAim(float dt, float3 eye, in ExpeditionStatus s, ref ArenaInput input)
+        {
+            if (s.RaidTethers == 0) return false;
+            int myId = EntityManager.GetComponentData<GhostOwner>(_me).NetworkId;
+            float best = float.MaxValue;
+            float3 target = default;
+            int bestIndex = -1;
+            for (int i = 0; i < RaidWeaver.MaxTethers; i++)
+            {
+                if (!RaidWeaver.UnpackTether(s.RaidTethers, i, out int a, out int b, out _)) continue;
+                if (a == myId || b == myId) continue;
+                if (!ChestOf(a, eye, out var from)) continue;
+                float3 point;
+                if (b == WeaverTether.WeaverEnd)
+                {
+                    // A third of the way from the player to the Weaver.
+                    var boss = RaidArena.Center + new float3(0f, 3.4f, 0f);
+                    point = math.lerp(from, boss, 0.3f);
+                }
+                else
+                {
+                    if (!ChestOf(b, eye, out var to)) continue;
+                    point = math.lerp(from, to, 0.5f);
+                }
+                float d = math.distance(eye, point);
+                if (d >= best || ArenaLayout.RaycastCover(eye, (point - eye) / math.max(d, 0.01f), d) != float.MaxValue) continue;
+                best = d;
+                target = point;
+                bestIndex = i;
+            }
+            if (bestIndex < 0) return false;
+            var aim = _aim.Step(dt, ToVec(eye), -4000 - bestIndex, ToVec(target), RaidWeaver.TetherRadius * 0.8f);
+            input.Yaw = aim.Yaw;
+            input.Pitch = aim.Pitch;
+            input.Fire = aim.Fire ? 1 : 0;
+            return true;
+        }
+
+        /// <summary>
+        /// The Weaver's floor: off a cracking tile, and never toward a hole (the nearest safe tile to wherever
+        /// the bot wanted to go instead). False if the bot's own plan is fine.
+        /// </summary>
+        private bool WeaverAnchor(float3 pos, in ExpeditionStatus s, ref float3 anchor)
+        {
+            var me = RaidArena.ToRoom(RaidRoomKind.Boss, pos);
+            var want = RaidArena.ToRoom(RaidRoomKind.Boss, anchor);
+            int myTile = RaidWeaver.TileAt(me.X, me.Z), wantTile = RaidWeaver.TileAt(want.X, want.Z);
+            bool unsafeHere = RaidWeaver.IsSet(s.RaidTilesCracking, myTile);
+            bool unsafeThere = wantTile < 0 || RaidWeaver.IsSet(s.RaidTilesFallen, wantTile) || RaidWeaver.IsSet(s.RaidTilesCracking, wantTile);
+            if (!unsafeHere && !unsafeThere) return false;
+            var from = unsafeThere ? want : me;
+            int best = -1;
+            float bestD = float.MaxValue;
+            for (int i = 0; i < RaidWeaver.Grid * RaidWeaver.Grid; i++)
+            {
+                if (RaidWeaver.IsSet(s.RaidTilesFallen, i) || RaidWeaver.IsSet(s.RaidTilesCracking, i)) continue;
+                var c = RaidWeaver.TileCenter(i);
+                float d = (c.X - from.X) * (c.X - from.X) + (c.Z - from.Z) * (c.Z - from.Z);
+                // Spread out a little: each seat leans to a different tile among the close ones.
+                d += ((i * 7 + _seat * 13) % 5) * 2f;
+                if (d >= bestD) continue;
+                bestD = d;
+                best = i;
+            }
+            if (best < 0) return false;
+            var tile = RaidWeaver.TileCenter(best);
+            anchor = RaidArena.FromRoom(RaidRoomKind.Boss, new System.Numerics.Vector3(tile.X, 0f, tile.Z));
+            return true;
+        }
+
+        /// <summary>
+        /// Lanterns: pick the target. A dark ally gets lit first (often, or always when no shade is in
+        /// anyone's light); otherwise the nearest shade standing in someone's light. True if this decided.
+        /// </summary>
+        private bool LanternsTarget(int myId, float3 eye)
+        {
+            if (!EntityManager.HasComponent<ExpeditionStatus>(_me)) return false;
+            var s = EntityManager.GetComponentData<ExpeditionStatus>(_me);
+            if (!InRoom(s, RaidRoomKind.Lanterns) || s.RaidPortal > -1.5f) return false;
+
+            _lights.Clear();
+            foreach (var kv in _entityById)
+            {
+                var e = kv.Value;
+                if (!EntityManager.Exists(e) || !EntityManager.HasComponent<ArenaBuffs>(e)) continue;
+                if (EntityManager.GetComponentData<ArenaVitals>(e).Health <= 0f) continue;
+                if (EntityManager.GetComponentData<ArenaBuffs>(e).Glow <= 0f) continue;
+                _lights.Add(ExpeditionWorld.Near(EntityManager.GetComponentData<LocalTransform>(e).Position, eye) + new float3(0f, Lanterns.LightHeight, 0f));
+            }
+
+            int lit = -1;
+            float bestLit = float.MaxValue;
+            for (int i = 0; i < _enemyList.Count; i++)
+            {
+                if (!_enemyList[i].Hittable) continue;
+                var p = _enemyList[i].Position;
+                var ep = new float3(p.X, p.Y, p.Z);
+                bool inLight = false;
+                foreach (var l in _lights) if (math.distancesq(l, ep) <= Lanterns.LightRadius * Lanterns.LightRadius * 0.85f) inLight = true;
+                if (!inLight) continue;
+                float d = math.distance(eye, ep);
+                if (d >= bestLit) continue;
+                bestLit = d;
+                lit = i;
+            }
+
+            // Glowing with no shade lit yet: take this light to the nearest shade (RoomAnchor walks it close).
+            bool glowing = EntityManager.GetComponentData<ArenaBuffs>(_me).Glow > 1f;
+            if (lit < 0 && glowing)
+            {
+                int nearest = -1;
+                float bestD = float.MaxValue;
+                for (int i = 0; i < _enemyList.Count; i++)
+                {
+                    float d = math.distance(eye, new float3(_enemyList[i].Position.X, _enemyList[i].Position.Y, _enemyList[i].Position.Z));
+                    if (!_enemyList[i].Hittable || d >= bestD) continue;
+                    bestD = d;
+                    nearest = i;
+                }
+                if (nearest >= 0)
+                {
+                    Pick(EnemyEntity(nearest), false);
+                    return true;
+                }
+            }
+            bool lightFirst = lit < 0 || _random.NextFloat() < 0.35f;
+            if (lightFirst && TryNearestAlly(myId, eye, a => !EntityManager.HasComponent<ArenaBuffs>(a.Entity) ||
+                                                             EntityManager.GetComponentData<ArenaBuffs>(a.Entity).Glow < 2.5f, out var ally))
+            {
+                Pick(ally, true);
+                return true;
+            }
+            if (lit >= 0)
+            {
+                Pick(EnemyEntity(lit), false);
+                return true;
+            }
+            // Nothing lit and nobody to light: keep an ally lit instead of wasting shots in the dark.
+            if (TryNearestAlly(myId, eye, a => true, out var anyone)) Pick(anyone, true);
+            return true;
+        }
+
+        private readonly System.Collections.Generic.List<float3> _lights = new System.Collections.Generic.List<float3>();
 
         /// <summary>The room clock from the status, run on between updates.</summary>
         private float Clock(in ExpeditionStatus s)

@@ -54,6 +54,10 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public uint RaidRoomSeed;
         [GhostField] public Core.Expedition.RaidBossKind RaidBoss;
         [GhostField] public Core.Expedition.RaidModifier RaidModifier;
+        /// <summary>The Weaver: its floor (bit per tile, see RaidWeaver) and its threads (RaidWeaver.PackTethers).</summary>
+        [GhostField] public ulong RaidTilesFallen;
+        [GhostField] public ulong RaidTilesCracking;
+        [GhostField] public ulong RaidTethers;
         [GhostField] public int RaidRoomData;
         [GhostField(Quantization = 100)] public float RaidRoomProgress;
         [GhostField(Quantization = 100)] public float RaidRoomClock;

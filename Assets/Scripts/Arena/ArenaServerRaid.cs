@@ -138,13 +138,14 @@ namespace FriendlyPersonShooter.Arena
                 Debug.Log($"[Raid] the Twins arrive with {_twinMaxHealth:0} health each");
                 return;
             }
+            RaidArena.SetBossFloor(0);
             var random = new Unity.Mathematics.Random(NextSeed() | 1u);
             var state = new EnemyState { Family = EnemyFamily.Bulwark, MaxHealth = health, Raid = true };
             state.Boss = BulwarkBehavior.Create(ToVec(RaidArena.Center), random.NextFloat(0f, 360f), _bulwark);
             _spawned.Clear();
             SpawnEnemy(state, state.Boss.Position);
             _spawned.Clear();
-            Debug.Log($"[Raid] the Bulwark arrives with {health:0} health");
+            Debug.Log($"[Raid] {RaidRoomLayout.NameOf(_run.Boss)} arrives with {health:0} health");
         }
 
         private void SpawnTwin(int twin, float healthShare)
@@ -198,7 +199,15 @@ namespace FriendlyPersonShooter.Arena
                 // Fell off the edge, or somehow outside the current room: back onto its platform
                 // (the gauntlet handles its own falls).
                 bool fell = room != RaidRoomKind.Gauntlet && pos.y < RaidArena.RoomCenter(room).y - 8f;
-                if (fell || !RaidArena.InRoom(room, pos, 60f, 60f))
+                if (fell && _run.AtBoss && _run.Weaver != null)
+                {
+                    // Through the Weaver's floor: back up onto a tile, stung.
+                    pos = WeaverLanding(pos);
+                    TeleportPlayer(id, pos);
+                    GauntletHurt(ecb, id, RaidWeaver.FallDamage);
+                    _weaverFalls++;
+                }
+                else if (fell || !RaidArena.InRoom(room, pos, 60f, 60f))
                 {
                     pos = RaidArena.RoomSpawn(room, i, _raidScratch.Count);
                     TeleportPlayer(id, pos);
@@ -213,6 +222,7 @@ namespace FriendlyPersonShooter.Arena
                 _announce.Add((AnnounceKind.TwinRevived, revived, 0, 0));
                 Debug.Log($"[Raid] twin {revived} is back");
             }
+            else if (_run.AtBoss && _run.Weaver != null) StepWeaver(ecb);
 
             if (_raidWaveDue > 0)
             {
@@ -278,8 +288,9 @@ namespace FriendlyPersonShooter.Arena
             _raidScratch.AddRange(_raid.Participants);
             _raid.Finish(_time, outcome);
 
-            // Whatever is left of the fight goes away (no drops).
+            // Whatever is left of the fight goes away (no drops); the Weaver's floor comes back.
             ClearRaidEnemies(ecb);
+            RaidArena.SetBossFloor(0);
             string reached = _run == null ? "" : $" at stage {_run.Stage + 1}/{_run.StageCount} ({_run.StageName})";
             _run = null;
 

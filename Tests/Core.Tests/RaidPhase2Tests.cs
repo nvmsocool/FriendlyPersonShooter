@@ -145,7 +145,7 @@ namespace FriendlyPersonShooter.Core.Tests
                 bosses.Add(run.Boss);
                 foreach (var k in run.Rooms) rooms.Add(k);
             }
-            Assert.That(bosses.Count, Is.EqualTo(2));
+            Assert.That(bosses.Count, Is.EqualTo(3));
             Assert.That(rooms, Is.EquivalentTo(RaidRoomLayout.Pool));
             Assert.That(new RaidRun(1, 4, boss: RaidBossKind.Twins).Boss, Is.EqualTo(RaidBossKind.Twins));
 

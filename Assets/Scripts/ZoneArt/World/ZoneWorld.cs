@@ -47,6 +47,12 @@ namespace FriendlyPersonShooter.ZoneArt
 
         public static ZoneWorld Current { get; private set; }
 
+        /// <summary>
+        /// Runs after the zones' look (sun, ambient, fog, sky) is applied each frame, so a game mode can
+        /// override it for a moment (the raid's fog and dark rooms). The zones put their look back next frame.
+        /// </summary>
+        public static System.Action AfterLook;
+
         /// <summary>The zone world for a layer, created on first use (and replaced when the layer or generator changes).</summary>
         public static ZoneWorld Open(LayerMap map, string generatorName, bool headless)
         {
@@ -520,7 +526,14 @@ namespace FriendlyPersonShooter.ZoneArt
         {
             if (_lateFrame == Time.frameCount) return;
             _lateFrame = Time.frameCount;
-            if (Headless || !ViewPoint.HasValue) return;
+            if (Headless) return;
+            LateView();
+            AfterLook?.Invoke();
+        }
+
+        private void LateView()
+        {
+            if (!ViewPoint.HasValue) return;
             var view = ViewPoint.Value;
 
             // Each zone's visuals sit at the copy nearest the camera.

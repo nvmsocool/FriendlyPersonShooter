@@ -8,6 +8,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         Bulwark = 0,
         /// <summary>Two smaller Bulwarks that must die close together (<see cref="RaidTwins"/>).</summary>
         Twins = 1,
+        /// <summary>A Bulwark over a floor that falls away, which ties players together (<see cref="RaidWeaver"/>).</summary>
+        Weaver = 2,
     }
 
     public enum TwinEvent : byte

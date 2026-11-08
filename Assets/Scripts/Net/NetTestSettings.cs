@@ -51,6 +51,9 @@ namespace FriendlyPersonShooter.Net
         /// <summary>-fps-start host|solo: the menu hosts or starts a solo game straight away (for testing).</summary>
         public static string Start;
 
+        /// <summary>-fps-shot FILE: the menu saves a screenshot to FILE once it has drawn (for checking builds).</summary>
+        public static string Shot;
+
         /// <summary>Bot allies. Each is a full client, so it receives the game state and can aim.</summary>
         public static int ArenaBots = 3;
 
@@ -104,6 +107,9 @@ namespace FriendlyPersonShooter.Net
                         break;
                     case "-fps-profile":
                         Profile = value;
+                        break;
+                    case "-fps-shot":
+                        Shot = value;
                         break;
                     case "-fps-world-seed":
                         if (uint.TryParse(value, out uint worldSeed)) WorldSeed = worldSeed;

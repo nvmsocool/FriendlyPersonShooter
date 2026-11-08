@@ -184,7 +184,7 @@ Guns are found, not chosen: each gun is a **frame** (how it fires) with three **
 | SMG | Fast spray, falls off with range | Mites, Skitters | Keeps buffs up on a nearby ally |
 | Marksman | Slow, high-damage single shots; zooms | Sentinels, Bulwarks | Big buff per hit, hard to land on a moving ally |
 | Beam | Continuous; effect builds while on target | Skitters, Divers | Steady healing or shielding; pure tracking |
-| Launcher | Slow projectile with small splash | Mite swarms | Buffs a cluster of allies at once |
+| Launcher | Slow projectile with a wide splash (5.5 m) | Mite swarms | Buffs a cluster of allies at once |
 
 Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mouse zooms, by an amount set by the frame and its scope mod.
 
@@ -201,6 +201,7 @@ Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mo
 
 **Finding gear**
 
+- **Starting gun.** A new player picks one of three starting guns, each with a common payload mod. The three never share a frame or a payload, so the choice is real. Bots get their role's kit instead.
 - **Loot boxes** stand around every zone. Each player who opens a box gets their own roll (a gun or a mod), so nobody competes for loot.
 - **Bosses** drop gear for everyone who fought them; a raid clear gives each player a guaranteed rare or better item.
 - **Equip on the spot.** There is no inventory: picking up a gun replaces the gun in your hand, and picking up a mod puts it on your current gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it.
@@ -228,7 +229,7 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 3. **Layer 3 (tier 3).** Hardest families, rarer blooms. Launch ships these 3 layers; the MVP proves only layer 1.
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
-- **Raids** are doors in the world. Once its key is fully pooled, anyone at the door presses E to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size, and everyone returns to the door's zone afterward.
+- **Raids** are doors in the world. Once its key is fully pooled, anyone at the door presses E to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot, and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
 - **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. The build order lives in `Docs/RaidDevPlan.md`.
 - **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it. A world boss fights differently from raid bosses: raid bosses test aim under pressure in a closed room, world bosses test movement in the open (dodging, jumping, using cover).
 
@@ -267,7 +268,8 @@ The game makes every meeting between friends in the world either useful or harml
 **Talking without typing**
 
 - **Quick-chat wheel** with essence and landmark words: "Seen any [Yellow]?", "[Purple] → past [Broken Tower]", "Need buffs", "Bloom here!". Messages reach every player nearby, grouped or not, and show in the reader's language. Your own lines show in your chat feed too.
-- **Minimap.** A simple top-down map in the corner shows only player positions, in their player colors.
+- **Minimap.** A simple top-down map in the corner shows players in their player colors and enemies as small dots. Teammates beyond its range sit on its rim as small arrows pointing their way.
+- **Pings.** Middle mouse pings what you point at: an enemy, or the ground or a wall. Everyone sees a marker in the pinger's color drawn over everything (pinned to the screen's edge when it's off screen) with its distance, a pillar of light at the spot and a diamond on the minimap, and hears a chirp. A ping lasts 8 s; a new one replaces your old one.
 - **Sightings.** Seeing a cluster of enemies or a bloom drops a private map pin. Looking at another player and pressing *share* swaps pins with them.
 - **Proximity voice** is optional.
 
@@ -452,6 +454,14 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **The Twins** (boss, a third of runs since phase 3): two Bulwarks, each with 60% of the single boss's health, standing 16 m apart. When one falls, the other must follow within 10 s or the first comes back at half health. Add waves follow their combined health. The HUD shows both bars and the revive countdown.
 - **Layout variants:** each run reshapes its rooms from a seed: where the Color Locks pillars and plates stand, which gauntlet stones sweep and how fast, the rune patterns, and the core's gates and cover. Floors, spawns and portals stay put.
 - Checked in the Editor with 3 bots: Echo Runes takes about 30 s with no mistakes. Bots struggle to hold the core (they let about half the runners through) and reach a third of the Twins' health before wiping, so both need the playtest.
+
+**After the third playtest (built Nov 6, 2026; not yet playtested).**
+- **Menu fix:** the build started in the Expedition scene behind the main menu (a broken screen) since the lobby code was removed on Nov 5. It starts at the menu again.
+- **Starting gun pick:** three cards over a dimmed screen; the mouse stays free until you pick one. Taking loot before picking keeps what you hold.
+- **Raid ending:** the boss explodes (a fireball, a shockwave along the floor, flying armor and a flash of light), rewards land right away, and an exit portal opens on the boss platform. Bots hang about for 15 s, then leave through it. The raid ends when the last raider has gone home, or after 5 minutes.
+- **Pings and minimap arrows** (see Talking without typing).
+- **Launcher:** splash radius 3.5 m → 5.5 m.
+- Checked in the Editor with 3 bots: the pick, a ping on the terrain, rim arrows for two bots sent 200–250 m away, and two won raids (the Weaver and the Bulwark) with the explosion, the hang-out and the exit portal.
 
 **Raid runs, phase 3 (built Nov 5, 2026; not yet playtested).** Two strange rooms (8 in the pool), a third boss, and two more run modifiers.
 - **Lanterns** (puzzle): the room is nearly dark. A helpful payload hit on an ally makes them glow for 10 s (a lone player always glows), with a light that reaches 7.5 m. Shades (Skitters) can only be hurt inside someone's light; hits in the dark do nothing and show a refused marker. Kill 6 + 2 per player. Shades trickle in one at a time up to a cap.

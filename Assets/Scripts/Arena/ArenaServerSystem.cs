@@ -49,6 +49,10 @@ namespace FriendlyPersonShooter.Arena
             public ulong[] Packed = new ulong[2];
             /// <summary>A bot already got its role's kit.</summary>
             public bool BotKit;
+            /// <summary>The starting guns this player picks from (no frame or payload twice), while <see cref="Choosing"/>.</summary>
+            public Gun[] Choices;
+            /// <summary>Hasn't picked a starting gun yet (holds the first choice meanwhile).</summary>
+            public bool Choosing;
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
@@ -181,6 +185,7 @@ namespace FriendlyPersonShooter.Arena
             SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
             StepLoot(ecb);
+            StepPings(ecb);
             if (ExpeditionWorld.Active) StepExpedition(ecb);
             else RespawnEnemies();
             StepSkillRequests();

@@ -15,8 +15,9 @@ namespace FriendlyPersonShooter.Arena
     /// toward its key (carried first, then the party bank), strangers into the same key. With a full key,
     /// anyone at the door presses E to start a countdown; whoever stands at the door when it ends goes up together for a run (see
     /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
-    /// group on the raid arena (<see cref="RaidArena"/>). Clearing it gives everyone inside a level's
-    /// worth of XP and some Yellow; a wipe or the time limit sends them back down.
+    /// group on the raid arena (<see cref="RaidArena"/>). Beating it blows the boss apart and pays everyone
+    /// inside a level's worth of XP, some Yellow and an item; they can stay up there, and each goes home
+    /// through the exit portal (or all at once when the hang-out ends). A wipe or the time limit sends them back down.
     /// </summary>
     public partial class ArenaServerSystem
     {
@@ -187,8 +188,7 @@ namespace FriendlyPersonShooter.Arena
             if (_raidBossDead)
             {
                 _raidBossDead = false;
-                EndRaid(RaidOutcome.Cleared, ecb);
-                return;
+                WinRaid(ecb);
             }
             _raidScratch.Clear();
             _raidScratch.AddRange(_raid.Participants);
@@ -228,6 +228,14 @@ namespace FriendlyPersonShooter.Arena
                 }
                 if (!st.Vitals.IsDown) up++;
                 _roomPlayers.Add((id, RaidArena.ToRoom(room, pos), !st.Vitals.IsDown));
+            }
+            if (_run.Won)
+            {
+                // The celebration: no more fighting; each raider goes home through the exit portal.
+                StepExitPortal();
+                var over = _raid.Check(_time, up);
+                if (over != RaidOutcome.None) EndRaid(over, ecb);
+                return;
             }
             if (!_run.AtBoss) StepRoom(ecb);
             else if (_run.Twins != null && _run.Twins.Step(_time, out int revived) == TwinEvent.Revived)
@@ -295,9 +303,71 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>
+        /// The boss died: it blows apart (clients draw it), the fight's leftovers go, and everyone inside is paid
+        /// on the spot (the downed get back up; each gets XP, Yellow and a rare-or-better item at their feet).
+        /// They stay up there until they leave through the exit portal.
+        /// </summary>
+        private void WinRaid(EntityCommandBuffer ecb)
+        {
+            float took = (float)(_time - _raid.StartedAt);
+            if (!_raid.Win(_time) || !_run.MarkWon()) return;
+            ClearRaidEnemies(ecb);
+            RaidArena.SetBossFloor(0);
+            _raidWaveDue = 0;
+            _raidScratch.Clear();
+            _raidScratch.AddRange(_raid.Participants);
+            foreach (int id in _raidScratch)
+            {
+                if (!_playerById.TryGetValue(id, out var e) || !_players.TryGetValue(e, out var st)) continue;
+                if (st.Revive != null)
+                {
+                    st.Vitals.Revive(_combat.Revive.ReviveHealthFraction);
+                    st.Revive = null;
+                }
+                AddXp(id, _raid.Settings.ClearXp);
+                WalletOf(id).PickUp(EssenceColor.Yellow, _raid.Settings.ClearYellow);
+                GiveBossLoot(id, EntityManager.GetComponentData<LocalTransform>(e).Position, ecb);
+            }
+            _raidsCleared++;
+            _announce.Add((AnnounceKind.RaidCleared, (int)took, 0, 0));
+            Debug.Log($"[Raid] Cleared after {took:0}s with {_raidScratch.Count} player(s) inside; the exit portal is open");
+        }
+
+        /// <summary>After the boss: whoever steps into the exit portal goes home to the door.</summary>
+        private void StepExitPortal()
+        {
+            var portal = RaidArena.FromRoom(RaidRoomKind.Boss, _run.Layout.Portal);
+            _raidScratch.Clear();
+            _raidScratch.AddRange(_raid.Participants);
+            for (int i = 0; i < _raidScratch.Count; i++)
+            {
+                int id = _raidScratch[i];
+                if (!_playerById.TryGetValue(id, out var e)) continue;
+                var pos = EntityManager.GetComponentData<LocalTransform>(e).Position;
+                var d = pos - portal;
+                if (d.x * d.x + d.z * d.z > RaidRoomLayout.PortalRadius * RaidRoomLayout.PortalRadius || math.abs(d.y) > 3f) continue;
+                _raid.Leave(id);
+                SendHome(id, i, _raidScratch.Count);
+                Debug.Log($"[Raid] player {id} went home through the exit portal");
+            }
+        }
+
+        /// <summary>Puts a raider back on the ground in a ring around the door.</summary>
+        private float3 SendHome(int id, int index, int count)
+        {
+            float a = 2f * math.PI * index / math.max(1, count);
+            var spot = ExpeditionWorld.ToFloat3(RaidDoorPoint) + new float3(math.sin(a) * 4f, 0f, math.cos(a) * 4f);
+            var landed = ExpeditionTerrain.OnGround(ExpeditionWorld.Wrap(spot));
+            TeleportPlayer(id, landed);
+            return landed;
+        }
+
         private void EndRaid(RaidOutcome outcome, EntityCommandBuffer ecb)
         {
             float took = (float)(_time - _raid.StartedAt);
+            // A won run was paid when the boss died; this just sends the last ones home.
+            bool celebrated = _raid.Won;
             _raidScratch.Clear();
             _raidScratch.AddRange(_raid.Participants);
             _raid.Finish(_time, outcome);
@@ -310,12 +380,12 @@ namespace FriendlyPersonShooter.Arena
 
             // Everyone inside comes back down by the door. On a clear the downed get back up and everyone
             // is paid; otherwise the downed keep bleeding out by the door, where others can revive them.
-            var door = RaidDoorPoint;
             for (int i = 0; i < _raidScratch.Count; i++)
             {
                 int id = _raidScratch[i];
                 if (!_playerById.TryGetValue(id, out var e) || !_players.TryGetValue(e, out var st)) continue;
-                if (outcome == RaidOutcome.Cleared)
+                bool pay = outcome == RaidOutcome.Cleared && !celebrated;
+                if (pay)
                 {
                     if (st.Revive != null)
                     {
@@ -325,14 +395,16 @@ namespace FriendlyPersonShooter.Arena
                     AddXp(id, _raid.Settings.ClearXp);
                     WalletOf(id).PickUp(EssenceColor.Yellow, _raid.Settings.ClearYellow);
                 }
-                float a = 2f * math.PI * i / math.max(1, _raidScratch.Count);
-                var spot = ExpeditionWorld.ToFloat3(door) + new float3(math.sin(a) * 4f, 0f, math.cos(a) * 4f);
-                var landed = ExpeditionTerrain.OnGround(ExpeditionWorld.Wrap(spot));
-                TeleportPlayer(id, landed);
+                var landed = SendHome(id, i, _raidScratch.Count);
                 // A clear also pays each raider a rare-or-better item, waiting at their feet.
-                if (outcome == RaidOutcome.Cleared) GiveBossLoot(id, landed, ecb);
+                if (pay) GiveBossLoot(id, landed, ecb);
             }
 
+            if (celebrated)
+            {
+                Debug.Log($"[Raid] the celebration ended after {took:0}s; {_raidScratch.Count} player(s) sent home");
+                return;
+            }
             if (outcome == RaidOutcome.Cleared)
             {
                 _raidsCleared++;

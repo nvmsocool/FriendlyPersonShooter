@@ -65,12 +65,27 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------- Loadouts ----------
 
-        /// <summary>A new player's kit: one random gun with one random payload mod.</summary>
+        /// <summary>
+        /// A new player's kit: a choice of starting guns (each with a payload mod, no frame or payload twice).
+        /// They hold the first one until they pick (<see cref="PickStartingGun"/>).
+        /// </summary>
         private void EnsureKit(PlayerState s)
         {
             if (s.Loadout != null) return;
-            s.Loadout = new Loadout(LootRolls.StartingGun(SeedHash.Of(_lootSeed, 0x6A1, s.Vitals.Id)));
+            s.Choices = LootRolls.StartingChoices(SeedHash.Of(_lootSeed, 0x6A1, s.Vitals.Id));
+            s.Choosing = true;
+            s.Loadout = new Loadout(s.Choices[0]);
             Refit(s);
+        }
+
+        /// <summary>The player picked one of their starting guns.</summary>
+        private void PickStartingGun(PlayerState s, int index)
+        {
+            if (!s.Choosing || s.Choices == null || index < 0 || index >= s.Choices.Length) return;
+            s.Choosing = false;
+            s.Loadout = new Loadout(s.Choices[index]);
+            Refit(s);
+            UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked {s.Choices[index].Frame} with {s.Choices[index].Payload}");
         }
 
         /// <summary>After a loadout change: new stats; a new gun comes loaded, a re-modded one keeps its ammo.</summary>
@@ -96,11 +111,18 @@ namespace FriendlyPersonShooter.Arena
         {
             var l = s.Loadout;
             var st = s.Guns[l.Active];
-            return new ArenaLoadout
+            var ghost = new ArenaLoadout
             {
                 Payload = l.InHand.Payload, GunA = l.GunA.Pack(), GunB = l.GunB.Pack(), Active = (byte)l.Active,
-                Ammo = st.Ammo, Reload = st.ReloadProgress(_time),
+                Ammo = st.Ammo, Reload = st.ReloadProgress(_time), Choosing = s.Choosing,
             };
+            if (s.Choosing && s.Choices != null)
+            {
+                ghost.Choice0 = s.Choices.Length > 0 ? s.Choices[0].Pack() : 0;
+                ghost.Choice1 = s.Choices.Length > 1 ? s.Choices[1].Pack() : 0;
+                ghost.Choice2 = s.Choices.Length > 2 ? s.Choices[2].Pack() : 0;
+            }
+            return ghost;
         }
 
         private void SwapGun(PlayerState s)
@@ -438,8 +460,17 @@ namespace FriendlyPersonShooter.Arena
                     continue;
                 }
                 ps.BotKit = true;
+                ps.Choosing = false;
                 ps.Loadout = new Loadout(LootRolls.BotGun(payload, SeedHash.Of(_lootSeed, 0xB07, id)));
                 Refit(ps);
+            }
+
+            foreach (var (request, receive, rpc) in SystemAPI.Query<RefRO<KitChoiceRequest>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(rpc);
+                if (!SystemAPI.HasComponent<NetworkId>(receive.ValueRO.SourceConnection)) continue;
+                int id = SystemAPI.GetComponent<NetworkId>(receive.ValueRO.SourceConnection).Value;
+                if (_playerById.TryGetValue(id, out var pe) && _players.TryGetValue(pe, out var ps)) PickStartingGun(ps, request.ValueRO.Index);
             }
 
             if (ExpeditionWorld.Active && _boxes == null) _boxes = LootBoxSites.For(ExpeditionWorld.Map);
@@ -487,6 +518,8 @@ namespace FriendlyPersonShooter.Arena
                 int before = state.Loadout.Active;
                 var result = state.Loadout.Equip(ground.Item);
                 if (!result.Equipped) return;
+                // Taking loot settles the kit: the starting pick is gone.
+                state.Choosing = false;
                 _items.Remove(bestItem);
                 ecb.DestroyEntity(bestItem);
                 _itemsTaken++;

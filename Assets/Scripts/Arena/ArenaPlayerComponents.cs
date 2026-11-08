@@ -58,6 +58,8 @@ namespace FriendlyPersonShooter.Arena
         public int Sprint;
         /// <summary>"Reset position" from the Esc menu: the server moves the player to the nearest shrine.</summary>
         public InputEvent Unstuck;
+        /// <summary>Middle mouse: ping what you're pointing at.</summary>
+        public InputEvent Ping;
     }
 
     /// <summary>

@@ -283,6 +283,8 @@ namespace FriendlyPersonShooter.Arena
                 }
             }
             for (; enemyDot < ArenaHud.EnemyDotSlots; enemyDot++) _hud.SetEnemyDot(enemyDot, false);
+            NotePingOwner(world, local);
+            WritePingHud(local, feet, right, forward);
 
             if (em.HasComponent<ArenaProgress>(local))
             {

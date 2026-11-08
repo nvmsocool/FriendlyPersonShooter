@@ -210,6 +210,46 @@ namespace FriendlyPersonShooter.Arena
             return clip;
         }
 
+        private static AudioClip _ping;
+
+        /// <summary>Someone pinged: a quick two-note chirp, flat (it's a message, not a sound in the world).</summary>
+        public static void Ping()
+        {
+            if (Application.isBatchMode || !EnsurePool()) return;
+            if (_ping == null)
+            {
+                const float note = 0.07f;
+                float[] freqs = { 1175f, 1568f };
+                int per = (int)(Rate * note);
+                int n = per * freqs.Length + (int)(Rate * 0.15f);
+                var data = new float[n];
+                for (int k = 0; k < freqs.Length; k++)
+                {
+                    float phase = 0f;
+                    for (int i = per * k; i < n; i++)
+                    {
+                        float t = (i - per * k) / (float)Rate;
+                        phase += freqs[k] / Rate;
+                        data[i] += 0.3f * Mathf.Sin(phase * 2f * Mathf.PI) * Mathf.Clamp01(t / 0.003f) * Mathf.Exp(-t * 18f);
+                    }
+                }
+                _ping = AudioClip.Create("Ping", n, 1, Rate, false);
+                _ping.SetData(data, 0);
+            }
+            PlayFlat(_ping, 1f, 0.55f);
+        }
+
+        /// <summary>The raid boss blowing apart: a few deep blasts, heard from anywhere in the raid.</summary>
+        public static void BossExplosion()
+        {
+            if (Application.isBatchMode || !EnsurePool()) return;
+            if (_blast == null) _blast = MakeBlast();
+            if (_thump == null) _thump = MakeThump();
+            PlayFlat(_blast, 0.55f, 1f);
+            PlayFlat(_blast, 0.7f, 0.8f);
+            PlayFlat(_thump, 0.5f, 1f);
+        }
+
         private static float Range(float a, float b) => a + (float)Rng.NextDouble() * (b - a);
 
         private static bool EnsurePool()

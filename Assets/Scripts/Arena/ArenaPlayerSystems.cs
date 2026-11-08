@@ -167,7 +167,7 @@ namespace FriendlyPersonShooter.Arena
             var mouse = Mouse.current;
             bool locked = Cursor.lockState == CursorLockMode.Locked;
             int h = 0, v = 0;
-            bool jump = false, swap = false, fire = false, reload = false, interact = false, zoom = false, sprint = false;
+            bool jump = false, swap = false, fire = false, reload = false, interact = false, zoom = false, sprint = false, ping = false;
             if (keyboard != null)
             {
                 if (keyboard.aKey.isPressed) h -= 1;
@@ -189,6 +189,7 @@ namespace FriendlyPersonShooter.Arena
                 _yaw = (_yaw + delta.x * sens) % 360f;
                 _pitch = math.clamp(_pitch + delta.y * sens, -85f, 85f);
                 fire = mouse.leftButton.isPressed;
+                ping = mouse.middleButton.wasPressedThisFrame;
             }
             LocalLook = new float2(_yaw, _pitch);
             Zooming = zoom;
@@ -203,6 +204,7 @@ namespace FriendlyPersonShooter.Arena
                 if (reload) i.Reload.Set();
                 if (interact) i.Interact.Set();
                 if (unstuck) i.Unstuck.Set();
+                if (ping) i.Ping.Set();
                 input.ValueRW = i;
             }
         }

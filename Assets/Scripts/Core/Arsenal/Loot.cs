@@ -58,6 +58,37 @@ namespace FriendlyPersonShooter.Core.Arsenal
             return new Gun(frame, payload0: new Mod(payload));
         }
 
+        /// <summary>How many starting guns a new player picks from.</summary>
+        public const int StartingChoiceCount = 3;
+
+        /// <summary>
+        /// A new player's choice of starting guns: <paramref name="count"/> guns, each with one common payload mod.
+        /// No two share a frame and no two share a payload (so at most as many as there are payloads).
+        /// </summary>
+        public static Gun[] StartingChoices(uint seed, int count = StartingChoiceCount)
+        {
+            var rng = new CombatRandom(seed == 0 ? 1u : seed);
+            var frames = (FrameKind[])GunFrames.All.Clone();
+            var payloads = (ModKind[])GunMods.PayloadKinds.Clone();
+            Shuffle(frames, ref rng);
+            Shuffle(payloads, ref rng);
+            count = Math.Max(1, Math.Min(count, Math.Min(frames.Length, payloads.Length)));
+            var guns = new Gun[count];
+            for (int i = 0; i < count; i++) guns[i] = new Gun(frames[i], payload0: new Mod(payloads[i]));
+            return guns;
+        }
+
+        private static void Shuffle<T>(T[] items, ref CombatRandom rng)
+        {
+            for (int i = items.Length - 1; i > 0; i--)
+            {
+                int j = rng.NextInt(i + 1);
+                var t = items[i];
+                items[i] = items[j];
+                items[j] = t;
+            }
+        }
+
         /// <summary>A bot's kit: its role's payload on a hitscan frame its aim can use.</summary>
         public static Gun BotGun(PayloadKind payload, uint seed)
         {

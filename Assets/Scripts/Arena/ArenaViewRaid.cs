@@ -138,6 +138,7 @@ namespace FriendlyPersonShooter.Arena
             RaidArena.Ensure();
             TryGetStatus(out var status);
             DrawStrange(status);
+            DrawVictory(status);
 
             // The arena's state glow follows the boss's plate (last frame's state).
             Color state = RaidViolet;
@@ -683,7 +684,7 @@ namespace FriendlyPersonShooter.Arena
                 case AnnounceKind.RaidStarted:
                     return $"<color=#D9B3FF>{m.Value} player{(m.Value == 1 ? "" : "s")} went into the raid</color>\n";
                 case AnnounceKind.RaidCleared:
-                    return $"<color=#FFD84D>RAID CLEARED in {m.Value / 60}:{m.Value % 60:00}! +{RaidRules.ClearXp} XP, +{RaidRules.ClearYellow} Yellow</color>\n";
+                    return $"<color=#FFD84D>RAID CLEARED in {m.Value / 60}:{m.Value % 60:00}! +{RaidRules.ClearXp} XP, +{RaidRules.ClearYellow} Yellow and an item at your feet. The portal takes you home</color>\n";
                 case AnnounceKind.RaidFailed:
                     return (RaidOutcome)m.Value == RaidOutcome.TimedOut
                         ? "<color=#FF8080>The raid ran out of time</color>\n"

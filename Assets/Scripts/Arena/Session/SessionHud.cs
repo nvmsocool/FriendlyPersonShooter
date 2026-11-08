@@ -1,3 +1,5 @@
+using FriendlyPersonShooter.Core.Arsenal;
+using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Progression;
 using Unity.Entities;
 using Unity.NetCode;
@@ -7,8 +9,8 @@ using UnityEngine.UI;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The in-game session overlay: the host's join code (top right), Copy code and Leave game buttons while the
-    /// cursor is free (Esc), and "can't reach the host" handling for joining players.
+    /// The in-game session overlay: the starting gun pick, the host's join code (top right), Copy code and Leave
+    /// game buttons while the cursor is free (Esc), and "can't reach the host" handling for joining players.
     /// </summary>
     public sealed class SessionHud : MonoBehaviour
     {
@@ -24,8 +26,13 @@ namespace FriendlyPersonShooter.Arena
         private int _shownRanks = -1, _shownPoints = -1;
         private float _started;
         private bool _connected;
-        private EntityQuery _id, _connection;
-        private World _queryWorld;
+        private EntityQuery _id, _connection, _loadout;
+        private World _queryWorld, _loadoutWorld;
+        private GameObject _pick;
+        private readonly Text[] _pickLabels = new Text[LootRolls.StartingChoiceCount];
+        private readonly Image[] _pickStripes = new Image[LootRolls.StartingChoiceCount];
+        private readonly ulong[] _pickShown = new ulong[LootRolls.StartingChoiceCount];
+        private bool _picked;
 
         private void Start()
         {
@@ -81,6 +88,7 @@ namespace FriendlyPersonShooter.Arena
             SessionUi.Button(p, hasCode ? "End game" : "Leave game", bottom, new Vector2(X(slot), 34), size, SessionUi.Primary,
                 () => PlaySession.Leave(), 26);
             _pause.SetActive(false);
+            BuildPick(canvas);
             // Straight into play: the mouse is captured from the start (Esc frees it and shows the options).
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
@@ -91,6 +99,7 @@ namespace FriendlyPersonShooter.Arena
             "WASD  move          Space  jump\n" +
             "Shift  sprint (forward)\n" +
             "Left mouse  fire    Right mouse  zoom\n" +
+            "Middle mouse  ping a spot or an enemy\n" +
             "Q  switch gun       R  reload\n" +
             "E  open a loot box / take an item\n" +
             "Esc  free the mouse (this menu)\n" +
@@ -180,6 +189,115 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>
+        /// The starting gun pick: a card per choice over a dimmed screen (which also keeps clicks off the game,
+        /// so the mouse stays free until a card is picked).
+        /// </summary>
+        private void BuildPick(Transform canvas)
+        {
+            var dim = SessionUi.Box(canvas, "Pick", new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.02f, 0.01f, 0.06f, 0.7f));
+            dim.rectTransform.anchorMin = Vector2.zero;
+            dim.rectTransform.anchorMax = Vector2.one;
+            _pick = dim.gameObject;
+            var c = new Vector2(0.5f, 0.5f);
+            SessionUi.Label(_pick.transform, "PICK YOUR STARTING GUN", 52, c, new Vector2(0, 250), new Vector2(1400, 70), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold)
+                .gameObject.AddComponent<Shadow>().effectDistance = new Vector2(3, -3);
+            SessionUi.Label(_pick.transform, "Each comes with a payload: shoot allies to buff them, enemies to weaken them. You'll find more guns and mods in loot boxes.",
+                22, c, new Vector2(0, 196), new Vector2(1400, 34), TextAnchor.MiddleCenter, SessionUi.Muted);
+            for (int i = 0; i < _pickLabels.Length; i++)
+            {
+                int index = i;
+                float x = (i - (_pickLabels.Length - 1) * 0.5f) * 420f;
+                var card = SessionUi.Button(_pick.transform, "", c, new Vector2(x, -30), new Vector2(390, 360), new Color(0.12f, 0.1f, 0.26f, 0.95f), () => Pick(index), 24);
+                _pickStripes[i] = SessionUi.Box(card.transform, "Payload", new Vector2(0.5f, 1f), new Vector2(0, -8), new Vector2(374, 10), Color.white);
+                _pickLabels[i] = card.GetComponentInChildren<Text>();
+                _pickLabels[i].supportRichText = true;
+                _pickLabels[i].fontStyle = FontStyle.Normal;
+                _pickLabels[i].alignment = TextAnchor.MiddleCenter;
+            }
+            _pick.SetActive(false);
+        }
+
+        private static string FrameBlurb(FrameKind frame)
+        {
+            switch (frame)
+            {
+                case FrameKind.Pistol: return "Accurate single shots";
+                case FrameKind.Rifle: return "Three-round bursts";
+                case FrameKind.Smg: return "Fast fire, short range";
+                case FrameKind.Marksman: return "Slow, hard-hitting, long range";
+                case FrameKind.Beam: return "A steady beam that ramps up";
+                case FrameKind.Launcher: return "Shells that burst where they land";
+                default: return "";
+            }
+        }
+
+        private static string PayloadBlurb(PayloadKind payload)
+        {
+            switch (payload)
+            {
+                case PayloadKind.Vigor: return "allies: heal + shield\nenemies: wither";
+                case PayloadKind.Might: return "allies: +damage\nenemies: expose";
+                case PayloadKind.Haste: return "allies: +speed, +jump\nenemies: slow";
+                case PayloadKind.Relay: return "allies: their hits carry Might\nenemies: hits splash";
+                default: return "";
+            }
+        }
+
+        private void Pick(int index)
+        {
+            ArenaFx.KitChoice = index;
+            _picked = true;
+            _pick.SetActive(false);
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+
+        /// <summary>Shows the pick while the server says this player hasn't chosen yet. True while it's up.</summary>
+        private bool RefreshPick()
+        {
+            var world = ClientServerBootstrap.ClientWorld;
+            bool show = false;
+            ArenaLoadout loadout = default;
+            if (!_picked && world != null && world.IsCreated)
+            {
+                if (_loadoutWorld != world)
+                {
+                    _loadoutWorld = world;
+                    _loadout = world.EntityManager.CreateEntityQuery(ComponentType.ReadOnly<ArenaLoadout>(), ComponentType.ReadOnly<ArenaPlayer>(),
+                        ComponentType.ReadOnly<GhostOwnerIsLocal>());
+                }
+                if (_loadout.CalculateEntityCount() == 1)
+                {
+                    loadout = _loadout.GetSingleton<ArenaLoadout>();
+                    show = loadout.Choosing && loadout.Choice0 != 0;
+                }
+            }
+            if (show && !_pick.activeSelf)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            _pick.SetActive(show);
+            if (!show) return false;
+            var choices = new[] { loadout.Choice0, loadout.Choice1, loadout.Choice2 };
+            for (int i = 0; i < _pickLabels.Length; i++)
+            {
+                var card = _pickLabels[i].transform.parent.gameObject;
+                card.SetActive(choices[i] != 0);
+                if (choices[i] == 0 || choices[i] == _pickShown[i]) continue;
+                _pickShown[i] = choices[i];
+                var gun = Gun.Unpack(choices[i]);
+                var color = ArenaHud.PayloadColor(gun.Payload);
+                _pickStripes[i].color = color;
+                _pickLabels[i].text = $"<b><size=40>{GunFrames.Name(gun.Frame).ToUpperInvariant()}</size></b>\n" +
+                                      $"<color=#B8B0D8>{FrameBlurb(gun.Frame)}</color>\n\n" +
+                                      $"<color=#{ColorUtility.ToHtmlStringRGB(color)}><b><size=32>{gun.Payload.ToString().ToUpperInvariant()}</size></b></color>\n" +
+                                      $"{PayloadBlurb(gun.Payload)}";
+            }
+            return true;
+        }
+
         /// <summary>Asks the server to move this player to the nearest shrine, then goes back to playing.</summary>
         private static void ResetPosition()
         {
@@ -190,7 +308,14 @@ namespace FriendlyPersonShooter.Arena
 
         private void Update()
         {
-            _pause.SetActive(Cursor.lockState != CursorLockMode.Locked);
+            bool picking = RefreshPick();
+            if (picking && Cursor.lockState == CursorLockMode.Locked)
+            {
+                // The pick stays up (and the mouse free) until a card is chosen.
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            _pause.SetActive(!picking && Cursor.lockState != CursorLockMode.Locked);
             if (_pause.activeSelf) RefreshSkills();
             if (PlaySession.IsHost || !PlaySession.InGame) return;
 

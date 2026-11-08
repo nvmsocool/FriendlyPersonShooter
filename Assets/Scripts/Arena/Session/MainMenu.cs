@@ -50,6 +50,7 @@ namespace FriendlyPersonShooter.Arena
                 NetTestSettings.JoinCode = null;
                 OnJoin();
             }
+            if (!string.IsNullOrEmpty(NetTestSettings.Shot)) StartCoroutine(TakeShot(NetTestSettings.Shot));
             var start = NetTestSettings.Start;
             NetTestSettings.Start = null;
             if (start == "host") OnHost();
@@ -93,6 +94,12 @@ namespace FriendlyPersonShooter.Arena
             _status = SessionUi.Label(canvas, "", 28, c, new Vector2(0, -250), new Vector2(1300, 90), TextAnchor.MiddleCenter, Color.white);
             _quit = SessionUi.Button(canvas, "Quit", c, new Vector2(0, -380), new Vector2(240, 70), SessionUi.Quiet, OnQuit, 30);
             ChangeBots(0);
+        }
+
+        private static System.Collections.IEnumerator TakeShot(string path)
+        {
+            yield return new WaitForSecondsRealtime(3f);
+            ScreenCapture.CaptureScreenshot(path);
         }
 
         private void ChangeBots(int delta)

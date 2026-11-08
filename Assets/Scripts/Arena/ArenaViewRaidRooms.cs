@@ -95,6 +95,24 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>A portal ring (with a beam above it and a disc on the floor) at <paramref name="portal"/> in a room centred on <paramref name="c"/>.</summary>
+        private static void AddPortal(List<Matrix4x4> list, Vector3 c, System.Numerics.Vector3 portal, float spinRate, float t)
+        {
+            var p = c + new Vector3(portal.X, portal.Y + 2.2f, portal.Z);
+            float spin = t * spinRate;
+            const int segs = 16;
+            for (int k = 0; k < segs; k++)
+            {
+                float a = 2f * Mathf.PI * k / segs;
+                var o = new Vector3(Mathf.Sin(a) * 2f, Mathf.Cos(a) * 2f, 0f);
+                Box(list, p + o, Quaternion.Euler(0f, 0f, -a * Mathf.Rad2Deg + spin), new Vector3(0.75f, 0.22f, 0.22f));
+            }
+            Box(list, p, Quaternion.Euler(0f, 0f, spin), new Vector3(0.5f, 0.5f, 0.5f) * (1f + 0.3f * Mathf.Sin(t * 6f)));
+            Box(list, c + new Vector3(portal.X, 40f, portal.Z), Quaternion.identity, new Vector3(0.3f, 80f, 0.3f));
+            Box(list, c + new Vector3(portal.X, portal.Y + 0.05f, portal.Z), Quaternion.Euler(0f, t * 40f, 0f),
+                new Vector3(RaidRoomLayout.PortalRadius * 1.6f, 0.05f, RaidRoomLayout.PortalRadius * 1.6f));
+        }
+
         private bool LiveIn(RaidRoomKind kind, ExpeditionStatus s) => s.InRaid && s.RaidStageCount > 0 && s.RaidRoom == kind;
 
         private float RoomClock(ExpeditionStatus s)
@@ -188,22 +206,7 @@ namespace FriendlyPersonShooter.Arena
             }
 
             // The portal: a ring standing at the far side, lit once the room is solved.
-            if (live && s.RaidPortal > -1.5f)
-            {
-                var p = c + new Vector3(layout.Portal.X, layout.Portal.Y + 2.2f, layout.Portal.Z);
-                float spin = t * (s.RaidPortal >= 0f ? 260f : 60f);
-                const int segs = 16;
-                for (int k = 0; k < segs; k++)
-                {
-                    float a = 2f * Mathf.PI * k / segs;
-                    var o = new Vector3(Mathf.Sin(a) * 2f, Mathf.Cos(a) * 2f, 0f);
-                    Box(_qPortal, p + o, Quaternion.Euler(0f, 0f, -a * Mathf.Rad2Deg + spin), new Vector3(0.75f, 0.22f, 0.22f));
-                }
-                Box(_qPortal, p, Quaternion.Euler(0f, 0f, spin), new Vector3(0.5f, 0.5f, 0.5f) * (1f + 0.3f * Mathf.Sin(t * 6f)));
-                Box(_qPortal, c + new Vector3(layout.Portal.X, 40f, layout.Portal.Z), id, new Vector3(0.3f, 80f, 0.3f));
-                Box(_qPortal, c + new Vector3(layout.Portal.X, layout.Portal.Y + 0.05f, layout.Portal.Z), Quaternion.Euler(0f, t * 40f, 0f),
-                    new Vector3(RaidRoomLayout.PortalRadius * 1.6f, 0.05f, RaidRoomLayout.PortalRadius * 1.6f));
-            }
+            if (live && s.RaidPortal > -1.5f) AddPortal(_qPortal, c, layout.Portal, s.RaidPortal >= 0f ? 260f : 60f, t);
 
             DrawList(_qFloor, _raidFloorMat);
             DrawList(_qTileA, _raidTileAMat);
@@ -374,6 +377,11 @@ namespace FriendlyPersonShooter.Arena
             int t = (int)s.RaidTimer;
             string mod = s.RaidModifier != RaidModifier.None ? $"  <color=#FF9A40>{RaidRoomLayout.NameOf(s.RaidModifier)}</color>" : "";
             string name = s.RaidRoom == RaidRoomKind.Boss ? RaidRoomLayout.NameOf(s.RaidBoss) : RaidRoomLayout.NameOf(s.RaidRoom);
+            if (RaidWon(s))
+            {
+                e.Append($"<color=#FFD84D><b>RAID CLEARED!</b> {name} is down</color>  <color=#D9B3FF>{t / 60}:{t % 60:00} to celebrate</color>\n");
+                return;
+            }
             e.Append($"<color=#D9B3FF><b>RAID</b> {s.RaidStage + 1}/{s.RaidStageCount}: <b>{name}</b></color>{mod}" +
                      $"  <color=#D9B3FF>{t / 60}:{t % 60:00} left</color>\n");
             if (s.RaidPortal > -1.5f)

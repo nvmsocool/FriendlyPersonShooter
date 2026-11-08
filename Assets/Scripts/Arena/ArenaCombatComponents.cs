@@ -63,6 +63,11 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public int Ammo;
         /// <summary>Reload progress 0..1; 1 when not reloading.</summary>
         [GhostField(Quantization = 100)] public float Reload;
+        /// <summary>True until the player picks a starting gun from <see cref="Choice0"/>..<see cref="Choice2"/> (packed guns, 0 = none).</summary>
+        [GhostField] public bool Choosing;
+        [GhostField] public ulong Choice0;
+        [GhostField] public ulong Choice1;
+        [GhostField] public ulong Choice2;
     }
 
     /// <summary>A gun or mod lying on the ground. Owner 0 = anyone can take it; otherwise only that player sees and takes it.</summary>
@@ -82,6 +87,12 @@ namespace FriendlyPersonShooter.Arena
     public struct LootBoxOpened : IRpcCommand
     {
         public int BoxId;
+    }
+
+    /// <summary>Client-to-server: I pick this starting gun (index into my choices).</summary>
+    public struct KitChoiceRequest : IRpcCommand
+    {
+        public byte Index;
     }
 
     /// <summary>Bot-to-server: give me my role's kit (a gun with this payload).</summary>
@@ -266,6 +277,19 @@ namespace FriendlyPersonShooter.Arena
         public int PlayerNetworkId;
         /// <summary>Second player (the reviver who landed the last fragment).</summary>
         public int OtherNetworkId;
+    }
+
+    /// <summary>Server-to-everyone: a player pinged a spot (middle mouse). Clients mark it in the world and on the minimap.</summary>
+    public struct PingFx : IRpcCommand
+    {
+        public const byte Spot = 0;
+        public const byte Enemy = 1;
+        /// <summary>Pointed at the sky: a spot far along the line.</summary>
+        public const byte Far = 2;
+
+        public int PlayerNetworkId;
+        public float3 Position;
+        public byte Kind;
     }
 
     /// <summary>Server-to-everyone: someone fired; draw a tracer from their gun to where it stopped.</summary>

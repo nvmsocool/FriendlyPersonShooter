@@ -74,6 +74,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         public double StageStartedAt { get; private set; }
         /// <summary>The current room is solved and its portal is open.</summary>
         public bool Solved { get; private set; }
+        /// <summary>The boss is beaten: the boss stage's exit portal is open (each raider leaves on their own).</summary>
+        public bool Won { get; private set; }
         /// <summary>When the portal moves everyone on (negative until someone steps in).</summary>
         public double PortalAt { get; private set; } = -1;
 
@@ -173,13 +175,25 @@ namespace FriendlyPersonShooter.Core.Expedition
             return true;
         }
 
+        /// <summary>The boss is beaten: its fight stops (no threads, no falling floor) and the exit portal opens. True the first time.</summary>
+        public bool MarkWon()
+        {
+            if (Won || !AtBoss) return false;
+            Won = true;
+            Solved = true;
+            PortalAt = -1;
+            Twins = null;
+            Weaver = null;
+            return true;
+        }
+
         /// <summary>
         /// The portal: the countdown starts when someone up is in it. Returns true when it ends; the
         /// caller then moves everyone and calls <see cref="Advance"/>.
         /// </summary>
         public bool StepPortal(double now, bool someoneInPortal)
         {
-            if (!Solved) return false;
+            if (!Solved || Won) return false;
             if (PortalAt < 0)
             {
                 if (!someoneInPortal) return false;

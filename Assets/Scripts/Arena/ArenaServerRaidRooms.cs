@@ -460,6 +460,13 @@ namespace FriendlyPersonShooter.Arena
             hasTarget = false;
             target = default;
             string stage = $"RAID {_run.Stage + 1}/{_run.StageCount}";
+            if (_run.Won)
+            {
+                var exit = RaidArena.FromRoom(RaidRoomKind.Boss, _run.Layout.Portal);
+                hasTarget = true;
+                target = new System.Numerics.Vector2(exit.x, exit.z);
+                return $"VICTORY! Step into the portal when you're ready to go home";
+            }
             if (_run.Solved)
             {
                 var p = RaidArena.FromRoom(_run.Room, _run.Layout.Portal);

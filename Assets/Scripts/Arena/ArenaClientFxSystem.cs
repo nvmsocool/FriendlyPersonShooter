@@ -20,6 +20,8 @@ namespace FriendlyPersonShooter.Arena
         public static readonly List<(EnemyAttackFx Attack, float Time)> EnemyAttacks = new List<(EnemyAttackFx, float)>();
         /// <summary>Enemy bolts in flight (drawn until they end or hit someone).</summary>
         public static readonly List<(EnemyBoltFx Bolt, float Time)> Bolts = new List<(EnemyBoltFx, float)>();
+        /// <summary>Pings (middle mouse), newest last; each player's new ping replaces their old one.</summary>
+        public static readonly List<(PingFx Ping, float Time)> Pings = new List<(PingFx, float)>();
         /// <summary>The Colossus's shockwave rings.</summary>
         public static readonly List<(ShockwaveFx Wave, float Time)> Waves = new List<(ShockwaveFx, float)>();
         /// <summary>The human's level and skills (set by the view each frame), for the Esc menu's skill tree.</summary>
@@ -27,6 +29,8 @@ namespace FriendlyPersonShooter.Arena
         public static bool HasProgress;
         /// <summary>Skills the human chose to buy, sent to the server by the client system.</summary>
         public static readonly List<byte> SkillBuys = new List<byte>();
+        /// <summary>The starting gun the human picked (index), sent once by the client system; -1 = none waiting.</summary>
+        public static int KitChoice = -1;
         /// <summary>Loot boxes the human has opened this session (drawn shut and dark).</summary>
         public static readonly HashSet<int> OpenedBoxes = new HashSet<int>();
     }
@@ -89,6 +93,14 @@ namespace FriendlyPersonShooter.Arena
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.Bolts.Add((bolt.ValueRO, now));
             }
+            foreach (var (ping, entity) in SystemAPI.Query<RefRO<PingFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (!keep) continue;
+                int who = ping.ValueRO.PlayerNetworkId;
+                ArenaFx.Pings.RemoveAll(p => p.Ping.PlayerNetworkId == who);
+                ArenaFx.Pings.Add((ping.ValueRO, now));
+            }
             foreach (var (wave, entity) in SystemAPI.Query<RefRO<ShockwaveFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
             {
                 ecb.DestroyEntity(entity);
@@ -103,6 +115,13 @@ namespace FriendlyPersonShooter.Arena
                     ecb.AddComponent<SendRpcCommandRequest>(rpc);
                 }
                 ArenaFx.SkillBuys.Clear();
+            }
+            if (keep && ArenaFx.KitChoice >= 0 && SystemAPI.HasSingleton<NetworkId>())
+            {
+                var rpc = ecb.CreateEntity();
+                ecb.AddComponent(rpc, new KitChoiceRequest { Index = (byte)ArenaFx.KitChoice });
+                ecb.AddComponent<SendRpcCommandRequest>(rpc);
+                ArenaFx.KitChoice = -1;
             }
             ecb.Playback(EntityManager);
         }

@@ -16,6 +16,7 @@ namespace FriendlyPersonShooter.Arena
     /// </summary>
     public partial class ArenaBotSystem
     {
+        private static readonly RaidSettings VictoryRules = new RaidSettings();
         private int _gauntletStone;
         /// <summary>Mid-air from a sweeper hop (not a gap jump): stay over the stone instead of heading on.</summary>
         private bool _hopping;
@@ -137,6 +138,14 @@ namespace FriendlyPersonShooter.Arena
             straight = false;
             jump = false;
             if (!s.InRaid || s.RaidStageCount == 0) return false;
+            if (s.RaidRoom == RaidRoomKind.Boss && s.RaidPortal > -1.5f)
+            {
+                // Won: hang about for a bit, then go home through the exit portal.
+                if (s.RaidTimer > VictoryRules.VictorySeconds - 15f) return false;
+                anchor = RaidArena.FromRoom(RaidRoomKind.Boss, RaidRoomLayout.For(RaidRoomKind.Boss).Portal);
+                straight = true;
+                return true;
+            }
             if (s.RaidRoom == RaidRoomKind.Boss) return s.RaidBoss == RaidBossKind.Weaver && WeaverAnchor(pos, s, ref anchor);
             var room = s.RaidRoom;
             var layout = RaidRoomLayout.For(room, s.RaidRoomSeed);

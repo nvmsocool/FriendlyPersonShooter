@@ -129,7 +129,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
             Kind = FrameKind.Launcher, Name = "Launcher", Mode = FireMode.Projectile,
             Damage = 30f, Interval = 0.75f, Spread = 0.5f, Range = 80f,
             Magazine = 5, Reload = 2.2f, Zoom = 1.2f, HealScale = 2.5f,
-            ProjectileSpeed = 38f, SplashRadius = 3.5f, SplashShare = 0.9f,
+            ProjectileSpeed = 38f, SplashRadius = 5.5f, SplashShare = 0.9f,
         };
 
         public static FrameStats For(FrameKind kind)

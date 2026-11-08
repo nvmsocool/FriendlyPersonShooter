@@ -25,6 +25,11 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Clear reward for everyone still in the raid: XP (one level) and some Yellow toward the gate.</summary>
         public int ClearXp { get; set; } = 300;
         public int ClearYellow { get; set; } = 10;
+        /// <summary>
+        /// After the boss dies, the raiders can stay up there this long (seconds) before the door sends whoever
+        /// is left home. Each one leaves sooner through the exit portal.
+        /// </summary>
+        public float VictorySeconds { get; set; } = 300f;
 
         public int Cost(EssenceColor color) => color == EssenceColor.Red ? RedCost : color == EssenceColor.Green ? GreenCost : 0;
     }
@@ -90,6 +95,9 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>The players inside (while running).</summary>
         public IReadOnlyList<int> Participants => _participants;
         public RaidOutcome LastOutcome { get; private set; }
+        /// <summary>The boss is dead and the raiders are celebrating up there (still <see cref="RaidPhase.Running"/>).</summary>
+        public bool Won { get; private set; }
+        public double WonAt { get; private set; }
 
         public int Pledged(EssenceColor color) => _pledged[color];
         public int Cost(EssenceColor color) => Settings.Cost(color);
@@ -159,6 +167,7 @@ namespace FriendlyPersonShooter.Core.Expedition
                     Phase = RaidPhase.Running;
                     StartedAt = now;
                     LastOutcome = RaidOutcome.None;
+                    Won = false;
                     return RaidDoorEvent.Started;
                 case RaidPhase.Resetting:
                     if (now < PhaseEnds) return RaidDoorEvent.None;
@@ -177,6 +186,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Seconds left in the run (or in the countdown while gathering).</summary>
         public double TimeLeft(double now)
         {
+            if (Phase == RaidPhase.Running && Won) return Math.Max(0, WonAt + Settings.VictorySeconds - now);
             if (Phase == RaidPhase.Running) return Math.Max(0, StartedAt + Settings.TimeLimit - now);
             if (Phase == RaidPhase.Gathering || Phase == RaidPhase.Resetting) return Math.Max(0, PhaseEnds - now);
             return 0;
@@ -189,9 +199,23 @@ namespace FriendlyPersonShooter.Core.Expedition
         public RaidOutcome Check(double now, int participantsUp)
         {
             if (Phase != RaidPhase.Running) return RaidOutcome.None;
+            // After the boss: the run is over once everyone has gone home through the portal, or the hang-out ends.
+            if (Won) return _participants.Count == 0 || now - WonAt >= Settings.VictorySeconds ? RaidOutcome.Cleared : RaidOutcome.None;
             if (_participants.Count == 0 || participantsUp <= 0) return RaidOutcome.Wiped;
             if (now - StartedAt >= Settings.TimeLimit) return RaidOutcome.TimedOut;
             return RaidOutcome.None;
+        }
+
+        /// <summary>
+        /// The boss died: the raiders are paid by the caller and stay up to celebrate. The run's clock stops;
+        /// <see cref="Check"/> reports <see cref="RaidOutcome.Cleared"/> once they have all left. True the first time.
+        /// </summary>
+        public bool Win(double now)
+        {
+            if (Phase != RaidPhase.Running || Won) return false;
+            Won = true;
+            WonAt = now;
+            return true;
         }
 
         /// <summary>Ends the run; the door reopens for pledges after <see cref="RaidSettings.ResetSeconds"/>.</summary>

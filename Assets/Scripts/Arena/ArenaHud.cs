@@ -39,6 +39,14 @@ namespace FriendlyPersonShooter.Arena
         private readonly Image[] _hurtArrowParts;
         private readonly GameObject _mapBox;
         private readonly Image[] _mapDots = new Image[MapDots];
+        /// <summary>Each player dot's arrow nose, shown when the dot is pinned to the map's edge.</summary>
+        private readonly Image[] _mapNoses = new Image[MapDots];
+        private const int Pings = 8;
+        private readonly Image[] _pingDots = new Image[Pings];
+        private readonly RectTransform[] _pingMarks = new RectTransform[Pings];
+        private readonly Image[] _pingDiamonds = new Image[Pings];
+        private readonly Image[] _pingCores = new Image[Pings];
+        private readonly Text[] _pingLabels = new Text[Pings];
         private const int EnemyDots = 48;
         private readonly Image[] _enemyDots = new Image[EnemyDots];
         private readonly Text[] _numbers = new Text[Numbers];
@@ -113,7 +121,16 @@ namespace FriendlyPersonShooter.Arena
             for (int i = 0; i < MapDots; i++)
             {
                 _mapDots[i] = SessionUi.Box(map.transform, "Dot", c, Vector2.zero, new Vector2(12, 12), Color.white);
+                _mapNoses[i] = SessionUi.Box(_mapDots[i].transform, "Nose", c, new Vector2(0, 7), new Vector2(4, 9), Color.white);
                 _mapDots[i].gameObject.SetActive(false);
+            }
+            // Pings: a hollow diamond in the pinger's color (pinned to the edge when far away).
+            for (int i = 0; i < Pings; i++)
+            {
+                _pingDots[i] = SessionUi.Box(map.transform, "Ping", c, Vector2.zero, new Vector2(14, 14), Color.white);
+                _pingDots[i].rectTransform.localRotation = Quaternion.Euler(0, 0, 45);
+                SessionUi.Box(_pingDots[i].transform, "Hole", c, Vector2.zero, new Vector2(7, 7), new Color(0.05f, 0.04f, 0.12f, 0.9f));
+                _pingDots[i].gameObject.SetActive(false);
             }
             // You: a white diamond with a nose pointing up in the middle.
             SessionUi.Box(map.transform, "You", c, Vector2.zero, new Vector2(12, 12), Color.white).rectTransform.localRotation = Quaternion.Euler(0, 0, 45);
@@ -124,6 +141,18 @@ namespace FriendlyPersonShooter.Arena
             {
                 _numbers[i] = Text(canvas, 26, c, Vector2.zero, new Vector2(200, 40), TextAnchor.MiddleCenter, FontStyle.Bold);
                 _numbers[i].gameObject.SetActive(false);
+            }
+
+            // Ping markers over the world (on top of everything): a diamond in the pinger's color and a distance.
+            for (int i = 0; i < Pings; i++)
+            {
+                _pingMarks[i] = SessionUi.Rect(canvas, "Ping mark", c, Vector2.zero, new Vector2(40, 40));
+                _pingDiamonds[i] = SessionUi.Box(_pingMarks[i], "Diamond", c, Vector2.zero, new Vector2(26, 26), Color.white);
+                _pingDiamonds[i].rectTransform.localRotation = Quaternion.Euler(0, 0, 45);
+                _pingCores[i] = SessionUi.Box(_pingDiamonds[i].transform, "Core", c, Vector2.zero, new Vector2(12, 12), Color.white);
+                _pingLabels[i] = Text(_pingMarks[i], 20, c, new Vector2(0, -32), new Vector2(220, 28), TextAnchor.MiddleCenter, FontStyle.Bold);
+                _pingLabels[i].gameObject.AddComponent<Shadow>().effectDistance = new Vector2(2, -2);
+                _pingMarks[i].gameObject.SetActive(false);
             }
 
             // Which way the hit came from: a red marker around the crosshair, and what hit you.
@@ -203,8 +232,47 @@ namespace FriendlyPersonShooter.Arena
             bool edge = p.magnitude > radius;
             if (edge) p = p.normalized * radius;
             dot.rectTransform.anchoredPosition = p;
-            dot.rectTransform.sizeDelta = edge ? new Vector2(9, 9) : new Vector2(13, 13);
-            dot.color = edge ? new Color(color.r, color.g, color.b, 0.7f) : color;
+            // Past the edge: a small arrow on the rim pointing their way.
+            dot.rectTransform.sizeDelta = edge ? new Vector2(10, 10) : new Vector2(13, 13);
+            dot.rectTransform.localRotation = edge ? Quaternion.Euler(0, 0, Mathf.Atan2(p.y, p.x) * Mathf.Rad2Deg - 90f) : Quaternion.identity;
+            dot.color = color;
+            _mapNoses[index].gameObject.SetActive(edge);
+            _mapNoses[index].color = color;
+        }
+
+        public static int PingSlots => Pings;
+
+        /// <summary>A ping on the minimap: <paramref name="offset"/> as for <see cref="SetMapDot"/>; pinned to the edge when far.</summary>
+        public void SetPingDot(int index, bool show, Vector2 offset = default, Color color = default)
+        {
+            if (index >= Pings) return;
+            var dot = _pingDots[index];
+            dot.gameObject.SetActive(show);
+            if (!show) return;
+            float radius = MapSize * 0.5f - 10f;
+            var p = offset / MapRange * radius;
+            if (p.magnitude > radius) p = p.normalized * radius;
+            dot.rectTransform.anchoredPosition = p;
+            dot.color = color;
+        }
+
+        /// <summary>
+        /// A ping marker at a screen point (already pulled onto the screen's edge when the spot is off screen), or
+        /// hides slot <paramref name="index"/> when <paramref name="label"/> is null. <paramref name="pop"/> grows it briefly.
+        /// </summary>
+        public void SetPing(int index, string label, Vector2 screen = default, Color color = default, float alpha = 1f, float pop = 1f)
+        {
+            if (index >= Pings) return;
+            var mark = _pingMarks[index];
+            mark.gameObject.SetActive(label != null);
+            if (label == null) return;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(_canvasRect, screen, null, out var local);
+            mark.anchoredPosition = local;
+            mark.localScale = Vector3.one * pop;
+            _pingDiamonds[index].color = new Color(color.r, color.g, color.b, alpha);
+            _pingCores[index].color = new Color(1f, 1f, 1f, alpha);
+            _pingLabels[index].text = label;
+            _pingLabels[index].color = new Color(1f, 1f, 1f, alpha);
         }
 
         public static int MapDotSlots => MapDots;

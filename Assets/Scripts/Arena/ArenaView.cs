@@ -154,6 +154,7 @@ namespace FriendlyPersonShooter.Arena
             DrawCombat(world, local);
             DrawLoot(world, local);
             DrawFeedback(world, local);
+            DrawPings();
 
             if (eye.HasValue && viewCamera != null)
             {

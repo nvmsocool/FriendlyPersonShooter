@@ -49,10 +49,15 @@ namespace FriendlyPersonShooter.Arena
             public ulong[] Packed = new ulong[2];
             /// <summary>A bot already got its role's kit.</summary>
             public bool BotKit;
-            /// <summary>The starting guns this player picks from (no frame or payload twice), while <see cref="Choosing"/>.</summary>
-            public Gun[] Choices;
-            /// <summary>Hasn't picked a starting gun yet (holds the first choice meanwhile).</summary>
-            public bool Choosing;
+            /// <summary>What this player is picking from: starting guns or a loot box's offer (see <see cref="Pick"/>).</summary>
+            public LootItem[] Choices;
+            /// <summary>The open pick, if any. A starting pick holds the first gun meanwhile.</summary>
+            public PickKind Pick;
+            /// <summary>Changes with every new pick, so a late click on an old one is ignored.</summary>
+            public byte PickSerial;
+            /// <summary>The box being picked from, and where the player stood when they opened it.</summary>
+            public int PickBox = -1;
+            public float3 PickAt;
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;

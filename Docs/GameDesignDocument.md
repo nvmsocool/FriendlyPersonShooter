@@ -202,7 +202,7 @@ Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mo
 **Finding gear**
 
 - **Starting gun.** A new player picks one of three starting guns, each with a common payload mod. The three never share a frame or a payload, so the choice is real. Bots get their role's kit instead.
-- **Loot boxes** stand around every zone. Each player who opens a box gets their own roll (a gun or a mod), so nobody competes for loot.
+- **Loot boxes** stand around every zone. Each player who opens a box gets their own offer of three items (guns or mods, no two of the same kind) and picks one, so nobody competes for loot. Each card shows what taking it would swap out. A player can leave the offer and come back: the box stays shut, with the same three inside, until they pick.
 - **Bosses** drop gear for everyone who fought them; a raid clear gives each player a guaranteed rare or better item.
 - **Equip on the spot.** There is no inventory: picking up a gun replaces the gun in your hand, and picking up a mod puts it on your current gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it.
 - **Starting kit:** one random gun with one random payload mod. The second gun slot starts empty.
@@ -461,6 +461,7 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **Raid ending:** the boss explodes (a fireball, a shockwave along the floor, flying armor and a flash of light), rewards land right away, and an exit portal opens on the boss platform. Bots hang about for 15 s, then leave through it. The raid ends when the last raider has gone home, or after 5 minutes.
 - **Pings and minimap arrows** (see Talking without typing).
 - **Launcher:** splash radius 3.5 m → 5.5 m.
+- **Loot box picks:** a box offers three items on the same pick screen as the starting gun, and the picked one is equipped at once (what it replaces drops at your feet). E, Esc, the Leave button, walking 6 m away or going down leaves the offer for later.
 - Checked in the Editor with 3 bots: the pick, a ping on the terrain, rim arrows for two bots sent 200–250 m away, and two won raids (the Weaver and the Bulwark) with the explosion, the hang-out and the exit portal.
 
 **Raid runs, phase 3 (built Nov 5, 2026; not yet playtested).** Two strange rooms (8 in the pool), a third boss, and two more run modifiers.

@@ -29,8 +29,10 @@ namespace FriendlyPersonShooter.Arena
         public static bool HasProgress;
         /// <summary>Skills the human chose to buy, sent to the server by the client system.</summary>
         public static readonly List<byte> SkillBuys = new List<byte>();
-        /// <summary>The starting gun the human picked (index), sent once by the client system; -1 = none waiting.</summary>
-        public static int KitChoice = -1;
+        /// <summary>The human's answer to their open pick (an index, or PickRequest.Leave), sent once by the client system; -1 = none waiting.</summary>
+        public static int PickChoice = -1;
+        /// <summary>Which pick <see cref="PickChoice"/> answers.</summary>
+        public static byte PickSerial;
         /// <summary>Loot boxes the human has opened this session (drawn shut and dark).</summary>
         public static readonly HashSet<int> OpenedBoxes = new HashSet<int>();
     }
@@ -116,12 +118,12 @@ namespace FriendlyPersonShooter.Arena
                 }
                 ArenaFx.SkillBuys.Clear();
             }
-            if (keep && ArenaFx.KitChoice >= 0 && SystemAPI.HasSingleton<NetworkId>())
+            if (keep && ArenaFx.PickChoice >= 0 && SystemAPI.HasSingleton<NetworkId>())
             {
                 var rpc = ecb.CreateEntity();
-                ecb.AddComponent(rpc, new KitChoiceRequest { Index = (byte)ArenaFx.KitChoice });
+                ecb.AddComponent(rpc, new PickRequest { Index = (byte)ArenaFx.PickChoice, Serial = ArenaFx.PickSerial });
                 ecb.AddComponent<SendRpcCommandRequest>(rpc);
-                ArenaFx.KitChoice = -1;
+                ArenaFx.PickChoice = -1;
             }
             ecb.Playback(EntityManager);
         }

@@ -4,12 +4,13 @@ using FriendlyPersonShooter.Core.Progression;
 using Unity.Entities;
 using Unity.NetCode;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The in-game session overlay: the starting gun pick, the host's join code (top right), Copy code and Leave
+    /// The in-game session overlay: the starting gun and loot box picks, the host's join code (top right), Copy code and Leave
     /// game buttons while the cursor is free (Esc), and "can't reach the host" handling for joining players.
     /// </summary>
     public sealed class SessionHud : MonoBehaviour
@@ -32,7 +33,14 @@ namespace FriendlyPersonShooter.Arena
         private readonly Text[] _pickLabels = new Text[LootRolls.StartingChoiceCount];
         private readonly Image[] _pickStripes = new Image[LootRolls.StartingChoiceCount];
         private readonly ulong[] _pickShown = new ulong[LootRolls.StartingChoiceCount];
-        private bool _picked;
+        private Text _pickTitle, _pickSub;
+        private GameObject _pickLeave;
+        private ulong _pickKit;
+        private byte _pickSerial;
+        /// <summary>The pick this player last answered (it stays hidden until the server opens a new one).</summary>
+        private int _answered = -1;
+        /// <summary>The last frame a pick was up (Esc then closes it rather than opening the options).</summary>
+        public static int PickFrame = -10;
 
         private void Start()
         {
@@ -190,8 +198,8 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// The starting gun pick: a card per choice over a dimmed screen (which also keeps clicks off the game,
-        /// so the mouse stays free until a card is picked).
+        /// The pick screen, for the starting gun and for loot boxes: a card per choice over a dimmed screen (which also
+        /// keeps clicks off the game, so the mouse stays free until a card is picked).
         /// </summary>
         private void BuildPick(Transform canvas)
         {
@@ -200,10 +208,9 @@ namespace FriendlyPersonShooter.Arena
             dim.rectTransform.anchorMax = Vector2.one;
             _pick = dim.gameObject;
             var c = new Vector2(0.5f, 0.5f);
-            SessionUi.Label(_pick.transform, "PICK YOUR STARTING GUN", 52, c, new Vector2(0, 250), new Vector2(1400, 70), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold)
-                .gameObject.AddComponent<Shadow>().effectDistance = new Vector2(3, -3);
-            SessionUi.Label(_pick.transform, "Each comes with a payload: shoot allies to buff them, enemies to weaken them. You'll find more guns and mods in loot boxes.",
-                22, c, new Vector2(0, 196), new Vector2(1400, 34), TextAnchor.MiddleCenter, SessionUi.Muted);
+            _pickTitle = SessionUi.Label(_pick.transform, "", 52, c, new Vector2(0, 250), new Vector2(1400, 70), TextAnchor.MiddleCenter, Color.white, FontStyle.Bold);
+            _pickTitle.gameObject.AddComponent<Shadow>().effectDistance = new Vector2(3, -3);
+            _pickSub = SessionUi.Label(_pick.transform, "", 22, c, new Vector2(0, 196), new Vector2(1400, 34), TextAnchor.MiddleCenter, SessionUi.Muted);
             for (int i = 0; i < _pickLabels.Length; i++)
             {
                 int index = i;
@@ -214,7 +221,11 @@ namespace FriendlyPersonShooter.Arena
                 _pickLabels[i].supportRichText = true;
                 _pickLabels[i].fontStyle = FontStyle.Normal;
                 _pickLabels[i].alignment = TextAnchor.MiddleCenter;
+                _pickLabels[i].rectTransform.sizeDelta = new Vector2(360, 320);
+                _pickLabels[i].rectTransform.anchoredPosition = new Vector2(0, -6);
             }
+            _pickLeave = SessionUi.Button(_pick.transform, "Leave it for now  (E / Esc)", c, new Vector2(0, -260), new Vector2(420, 56), SessionUi.Quiet,
+                () => Pick(PickRequest.Leave), 24).gameObject;
             _pick.SetActive(false);
         }
 
@@ -244,22 +255,24 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>Answers the open pick (a card, or PickRequest.Leave for a box) and goes back to playing.</summary>
         private void Pick(int index)
         {
-            ArenaFx.KitChoice = index;
-            _picked = true;
+            ArenaFx.PickChoice = index;
+            ArenaFx.PickSerial = _pickSerial;
+            _answered = _pickSerial;
             _pick.SetActive(false);
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
 
-        /// <summary>Shows the pick while the server says this player hasn't chosen yet. True while it's up.</summary>
+        /// <summary>Shows the open pick while the server has one this player hasn't answered. True while it's up.</summary>
         private bool RefreshPick()
         {
             var world = ClientServerBootstrap.ClientWorld;
             bool show = false;
             ArenaLoadout loadout = default;
-            if (!_picked && world != null && world.IsCreated)
+            if (world != null && world.IsCreated)
             {
                 if (_loadoutWorld != world)
                 {
@@ -270,24 +283,55 @@ namespace FriendlyPersonShooter.Arena
                 if (_loadout.CalculateEntityCount() == 1)
                 {
                     loadout = _loadout.GetSingleton<ArenaLoadout>();
-                    show = loadout.Choosing && loadout.Choice0 != 0;
+                    show = loadout.Pick != PickKind.None && loadout.Choice0 != 0 && loadout.PickSerial != _answered;
                 }
             }
-            if (show && !_pick.activeSelf)
+            bool wasShown = _pick.activeSelf;
+            if (show && !wasShown)
             {
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
             }
+            else if (!show && wasShown)
+            {
+                // The server closed it (walked away, went down, or E): back to playing.
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
             _pick.SetActive(show);
             if (!show) return false;
+
+            PickFrame = Time.frameCount;
+            bool box = loadout.Pick == PickKind.Box;
+            _pickSerial = loadout.PickSerial;
+            _pickLeave.SetActive(box);
+            var keyboard = Keyboard.current;
+            if (box && wasShown && keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
+            {
+                Pick(PickRequest.Leave);
+                return false;
+            }
+            _pickTitle.text = box ? "LOOT BOX: PICK ONE" : "PICK YOUR STARTING GUN";
+            _pickSub.text = box
+                ? "Take one of the three. Walk away or leave it and the box stays shut, with the same three inside."
+                : "Each comes with a payload: shoot allies to buff them, enemies to weaken them. You'll find more guns and mods in loot boxes.";
             var choices = new[] { loadout.Choice0, loadout.Choice1, loadout.Choice2 };
+            // A box card shows what it would swap out, which changes with the loadout.
+            ulong kit = loadout.GunA ^ (loadout.GunB * 31) ^ loadout.Active ^ (box ? 1UL << 40 : 0);
             for (int i = 0; i < _pickLabels.Length; i++)
             {
                 var card = _pickLabels[i].transform.parent.gameObject;
                 card.SetActive(choices[i] != 0);
-                if (choices[i] == 0 || choices[i] == _pickShown[i]) continue;
+                if (choices[i] == 0 || (choices[i] == _pickShown[i] && kit == _pickKit)) continue;
                 _pickShown[i] = choices[i];
-                var gun = Gun.Unpack(choices[i]);
+                var item = LootItem.Unpack(choices[i]);
+                if (box)
+                {
+                    _pickStripes[i].color = ArenaView.ItemTierColor(item);
+                    _pickLabels[i].text = ArenaView.BoxCard(loadout, item);
+                    continue;
+                }
+                var gun = item.Gun;
                 var color = ArenaHud.PayloadColor(gun.Payload);
                 _pickStripes[i].color = color;
                 _pickLabels[i].text = $"<b><size=40>{GunFrames.Name(gun.Frame).ToUpperInvariant()}</size></b>\n" +
@@ -295,6 +339,7 @@ namespace FriendlyPersonShooter.Arena
                                       $"<color=#{ColorUtility.ToHtmlStringRGB(color)}><b><size=32>{gun.Payload.ToString().ToUpperInvariant()}</size></b></color>\n" +
                                       $"{PayloadBlurb(gun.Payload)}";
             }
+            _pickKit = kit;
             return true;
         }
 

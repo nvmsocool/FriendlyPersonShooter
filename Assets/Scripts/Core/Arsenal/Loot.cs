@@ -78,6 +78,33 @@ namespace FriendlyPersonShooter.Core.Arsenal
             return guns;
         }
 
+        /// <summary>How many items a loot box offers to pick from.</summary>
+        public const int BoxChoiceCount = 3;
+
+        /// <summary>
+        /// A loot box's offer: <paramref name="count"/> box rolls to pick one from. No two are the same kind of
+        /// thing (two guns never share a frame, two mods never share a kind).
+        /// </summary>
+        public static LootItem[] BoxChoices(uint seed, int count = BoxChoiceCount)
+        {
+            var items = new LootItem[Math.Max(1, count)];
+            int found = 0;
+            for (uint attempt = 0; found < items.Length; attempt++)
+            {
+                var item = Roll(LootSource.Box, SeedHash.Of(seed, 0xC401, (int)attempt));
+                bool repeat = false;
+                for (int i = 0; i < found && !repeat; i++) repeat = SameKind(items[i], item);
+                // After many tries take repeats rather than loop forever (can't happen with today's tables).
+                if (repeat && attempt < 64) continue;
+                items[found++] = item;
+            }
+            return items;
+        }
+
+        /// <summary>Same frame (guns) or same mod kind (mods).</summary>
+        public static bool SameKind(LootItem a, LootItem b) =>
+            a.IsGun == b.IsGun && (a.IsGun ? a.Gun.Frame == b.Gun.Frame : a.Mod.Kind == b.Mod.Kind);
+
         private static void Shuffle<T>(T[] items, ref CombatRandom rng)
         {
             for (int i = items.Length - 1; i > 0; i--)

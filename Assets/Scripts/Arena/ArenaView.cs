@@ -98,7 +98,8 @@ namespace FriendlyPersonShooter.Arena
         {
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Cursor.lockState = CursorLockMode.None;
+            // Esc frees the mouse, unless it is closing a pick (up this frame or the last).
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame && SessionHud.PickFrame < Time.frameCount - 1) Cursor.lockState = CursorLockMode.None;
             // Clicking into the game captures the mouse, except on an overlay button (the session's Leave and Copy).
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked &&
                 !(UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()))

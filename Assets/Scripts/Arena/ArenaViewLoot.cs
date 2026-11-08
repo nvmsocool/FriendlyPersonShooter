@@ -289,6 +289,28 @@ namespace FriendlyPersonShooter.Arena
             return math.distance(door.xz, ((float3)feet).xz) <= RaidRules.UseRadius;
         }
 
+        /// <summary>A loot box pick card: the item, what it does, and what taking it would swap out.</summary>
+        public static string BoxCard(ArenaLoadout lo, LootItem item)
+        {
+            var preview = Loadout.Unpack(lo.GunA, lo.GunB, lo.Active);
+            var r = preview.Equip(item);
+            var sb = new StringBuilder();
+            sb.Append("<b><size=30>").Append(ItemLabel(item)).Append("</size></b>\n");
+            if (item.IsGun) sb.Append("<color=#B8B0D8>gun</color>\n");
+            sb.Append("\n<size=20>").Append(item.IsGun ? GunDetail(item.Gun).Replace("     ", "\n") : GunMods.Describe(item.Mod)).Append("</size>\n\n<size=19>");
+            if (!r.Equipped) sb.Append($"<color=#FF8C8C>{r.Refusal}</color>");
+            else if (!r.Dropped.IsNone)
+            {
+                sb.Append("<color=#B8B0D8>swaps out your</color> ").Append(ItemLabel(r.Dropped));
+                if (!r.Dropped2.IsNone) sb.Append(" <color=#B8B0D8>and</color> ").Append(ItemLabel(r.Dropped2));
+            }
+            else sb.Append(item.IsGun ? "<color=#B8B0D8>goes in your empty gun slot</color>" : "<color=#B8B0D8>goes in an empty mod slot</color>");
+            return sb.Append("</size>").ToString();
+        }
+
+        /// <summary>The colour of an item's tier (common, rare, epic).</summary>
+        public static Color ItemTierColor(LootItem item) => TierColor(item.Tier);
+
         /// <summary>What taking this item would do, before you take it: what it is and what it would swap out.</summary>
         private static string ItemPrompt(ArenaLoadout lo, LootItem item, int owner)
         {

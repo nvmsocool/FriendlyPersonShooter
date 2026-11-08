@@ -63,8 +63,10 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public int Ammo;
         /// <summary>Reload progress 0..1; 1 when not reloading.</summary>
         [GhostField(Quantization = 100)] public float Reload;
-        /// <summary>True until the player picks a starting gun from <see cref="Choice0"/>..<see cref="Choice2"/> (packed guns, 0 = none).</summary>
-        [GhostField] public bool Choosing;
+        /// <summary>An open pick (a starting gun or a loot box) from <see cref="Choice0"/>..<see cref="Choice2"/> (packed loot items, 0 = none).</summary>
+        [GhostField] public PickKind Pick;
+        /// <summary>Changes with every new pick; a pick request names it.</summary>
+        [GhostField] public byte PickSerial;
         [GhostField] public ulong Choice0;
         [GhostField] public ulong Choice1;
         [GhostField] public ulong Choice2;
@@ -89,10 +91,23 @@ namespace FriendlyPersonShooter.Arena
         public int BoxId;
     }
 
-    /// <summary>Client-to-server: I pick this starting gun (index into my choices).</summary>
-    public struct KitChoiceRequest : IRpcCommand
+    /// <summary>What a player is picking from.</summary>
+    public enum PickKind : byte
     {
+        None = 0,
+        /// <summary>A new player's starting gun (can't be skipped).</summary>
+        Start = 1,
+        /// <summary>A loot box's offer (can be left for later).</summary>
+        Box = 2,
+    }
+
+    /// <summary>Client-to-server: I pick this choice (index into my open pick), or <see cref="Leave"/> it for now.</summary>
+    public struct PickRequest : IRpcCommand
+    {
+        public const byte Leave = 255;
         public byte Index;
+        /// <summary>The pick this answers (<see cref="ArenaLoadout.PickSerial"/>).</summary>
+        public byte Serial;
     }
 
     /// <summary>Bot-to-server: give me my role's kit (a gun with this payload).</summary>

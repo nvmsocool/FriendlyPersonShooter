@@ -21,6 +21,8 @@ namespace FriendlyPersonShooter.Arena
         private const float InteractRange = 2.5f;
         /// <summary>A box roll or raid reward waits this long for its owner.</summary>
         private const float PersonalItemLife = 180f;
+        /// <summary>A box's pick closes when its player walks this far from where they opened it.</summary>
+        private const float BoxPickRange = 6f;
         /// <summary>An item someone swapped out stays on the ground this long, for anyone.</summary>
         private const float DroppedItemLife = 120f;
 
@@ -72,20 +74,73 @@ namespace FriendlyPersonShooter.Arena
         private void EnsureKit(PlayerState s)
         {
             if (s.Loadout != null) return;
-            s.Choices = LootRolls.StartingChoices(SeedHash.Of(_lootSeed, 0x6A1, s.Vitals.Id));
-            s.Choosing = true;
-            s.Loadout = new Loadout(s.Choices[0]);
+            var guns = LootRolls.StartingChoices(SeedHash.Of(_lootSeed, 0x6A1, s.Vitals.Id));
+            var items = new LootItem[guns.Length];
+            for (int i = 0; i < guns.Length; i++) items[i] = LootItem.Of(guns[i]);
+            OpenPick(s, PickKind.Start, items);
+            s.Loadout = new Loadout(guns[0]);
             Refit(s);
         }
 
-        /// <summary>The player picked one of their starting guns.</summary>
-        private void PickStartingGun(PlayerState s, int index)
+        private static void OpenPick(PlayerState s, PickKind kind, LootItem[] items)
         {
-            if (!s.Choosing || s.Choices == null || index < 0 || index >= s.Choices.Length) return;
-            s.Choosing = false;
-            s.Loadout = new Loadout(s.Choices[index]);
-            Refit(s);
-            UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked {s.Choices[index].Frame} with {s.Choices[index].Payload}");
+            s.Pick = kind;
+            s.Choices = items;
+            s.PickSerial++;
+        }
+
+        private static void ClosePick(PlayerState s)
+        {
+            s.Pick = PickKind.None;
+            s.Choices = null;
+            s.PickBox = -1;
+        }
+
+        /// <summary>The player answered their open pick: took one of the choices, or left a box for later.</summary>
+        private void AnswerPick(PlayerState s, PickRequest request, EntityCommandBuffer ecb)
+        {
+            if (s.Pick == PickKind.None || s.Choices == null || request.Serial != s.PickSerial) return;
+            if (request.Index == PickRequest.Leave)
+            {
+                if (s.Pick == PickKind.Box) ClosePick(s);
+                return;
+            }
+            int index = request.Index;
+            if (index >= s.Choices.Length) return;
+            var item = s.Choices[index];
+            if (s.Pick == PickKind.Start)
+            {
+                ClosePick(s);
+                s.Loadout = new Loadout(item.Gun);
+                Refit(s);
+                UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked {item.Gun.Frame} with {item.Gun.Payload}");
+                return;
+            }
+            int box = s.PickBox;
+            var at = s.PickAt;
+            ClosePick(s);
+            if (s.Vitals.IsDown || !_boxLedger.TryOpen(box, s.Vitals.Id)) return;
+            _boxesOpened++;
+            if (!s.BotKit) _usage.BoxOpened();
+            if (!Take(s, item, at, ecb)) SpawnItem(item, s.Vitals.Id, ExpeditionWorld.Wrap(at + new float3(0f, 1.1f, 0f)), PersonalItemLife);
+            if (_connections.TryGetValue(s.Vitals.Id, out var connection))
+            {
+                var rpc = ecb.CreateEntity();
+                ecb.AddComponent(rpc, new LootBoxOpened { BoxId = box });
+                ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = connection });
+            }
+        }
+
+        /// <summary>A box pick closes if its player goes down or walks away from the box.</summary>
+        private void StepPicks()
+        {
+            foreach (var kv in _players)
+            {
+                var s = kv.Value;
+                if (s.Pick != PickKind.Box) continue;
+                var pos = new float3(s.Position.X, s.Position.Y, s.Position.Z);
+                if (s.Vitals.IsDown || math.distancesq(ExpeditionWorld.Near(s.PickAt, pos), pos) > BoxPickRange * BoxPickRange) ClosePick(s);
+            }
         }
 
         /// <summary>After a loadout change: new stats; a new gun comes loaded, a re-modded one keeps its ammo.</summary>
@@ -114,9 +169,9 @@ namespace FriendlyPersonShooter.Arena
             var ghost = new ArenaLoadout
             {
                 Payload = l.InHand.Payload, GunA = l.GunA.Pack(), GunB = l.GunB.Pack(), Active = (byte)l.Active,
-                Ammo = st.Ammo, Reload = st.ReloadProgress(_time), Choosing = s.Choosing,
+                Ammo = st.Ammo, Reload = st.ReloadProgress(_time), Pick = s.Pick, PickSerial = s.PickSerial,
             };
-            if (s.Choosing && s.Choices != null)
+            if (s.Pick != PickKind.None && s.Choices != null)
             {
                 ghost.Choice0 = s.Choices.Length > 0 ? s.Choices[0].Pack() : 0;
                 ghost.Choice1 = s.Choices.Length > 1 ? s.Choices[1].Pack() : 0;
@@ -460,18 +515,19 @@ namespace FriendlyPersonShooter.Arena
                     continue;
                 }
                 ps.BotKit = true;
-                ps.Choosing = false;
+                ClosePick(ps);
                 ps.Loadout = new Loadout(LootRolls.BotGun(payload, SeedHash.Of(_lootSeed, 0xB07, id)));
                 Refit(ps);
             }
 
-            foreach (var (request, receive, rpc) in SystemAPI.Query<RefRO<KitChoiceRequest>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
+            foreach (var (request, receive, rpc) in SystemAPI.Query<RefRO<PickRequest>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
             {
                 ecb.DestroyEntity(rpc);
                 if (!SystemAPI.HasComponent<NetworkId>(receive.ValueRO.SourceConnection)) continue;
                 int id = SystemAPI.GetComponent<NetworkId>(receive.ValueRO.SourceConnection).Value;
-                if (_playerById.TryGetValue(id, out var pe) && _players.TryGetValue(pe, out var ps)) PickStartingGun(ps, request.ValueRO.Index);
+                if (_playerById.TryGetValue(id, out var pe) && _players.TryGetValue(pe, out var ps)) AnswerPick(ps, request.ValueRO, ecb);
             }
+            StepPicks();
 
             if (ExpeditionWorld.Active && _boxes == null) _boxes = LootBoxSites.For(ExpeditionWorld.Map);
 
@@ -497,11 +553,17 @@ namespace FriendlyPersonShooter.Arena
 
         /// <summary>
         /// E: take the nearest item you may take; failing that, start the raid countdown if you're at the door
-        /// with a full key; failing that, open the nearest box you haven't opened.
+        /// with a full key; failing that, open the nearest box you haven't opened (its pick of three).
+        /// E again while a box's pick is open leaves it for later.
         /// </summary>
         private void Interact(PlayerState state, float3 feet, EntityCommandBuffer ecb)
         {
             int id = state.Vitals.Id;
+            if (state.Pick == PickKind.Box)
+            {
+                ClosePick(state);
+                return;
+            }
             Entity bestItem = Entity.Null;
             float bestD = InteractRange * InteractRange;
             foreach (var kv in _items)
@@ -514,28 +576,15 @@ namespace FriendlyPersonShooter.Arena
             }
             if (bestItem != Entity.Null)
             {
-                var ground = _items[bestItem];
-                int before = state.Loadout.Active;
-                var result = state.Loadout.Equip(ground.Item);
-                if (!result.Equipped) return;
-                // Taking loot settles the kit: the starting pick is gone.
-                state.Choosing = false;
+                if (!Take(state, _items[bestItem].Item, feet, ecb)) return;
                 _items.Remove(bestItem);
                 ecb.DestroyEntity(bestItem);
-                _itemsTaken++;
-                if (!state.BotKit) _usage.Took(ground.Item);
-                Refit(state);
-                if (state.Loadout.Active != before) FireControl.SwappedIn(ref state.Guns[state.Loadout.Active], _time);
-                var at = feet + new float3(0f, 0.6f, 0f);
-                if (!result.Dropped.IsNone) SpawnItem(result.Dropped, 0, at, DroppedItemLife);
-                if (!result.Dropped2.IsNone) SpawnItem(result.Dropped2, 0, at + new float3(0.5f, 0f, 0f), DroppedItemLife);
                 return;
             }
 
             if (TryStartRaid(id, feet)) return;
             if (_boxes == null) return;
             int box = -1;
-            float3 boxPos = default;
             bestD = InteractRange * InteractRange;
             foreach (var b in _boxes)
             {
@@ -545,19 +594,33 @@ namespace FriendlyPersonShooter.Arena
                 if (d >= bestD || math.abs(p.y - feet.y) > 2.5f) continue;
                 bestD = d;
                 box = b.Id;
-                boxPos = p;
             }
-            if (box < 0 || !_boxLedger.TryOpen(box, id)) return;
-            _boxesOpened++;
-            if (!state.BotKit) _usage.BoxOpened();
-            var item = LootRolls.Roll(LootSource.Box, LootBoxLedger.RollSeed(_lootSeed, box, id));
-            SpawnItem(item, id, ExpeditionWorld.Wrap(boxPos + new float3(0f, 1.1f, 0f)), PersonalItemLife);
-            if (_connections.TryGetValue(id, out var connection))
-            {
-                var rpc = ecb.CreateEntity();
-                ecb.AddComponent(rpc, new LootBoxOpened { BoxId = box });
-                ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = connection });
-            }
+            if (box < 0 || state.Pick != PickKind.None) return;
+            // The box opens for good when one is picked (AnswerPick); until then it can be left and come back to,
+            // with the same three on offer.
+            OpenPick(state, PickKind.Box, LootRolls.BoxChoices(LootBoxLedger.RollSeed(_lootSeed, box, id)));
+            state.PickBox = box;
+            state.PickAt = feet;
+        }
+
+        /// <summary>
+        /// Equips an item (from the ground or a box pick): what it replaces drops at the player's feet.
+        /// False if it can't be equipped. Taking loot settles the kit, so a starting pick still open is gone.
+        /// </summary>
+        private bool Take(PlayerState state, LootItem item, float3 feet, EntityCommandBuffer ecb)
+        {
+            int before = state.Loadout.Active;
+            var result = state.Loadout.Equip(item);
+            if (!result.Equipped) return false;
+            if (state.Pick == PickKind.Start) ClosePick(state);
+            _itemsTaken++;
+            if (!state.BotKit) _usage.Took(item);
+            Refit(state);
+            if (state.Loadout.Active != before) FireControl.SwappedIn(ref state.Guns[state.Loadout.Active], _time);
+            var at = feet + new float3(0f, 0.6f, 0f);
+            if (!result.Dropped.IsNone) SpawnItem(result.Dropped, 0, at, DroppedItemLife);
+            if (!result.Dropped2.IsNone) SpawnItem(result.Dropped2, 0, at + new float3(0.5f, 0f, 0f), DroppedItemLife);
+            return true;
         }
 
         /// <summary>Where a box stands: on the ground at its spot (the client draws it at the same place).</summary>

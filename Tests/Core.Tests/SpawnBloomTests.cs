@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.World;
@@ -10,57 +12,118 @@ namespace FriendlyPersonShooter.Core.Tests
     {
         private static LayerMap Map(uint seed = 42) => LayerGenerator.Generate(seed, new ZoneTiling(3, 3, 125f));
 
+        private static readonly Vector2[] Nobody = new Vector2[0];
+
+        /// <summary>Kills every enemy of a group.</summary>
+        private static void Clear(SpawnSchedule schedule, SpawnEvent e, double time)
+        {
+            for (int i = 0; i < e.Count; i++) schedule.Lost(e.Group, time);
+        }
+
         [Test]
-        public void SpawnSchedule_IsTheSameForTheSameSeedAndClock()
+        public void SpawnSchedule_IsTheSameForTheSameSeed()
         {
             var a = new SpawnSchedule(Map(), new BloomSchedule(Map()));
             var b = new SpawnSchedule(Map(), new BloomSchedule(Map()));
             var zone = new ZoneCoord(2, 2);
-            for (double t = 0; t < 3600; t += 97)
+            for (int round = 0; round < 10; round++)
             {
-                Assert.That(a.ActiveAt(zone, t).Select(e => e.ToString()), Is.EqualTo(b.ActiveAt(zone, t).Select(e => e.ToString())));
+                double t = round * 130;
+                var x = a.Due(zone, t, Nobody);
+                var y = b.Due(zone, t, Nobody);
+                Assert.That(x.Select(e => e.ToString()), Is.EqualTo(y.Select(e => e.ToString())));
+                foreach (var e in x) Clear(a, e, t);
+                foreach (var e in y) Clear(b, e, t);
             }
         }
 
         [Test]
-        public void SpawnSchedule_ActivatesSomePointsEachWaveAndChangesBetweenWaves()
+        public void SpawnSchedule_FillsAShareOfPointsOnceWithTheirOwnFamily()
         {
             var map = Map();
             var schedule = new SpawnSchedule(map);
-            var zone = map.Zones[7];
-            var w0 = schedule.ActiveAt(zone.Coord, 10).Select(e => e.SpawnPointId).ToList();
-            var w0Later = schedule.ActiveAt(zone.Coord, 50).Select(e => e.SpawnPointId).ToList();
-            Assert.That(w0, Is.EqualTo(w0Later), "same wave, same points");
-
-            bool changed = false;
-            int totalActive = 0, waves = 0;
-            for (int wave = 0; wave < 50; wave++)
+            int used = 0, total = 0;
+            foreach (var zone in map.Zones)
             {
-                var active = schedule.ActiveAt(zone.Coord, wave * 60 + 1);
-                totalActive += active.Count;
-                waves++;
-                if (!active.Select(e => e.SpawnPointId).SequenceEqual(w0)) changed = true;
-                foreach (var e in active)
+                var first = schedule.Due(zone.Coord, 0, Nobody);
+                foreach (var e in first)
                 {
                     var point = zone.SpawnPoints[e.SpawnPointId];
+                    Assert.That(schedule.IsActive(zone.Coord, point.Id));
                     Assert.That(e.Family, Is.EqualTo(point.Family));
                     Assert.That(e.Count, Is.InRange(schedule.Settings.MinCount(e.Family), schedule.Settings.MaxCount(e.Family)));
-                    Assert.That(e.Start, Is.EqualTo(wave * 60.0));
+                    Assert.That(e.Generation, Is.EqualTo(0));
+                    Assert.That(double.IsPositiveInfinity(e.End), "spawn point groups never time out");
                 }
+                used += first.Count;
+                total += zone.SpawnPoints.Count;
+                // Nobody died, so nothing more comes, however long it's been.
+                Assert.That(schedule.Due(zone.Coord, 5000, Nobody), Is.Empty);
             }
-            Assert.That(changed);
-            double share = totalActive / (double)(waves * zone.SpawnPoints.Count);
-            Assert.That(share, Is.InRange(0.3, 0.7));
+            Assert.That(used / (double)total, Is.InRange(0.3, 0.7));
         }
 
         [Test]
-        public void SpawnSchedule_WindowCoversEveryOverlappingWave()
+        public void SpawnSchedule_SurvivorsHoldTheirPoint()
         {
             var map = Map();
             var schedule = new SpawnSchedule(map);
-            var zone = map.Zones[0].Coord;
-            var window = schedule.Between(zone, 30, 150);
-            Assert.That(window.Select(e => e.Wave).Distinct().OrderBy(w => w), Is.EqualTo(new long[] { 0, 1, 2 }));
+            var zone = map.Zones.First(z => schedule.Due(z.Coord, 0, Nobody).Any(e => e.Count >= 2)).Coord;
+            var fresh = new SpawnSchedule(map);
+            var group = fresh.Due(zone, 0, Nobody).First(e => e.Count >= 2);
+            for (int i = 0; i < group.Count - 1; i++) fresh.Lost(group.Group, 10);
+            Assert.That(fresh.AliveIn(group.Group), Is.EqualTo(1));
+            Assert.That(fresh.Due(zone, 10000, Nobody).Any(e => e.Group.Equals(group.Group)), Is.False, "one is still alive");
+        }
+
+        [Test]
+        public void SpawnSchedule_ClearedPointRefillsAfterTwoMinutesWhenNobodyIsNear()
+        {
+            var map = Map();
+            var schedule = new SpawnSchedule(map);
+            var zone = map.Zones[7].Coord;
+            var group = schedule.Due(zone, 0, Nobody).First();
+            Clear(schedule, group, 30);
+            var spot = group.Point.World;
+            bool Refills(double t, params Vector2[] players) => schedule.Due(zone, t, players).Any(e => e.Group.Equals(group.Group));
+
+            Assert.That(Refills(30 + 119, new Vector2[0]), Is.False, "still cooling down");
+            Assert.That(Refills(30 + 120, spot + new Vector2(60, 0)), Is.False, "a player 60 m away");
+            Assert.That(Refills(30 + 200, spot + new Vector2(0, 99)), Is.False, "a player 99 m away");
+            Assert.That(Refills(30 + 300, spot + new Vector2(150, 0)), Is.True, "the nearest player is 150 m away");
+            Assert.That(schedule.AliveIn(group.Group), Is.GreaterThan(0));
+        }
+
+        [Test]
+        public void SpawnSchedule_PlayerDistanceGoesAroundTheWrap()
+        {
+            var map = Map();
+            var schedule = new SpawnSchedule(map);
+            var spot = map.Zones[0].SpawnPoints[0].Point.World;
+            var copy = spot + map.Tiling.PeriodA + new Vector2(30, 0);
+            Assert.That(schedule.AnyPlayerWithin(spot, new[] { copy }, 100f), Is.True);
+            Assert.That(schedule.AnyPlayerWithin(spot, new[] { spot + new Vector2(0, 101) }, 100f), Is.False);
+        }
+
+        [Test]
+        public void SpawnSchedule_RefillsAreNewRandomEnemiesFromTheZonesMix()
+        {
+            var map = Map(5);
+            var schedule = new SpawnSchedule(map);
+            var seen = new HashSet<EnemyFamily>();
+            var mixed = map.Zones.First(z => z.Bias.HasSecondary && z.SpawnPoints.Any(p => schedule.IsActive(z.Coord, p.Id)));
+            for (int round = 0; round < 40; round++)
+            {
+                double t = round * 121.0;
+                foreach (var e in schedule.Due(mixed.Coord, t, Nobody))
+                {
+                    Assert.That(mixed.FamilyWeight(e.Family), Is.GreaterThan(0f), $"{e.Family} isn't in the zone's mix");
+                    Assert.That(e.Family, Is.Not.EqualTo(EnemyFamily.Glimmer));
+                    if (e.Generation > 0) seen.Add(e.Family);
+                    Clear(schedule, e, t);
+                }
+            }
+            Assert.That(seen.Count, Is.GreaterThan(1), "refills vary");
         }
 
         [Test]
@@ -120,13 +183,23 @@ namespace FriendlyPersonShooter.Core.Tests
             var schedule = new SpawnSchedule(map, blooms);
             Assert.That(blooms.TryGetNext(0, out var bloom));
 
+            Assert.That(schedule.Due(bloom.Zone, bloom.Start - 1, Nobody).Any(e => e.IsBloom), Is.False, "not before it starts");
             double mid = (bloom.Start + bloom.End) / 2;
-            var during = schedule.ActiveAt(bloom.Zone, mid).Where(e => e.IsBloom).ToList();
+            var during = schedule.Due(bloom.Zone, mid, Nobody).Where(e => e.IsBloom).ToList();
             Assert.That(during.Count, Is.EqualTo(blooms.Settings.SpawnGroups));
             Assert.That(during.All(e => e.Family == bloom.Family && e.Count >= schedule.Settings.MaxCount(bloom.Family)));
-            Assert.That(during.All(e => e.Zone == bloom.Zone));
+            Assert.That(during.All(e => e.Zone == bloom.Zone && e.End == bloom.End));
+            Assert.That(schedule.Due(bloom.Zone, mid + 1, Nobody).Any(e => e.IsBloom), Is.False, "the groups are still out");
 
-            Assert.That(schedule.ActiveAt(bloom.Zone, bloom.End + 1).Any(e => e.IsBloom && e.Start >= bloom.Start && e.End <= bloom.End), Is.False);
+            // A cleared bloom group comes back quickly while the bloom runs, players or not.
+            Clear(schedule, during[0], mid);
+            var near = new[] { during[0].Point.World };
+            Assert.That(schedule.Due(bloom.Zone, mid + 5, near).Any(e => e.Group.Equals(during[0].Group)), Is.False);
+            Assert.That(schedule.Due(bloom.Zone, mid + schedule.Settings.BloomRefillSeconds, near).Count(e => e.Group.Equals(during[0].Group)), Is.EqualTo(1));
+
+            // Once it's over, nothing more of it comes.
+            foreach (var e in during) Clear(schedule, e, mid + 30);
+            Assert.That(schedule.Due(bloom.Zone, bloom.End + 1, Nobody).Any(e => e.IsBloom), Is.False);
         }
     }
 }

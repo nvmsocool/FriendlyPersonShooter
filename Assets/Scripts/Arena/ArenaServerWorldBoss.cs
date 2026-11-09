@@ -155,9 +155,9 @@ namespace FriendlyPersonShooter.Arena
                 float x = home.X + o.x, z = home.Z + o.y;
                 SpawnSwarm(new Vector3(x, SpawnGround(x, z) + 1.5f, z));
             }
-            // Tie them to a short spawn event so stragglers leave on their own.
-            var key = new SpawnKey(-2, _world.Spawns * 10L + wave, false);
-            _eventEnds[key] = _time + WorldAddsLife;
+            // Give them a time limit so stragglers leave on their own (once nobody is near them).
+            var key = SpawnGroupId.Adds(_world.Spawns * 10L + wave);
+            _groupEnds[key] = _time + WorldAddsLife;
             foreach (var s in _spawned) s.Spawn = key;
             _spawned.Clear();
             Debug.Log($"[WorldBoss] wave {wave}: {skitters} Skitters{(wave >= 2 ? " + a Mite swarm" : "")}");

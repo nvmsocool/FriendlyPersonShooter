@@ -209,16 +209,21 @@ namespace FriendlyPersonShooter.Core.Tests
                 var settings = LayerSettings.ForLayer(layer);
                 var map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), settings);
                 var schedule = new SpawnSchedule(map, null, settings.Spawns());
-                foreach (var zone in map.Zones)
+                // Clear every group 20 times over, with nobody around, so each point refills each time.
+                for (int round = 0; round < 20; round++)
                 {
-                    foreach (var e in schedule.Between(zone.Coord, 0, 1200))
+                    foreach (var zone in map.Zones)
                     {
-                        if (Elites.For(e.Family) == EliteKind.None) continue;
-                        totals[layer]++;
-                        if (e.Elite != EliteKind.None)
+                        foreach (var e in schedule.Due(zone.Coord, round * 200.0, null))
                         {
-                            counts[layer]++;
-                            Assert.That(Elites.Primary(e.Elite), Is.EqualTo(e.Family));
+                            for (int i = 0; i < e.Count; i++) schedule.Lost(e.Group, round * 200.0);
+                            if (Elites.For(e.Family) == EliteKind.None) continue;
+                            totals[layer]++;
+                            if (e.Elite != EliteKind.None)
+                            {
+                                counts[layer]++;
+                                Assert.That(Elites.Primary(e.Elite), Is.EqualTo(e.Family));
+                            }
                         }
                     }
                 }

@@ -91,8 +91,7 @@ namespace FriendlyPersonShooter.Arena
                 _ledger.Forget(s.Vitals.Id);
                 ecb.DestroyEntity(e);
             }
-            _spawnedEvents.Clear();
-            _eventEnds.Clear();
+            _groupEnds.Clear();
             foreach (var kv in _items) ecb.DestroyEntity(kv.Key);
             _items.Clear();
 

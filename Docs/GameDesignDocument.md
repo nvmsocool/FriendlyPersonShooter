@@ -264,7 +264,9 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 - **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown). You keep your carried essence but can't bank it for 60 seconds.
 - **No visible edge.** Fog and draw distance end inside the loaded neighbor zones, so players never see past what's loaded.
 - Crossing into a new zone blends the sky's colors only, never its cloud pattern.
-- Terrain, the spawn schedule and blooms all follow from the seed and the clock. The host tracks only short-lived things: live enemies and dropped caches.
+- Terrain, spawn points and blooms all follow from the seed and the clock. The host tracks live enemies, which spawn point each group belongs to, and dropped caches.
+- **Enemies stay until they're killed.** About half of each zone's spawn points are in use on a layer (60% on layers 2 and 3). The first time players come near a zone, each fills with its own family. When a point's whole group is dead, it waits 2 minutes. After that, it refills with a new random enemy from the zone's color mix as soon as no player is within 100 m. Nothing appears in front of you, and nothing vanishes mid-fight.
+- Bloom groups refill 20 s after they're cleared while the bloom runs. When it ends, survivors leave once nobody is within 100 m of them. Colossus adds do the same after 3 minutes.
 - Enemies in the open world don't scale with player count, so every extra player nearby is pure help.
 
 **Weekly reseed**
@@ -500,6 +502,8 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **Layers 2 and 3:** see Moving between layers.
 - Checked in the Editor with a bot: every new family spawns, moves, attacks and is drawn. Bots kill elites. Pinned, Shatter, Jam, Overdrive and Frenzy work on the host and show on the client. The group went down through the gate to layer 2, back up through the portal, and through layer 3's gate to the end. 379 Core tests pass.
 - Not built: Attunement and the weekly reseed.
+
+**No more spawn waves (Nov 9, 2026; not yet playtested).** Open-world enemies used to belong to 60-second waves: when a wave ended, every survivor vanished and new enemies rolled in, even mid-fight. Now they stay until killed, and a cleared spawn point refills after 2 minutes with a new random enemy, once no player is within 100 m (see the world rules above). The wave code also had a bug: a spawn point skipped a wave when another zone's point with the same number had already spawned in it, so the world now holds more enemies than before (103 near the start instead of 46 in the same test). Checked in the Editor: no enemy vanished over 2 minutes, a cleared point stayed empty 2 minutes later with the player 30 m away, and refilled (as a Sentinel) as soon as the player moved 150 m away. 382 Core tests pass.
 
 **Open questions from the prototype**
 

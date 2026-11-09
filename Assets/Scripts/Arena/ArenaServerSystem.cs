@@ -87,8 +87,8 @@ namespace FriendlyPersonShooter.Arena
             public MiteSwarm Swarm;
             public int MiteIndex;
             public bool Telegraph;
-            /// <summary>Expedition: the spawn event this enemy came from.</summary>
-            public SpawnKey Spawn;
+            /// <summary>Expedition: the group this enemy came from (a spawn point, a bloom, a boss's adds), or unset.</summary>
+            public SpawnGroupId Spawn;
             /// <summary>Glimmers: where it hovers, when it appeared, and its bob phase.</summary>
             public Vector3 Home;
             public double Born;
@@ -624,6 +624,7 @@ namespace FriendlyPersonShooter.Arena
             ecb.DestroyEntity(e);
             if (ExpeditionWorld.Active)
             {
+                GroupMemberDied(s);
                 if (s.Family == EnemyFamily.Mite) s.Swarm.Alive[s.MiteIndex] = false;
                 if (s.Family == EnemyFamily.Bulwark)
                 {

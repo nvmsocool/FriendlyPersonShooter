@@ -15,35 +15,11 @@ using Vector3 = System.Numerics.Vector3;
 
 namespace FriendlyPersonShooter.Arena
 {
-    /// <summary>Identifies one spawn event: a spawn point's wave (blooms count separately).</summary>
-    public readonly struct SpawnKey : System.IEquatable<SpawnKey>
-    {
-        public readonly int SpawnPointId;
-        public readonly long Wave;
-        public readonly bool Bloom;
-        /// <summary>
-        /// False for the default key, which enemies not made by a spawn event carry (debug spawns, boss adds), so
-        /// they never match spawn point 0's first wave and leave with it.
-        /// </summary>
-        public readonly bool IsSet;
-
-        public SpawnKey(int spawnPointId, long wave, bool bloom)
-        {
-            SpawnPointId = spawnPointId;
-            Wave = wave;
-            Bloom = bloom;
-            IsSet = true;
-        }
-
-        public bool Equals(SpawnKey o) => IsSet == o.IsSet && SpawnPointId == o.SpawnPointId && Wave == o.Wave && Bloom == o.Bloom;
-        public override bool Equals(object obj) => obj is SpawnKey o && Equals(o);
-        public override int GetHashCode() => (SpawnPointId * 397) ^ Wave.GetHashCode() ^ (Bloom ? 0x5555 : 0);
-    }
-
     /// <summary>
     /// The expedition (MVP step 4) on the server, on top of the arena's combat:
-    /// - Enemies spawn from the layer's seeded spawn schedule (and blooms) in zones near players.
-    ///   Each spawn event spawns once; enemies it made leave when it ends.
+    /// - Enemies spawn at the layer's spawn points (and blooms) in zones near players, and stay until killed. A
+    ///   cleared spawn point refills 2 minutes later with a new random enemy, once no player is within 100 m
+    ///   (see <see cref="SpawnSchedule"/>). Bloom groups and boss adds leave after their time, once nobody is near.
     /// - Every player who hit an enemy gets its full essence drop, carried until they stand at the raid door
     ///   or a gate, which bank it (not shrines; see <see cref="Banking"/>). A reset blocks banking for a minute.
     /// - Standing at the gate with enough banked essence pays for access; walking through ends the expedition.
@@ -66,12 +42,14 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Banked essence is one pool for the whole party; carried essence stays personal.</summary>
         private readonly EssenceAmounts _partyBank = new EssenceAmounts();
         private readonly Dictionary<int, ExpeditionTracker> _trackers = new Dictionary<int, ExpeditionTracker>();
-        private readonly HashSet<SpawnKey> _spawnedEvents = new HashSet<SpawnKey>();
-        private readonly Dictionary<SpawnKey, double> _eventEnds = new Dictionary<SpawnKey, double>();
+        /// <summary>Groups with a time limit (bloom groups, boss adds): when they may leave.</summary>
+        private readonly Dictionary<SpawnGroupId, double> _groupEnds = new Dictionary<SpawnGroupId, double>();
+        private readonly List<Vector2> _playerSpots = new List<Vector2>();
+        private readonly HashSet<SpawnGroupId> _groupsLeft = new HashSet<SpawnGroupId>();
         private readonly Dictionary<int, Entity> _cacheGhosts = new Dictionary<int, Entity>();
         private readonly List<EnemyState> _spawned = new List<EnemyState>();
         private readonly List<int> _intScratch = new List<int>();
-        private readonly List<SpawnKey> _keyScratch = new List<SpawnKey>();
+        private readonly List<SpawnGroupId> _groupScratch = new List<SpawnGroupId>();
         private double _nextStatus, _nextSpawnCheck;
         private int _essenceAwarded, _banked, _gateUnlocks, _completions, _cachesDropped, _cachesReturned, _eventsSpawned;
 
@@ -195,13 +173,18 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        /// <summary>Spawns events that are running in any zone within one of a player; removes enemies whose event ended.</summary>
+        /// <summary>
+        /// Spawns the groups that are due in any zone within one of a player (first fills, refills, blooms). Then
+        /// sends away survivors of timed groups (bloom groups, boss adds) whose time is up, once no player is near.
+        /// </summary>
         private void SpawnNearPlayers(EntityCommandBuffer ecb)
         {
             var zones = new HashSet<ZoneCoord>();
+            _playerSpots.Clear();
             foreach (var kv in _players)
             {
                 var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
+                _playerSpots.Add(new Vector2(pos.x, pos.z));
                 var zone = _map.Tiling.ZoneAt(pos.x, pos.z);
                 foreach (var z in _map.Tiling.Neighborhood(zone, 1)) zones.Add(z);
             }
@@ -210,30 +193,24 @@ namespace FriendlyPersonShooter.Arena
             {
                 // On generated ground, wait until the zone is built (it streams in around players) so enemies land on it.
                 if (ExpeditionTerrain.Active && !ExpeditionTerrain.World.IsReady(zone)) continue;
-                foreach (var ev in _schedule.ActiveAt(zone, _time))
+                foreach (var ev in _schedule.Due(zone, _time, _playerSpots))
                 {
-                    var key = new SpawnKey(ev.SpawnPointId, ev.Wave, ev.IsBloom);
-                    if (!_spawnedEvents.Add(key)) continue;
-                    _eventEnds[key] = ev.End;
                     _eventsSpawned++;
-                    SpawnEvent(ev, key);
+                    SpawnEvent(ev);
                 }
             }
 
-            // Events that ended take their surviving enemies with them.
-            _keyScratch.Clear();
-            foreach (var kv in _eventEnds) if (_time >= kv.Value) _keyScratch.Add(kv.Key);
-            if (_keyScratch.Count == 0) return;
-            var ended = new HashSet<SpawnKey>(_keyScratch);
-            foreach (var key in _keyScratch)
-            {
-                _eventEnds.Remove(key);
-                _spawnedEvents.Remove(key);
-            }
+            if (_groupEnds.Count == 0) return;
+            float radius = _schedule.Settings.ClearRadius;
             _scratch.Clear();
+            _groupsLeft.Clear();
             foreach (var kv in _enemies)
             {
-                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && !kv.Value.WorldBoss && kv.Value.Spawn.IsSet && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+                var s = kv.Value;
+                if (!s.Spawn.IsSet || s.Raid || s.WorldBoss || !_groupEnds.TryGetValue(s.Spawn, out double end)) continue;
+                var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
+                if (_time >= end && !_schedule.AnyPlayerWithin(new Vector2(pos.x, pos.z), _playerSpots, radius)) _scratch.Add(kv.Key);
+                else _groupsLeft.Add(s.Spawn);
             }
             foreach (var e in _scratch)
             {
@@ -244,14 +221,24 @@ namespace FriendlyPersonShooter.Arena
                 _ledger.Forget(s.Vitals.Id);
                 ecb.DestroyEntity(e);
             }
+            // Forget timed groups that are over and have nobody left.
+            _groupScratch.Clear();
+            foreach (var kv in _groupEnds) if (_time >= kv.Value && !_groupsLeft.Contains(kv.Key)) _groupScratch.Add(kv.Key);
+            foreach (var key in _groupScratch) _groupEnds.Remove(key);
+        }
+
+        /// <summary>A spawn group's enemy died: the schedule counts it, and a cleared spawn point starts its wait.</summary>
+        private void GroupMemberDied(EnemyState s)
+        {
+            if (_schedule != null && s.Spawn.IsSet && s.Spawn.Source != SpawnSource.Adds) _schedule.Lost(s.Spawn, _time);
         }
 
         /// <summary>The ground at a spawn spot (0 on the flat floor), building its zone first if needed.</summary>
         private static float SpawnGround(float x, float z) => ExpeditionTerrain.Active ? ExpeditionTerrain.OnGround(new float3(x, 0f, z)).y : 0f;
 
-        private void SpawnEvent(SpawnEvent ev, SpawnKey key)
+        private void SpawnEvent(SpawnEvent ev)
         {
-            var random = new Unity.Mathematics.Random((uint)(key.GetHashCode() * 2654435761u) | 1u);
+            var random = new Unity.Mathematics.Random((uint)((ev.Group.GetHashCode() + ev.Generation * 7919) * 2654435761u) | 1u);
             var point = ev.Point.World;
             int tier = ExpeditionWorld.Settings.Tier;
             _spawned.Clear();
@@ -296,7 +283,9 @@ namespace FriendlyPersonShooter.Arena
                     SpawnSwarm(new Vector3(point.X, SpawnGround(point.X, point.Y) + 1.5f, point.Y), tier);
                     break;
             }
-            foreach (var s in _spawned) s.Spawn = key;
+            foreach (var s in _spawned) s.Spawn = ev.Group;
+            _schedule.Spawned(ev.Group, _spawned.Count, _time);
+            if (!double.IsInfinity(ev.End)) _groupEnds[ev.Group] = ev.End;
             _spawned.Clear();
         }
 

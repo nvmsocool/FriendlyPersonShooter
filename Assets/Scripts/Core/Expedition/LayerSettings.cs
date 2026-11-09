@@ -18,7 +18,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         public int Tier { get; set; } = 1;
         /// <summary>Chance a spawn group of a family with an elite kind is led by an elite (see <see cref="SpawnSettings.EliteChance"/>).</summary>
         public float EliteChance { get; set; } = 0.06f;
-        /// <summary>Share of each zone's spawn points active in a wave (see <see cref="SpawnSettings.ActiveShare"/>).</summary>
+        /// <summary>Share of each zone's spawn points in use on the layer (see <see cref="SpawnSettings.ActiveShare"/>).</summary>
         public float ActiveShare { get; set; } = 0.5f;
         /// <summary>Chance a zone hosts a bloom in a slot (see <see cref="BloomSettings.ChancePerZonePerSlot"/>).</summary>
         public float BloomChance { get; set; } = 0.1f;

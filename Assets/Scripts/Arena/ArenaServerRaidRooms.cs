@@ -223,14 +223,10 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!_run.MarkSolved()) return;
             _roomsSolved++;
-            int xp = _run.RoomXp, yellow = _run.RoomYellow;
-            foreach (int id in _raid.Participants)
-            {
-                AddXp(id, xp);
-                WalletOf(id).PickUp(EssenceColor.Yellow, yellow);
-            }
+            int xp = _run.RoomXp;
+            foreach (int id in _raid.Participants) AddXp(id, xp);
             ClearRaidEnemies(ecb);
-            _announce.Add((AnnounceKind.RaidRoomSolved, (int)_run.Room, xp, yellow));
+            _announce.Add((AnnounceKind.RaidRoomSolved, (int)_run.Room, xp, 0));
             Debug.Log($"[Raid] solved {RaidRoomLayout.NameOf(_run.Room)} after {_run.StageTime(_time):0}s");
         }
 

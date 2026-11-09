@@ -38,6 +38,30 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>A Slowed enemy never drops below this share of its speed, however much Slow stacks.</summary>
         public float SlowFloor { get; set; } = 0.2f;
 
+        // Frenzy.
+        /// <summary>Extra fire rate and reload speed a Frenzied player gets.</summary>
+        public float FrenzyBonus { get; set; } = 0.3f;
+        public float FrenzyDuration { get; set; } = 6f;
+        /// <summary>How much slower a Jammed enemy attacks (its attack clock runs at 1 / (1 + this)).</summary>
+        public float JamAmount { get; set; } = 0.6f;
+        public float JamDuration { get; set; } = 5f;
+
+        // Ward.
+        /// <summary>Shield points one Ward hit gives (stacks like other buffs, up to 2x).</summary>
+        public float WardShield { get; set; } = 20f;
+        public float WardDuration { get; set; } = 6f;
+        /// <summary>Share of an enemy's armor a Brittle debuff turns off (0.5 = armored hits do half way to full damage).</summary>
+        public float BrittleAmount { get; set; } = 0.5f;
+        public float BrittleDuration { get; set; } = 6f;
+
+        // Focus.
+        /// <summary>How much larger weak points are for a Focused player's own hits (radius).</summary>
+        public float FocusWeakPointBonus { get; set; } = 0.35f;
+        public float FocusDuration { get; set; } = 6f;
+        /// <summary>How much larger a Marked enemy's weak points are for everyone (radius).</summary>
+        public float MarkWeakPointBonus { get; set; } = 0.4f;
+        public float MarkDuration { get; set; } = 6f;
+
         // Relay.
         /// <summary>How many of a Relayed player's next hits carry the relayer's payload.</summary>
         public int RelayHits { get; set; } = 5;
@@ -68,6 +92,12 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>Share of the plagued enemy's Wither damage per second that a spread Wither deals.</summary>
         public float PlagueShare { get; set; } = 0.75f;
         public float PlagueWitherDuration { get; set; } = 3f;
+        /// <summary>Deadeye (Might + Focus on a player): their weak-point hits use this multiplier instead of <see cref="WeakPointMultiplier"/>.</summary>
+        public float DeadeyeWeakPointMultiplier { get; set; } = 3f;
+        /// <summary>Bastion (Vigor shield + Ward on a player): Ward shield points regained per second.</summary>
+        public float BastionRegen { get; set; } = 8f;
+        /// <summary>Pinned (Slow + Mark on an enemy): seconds it freezes when the combo forms.</summary>
+        public float PinnedFreeze { get; set; } = 1f;
 
         // Downed and revive.
         public ReviveSettings Revive { get; set; } = new ReviveSettings();
@@ -103,6 +133,11 @@ namespace FriendlyPersonShooter.Core.Combat
         public float GlimmerHealth { get; set; } = 5f;
         /// <summary>The raid boss's health per player in the raid (see <see cref="BulwarkSettings.HealthFor"/>).</summary>
         public float BulwarkHealth { get; set; } = 1300f;
+        /// <summary>A Bulwark roaming the world: most hits do a fifth, so this is about 30 plate hits.</summary>
+        public float WorldBulwarkHealth { get; set; } = 240f;
+        /// <summary>Most Sentinel hits are on armor (see <see cref="SentinelSettings.ArmorMultiplier"/>); about 3 eye hits.</summary>
+        public float SentinelHealth { get; set; } = 50f;
+        public float DiverHealth { get; set; } = 35f;
 
         public float EnemyHealth(EnemyFamily family)
         {
@@ -112,6 +147,8 @@ namespace FriendlyPersonShooter.Core.Combat
                 case EnemyFamily.Skitter: return SkitterHealth;
                 case EnemyFamily.Glimmer: return GlimmerHealth;
                 case EnemyFamily.Bulwark: return BulwarkHealth;
+                case EnemyFamily.Sentinel: return SentinelHealth;
+                case EnemyFamily.Diver: return DiverHealth;
                 default: return MiteHealth;
             }
         }

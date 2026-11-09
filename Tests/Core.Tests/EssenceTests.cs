@@ -14,7 +14,14 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(EssenceColors.Of(EnemyFamily.Skitter), Is.EqualTo(EssenceColor.Red));
             Assert.That(EssenceColors.Of(EnemyFamily.Mite), Is.EqualTo(EssenceColor.Green));
             Assert.That(EssenceColors.TryGetFamily(EssenceColor.Red, out var f) && f == EnemyFamily.Skitter);
-            Assert.That(EssenceColors.TryGetFamily(EssenceColor.Blue, out _), Is.False);
+            Assert.That(EssenceColors.Of(EnemyFamily.Sentinel), Is.EqualTo(EssenceColor.Blue));
+            Assert.That(EssenceColors.Of(EnemyFamily.Bulwark), Is.EqualTo(EssenceColor.Purple));
+            Assert.That(EssenceColors.Of(EnemyFamily.Diver), Is.EqualTo(EssenceColor.Orange));
+            foreach (var c in EssenceColors.All)
+            {
+                Assert.That(EssenceColors.TryGetFamily(c, out var family), Is.True, $"{c} has a family");
+                Assert.That(EssenceColors.Of(family), Is.EqualTo(c));
+            }
             Assert.That(EssenceColors.All.Count, Is.EqualTo(6));
         }
 

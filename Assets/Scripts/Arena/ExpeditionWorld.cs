@@ -27,29 +27,41 @@ namespace FriendlyPersonShooter.Arena
 
         private static LayerMap _map;
         private static uint _mapSeed;
+        private static int _mapLayer;
         private static ArenaLayout.Box[] _cover;
 
         public static bool Active => NetTestSettings.Game == GameMode.Expedition;
+
+        /// <summary>
+        /// The layer the whole group is on (1 = the top, see <see cref="LayerSettings.LayerCount"/>). The server sets
+        /// it; clients copy it from their expedition status.
+        /// </summary>
+        public static int Layer = 1;
+
+        /// <summary>The current layer's tuning (palette, elites, tier, gate).</summary>
+        public static LayerSettings Settings => LayerSettings.ForLayer(Layer);
+
 
         public static LayerMap Map
         {
             get
             {
-                if (_map == null || _mapSeed != NetTestSettings.WorldSeed)
+                if (_map == null || _mapSeed != NetTestSettings.WorldSeed || _mapLayer != Layer)
                 {
                     _mapSeed = NetTestSettings.WorldSeed;
-                    _map = LayerGenerator.Generate(_mapSeed, LayerSettings.MvpTiling(), LayerSettings.ForPlaytest());
+                    _mapLayer = Layer;
+                    _map = LayerGenerator.Generate(LayerSettings.SeedFor(_mapSeed, Layer), LayerSettings.MvpTiling(), Settings);
                     _cover = null;
                 }
                 return _map;
             }
         }
 
-        private static System.Numerics.Vector2 _raidDoor;
+        private static IReadOnlyList<System.Numerics.Vector2> _raidDoors;
         private static uint _raidDoorSeed = uint.MaxValue;
 
-        /// <summary>Where the layer's raid door stands (world x, z). The raid arena floats above it.</summary>
-        public static System.Numerics.Vector2 RaidDoor
+        /// <summary>Where the layer's raid doors stand (world x, z). The raid platforms float above the first.</summary>
+        public static IReadOnlyList<System.Numerics.Vector2> RaidDoors
         {
             get
             {
@@ -57,11 +69,33 @@ namespace FriendlyPersonShooter.Arena
                 if (_raidDoorSeed != map.Seed)
                 {
                     _raidDoorSeed = map.Seed;
-                    _raidDoor = RaidSite.DoorFor(map);
+                    _raidDoors = RaidSite.DoorsFor(map);
                 }
-                return _raidDoor;
+                return _raidDoors;
             }
         }
+
+        /// <summary>
+        /// The open raid door (index into <see cref="RaidDoors"/>). The server sets it; clients copy it from their
+        /// expedition status (see <see cref="RaidDoorRotation"/>).
+        /// </summary>
+        public static int RaidDoorIndex;
+
+        /// <summary>Spent raid doors as bits (drawn dark).</summary>
+        public static ulong RaidDoorsSpent;
+
+        /// <summary>Where the open raid door stands (world x, z).</summary>
+        public static System.Numerics.Vector2 RaidDoor
+        {
+            get
+            {
+                var doors = RaidDoors;
+                return doors[RaidDoorIndex >= 0 && RaidDoorIndex < doors.Count ? RaidDoorIndex : 0];
+            }
+        }
+
+        /// <summary>Where the raid platforms float above (the first door; it never moves).</summary>
+        public static System.Numerics.Vector2 RaidAnchor => RaidDoors[0];
 
         /// <summary>Moves a position into the canonical copy of its zone (keeps y).</summary>
         public static float3 Wrap(float3 p)

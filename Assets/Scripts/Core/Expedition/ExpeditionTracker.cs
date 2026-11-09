@@ -209,8 +209,9 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case ExpeditionPhase.PassThrough:
                 {
                     string label = $"the gate {gatePlace}";
-                    return new ExpeditionObjective(Phase,
-                        $"Gate open for {(int)Math.Ceiling(_gate.OpenLeft(now))}s. Go through {label}", true, gatePoint, label);
+                    // Access without a running opening: the group came back up through this gate, and it stays open to them.
+                    string open = _gate.IsOpen ? $"Gate open for {(int)Math.Ceiling(_gate.OpenLeft(now))}s" : "The gate is open to you";
+                    return new ExpeditionObjective(Phase, $"{open}. Go through {label}", true, gatePoint, label);
                 }
                 default:
                     return new ExpeditionObjective(Phase,

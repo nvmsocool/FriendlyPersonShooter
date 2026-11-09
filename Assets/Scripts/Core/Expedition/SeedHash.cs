@@ -13,6 +13,7 @@ namespace FriendlyPersonShooter.Core.Expedition
         public const int GateSalt = 3;
         public const int SpawnSalt = 4;
         public const int BloomSalt = 5;
+        public const int DepthSalt = 6;
 
         public static uint Of(uint seed, int a, int b = 0, int c = 0, int d = 0, int e = 0, int f = 0)
         {

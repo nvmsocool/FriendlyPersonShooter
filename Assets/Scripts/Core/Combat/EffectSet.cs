@@ -143,14 +143,37 @@ namespace FriendlyPersonShooter.Core.Combat
         }
 
         /// <summary>Takes up to <paramref name="amount"/> points out of the shield; returns what it absorbed.</summary>
-        public float DrainShield(float amount)
+        public float DrainShield(float amount) => Drain(EffectKind.Shield, amount, true);
+
+        /// <summary>
+        /// Takes up to <paramref name="amount"/> out of an effect used as a pool of points (a shield); returns what it
+        /// absorbed. An emptied effect is removed, or kept at 0 (it may refill) when <paramref name="removeWhenEmpty"/> is false.
+        /// </summary>
+        public float Drain(EffectKind kind, float amount, bool removeWhenEmpty)
         {
-            var slot = Find(EffectKind.Shield);
+            var slot = Find(kind);
             if (slot == null || amount <= 0) return 0f;
             float absorbed = Math.Min(amount, slot.Strength);
             slot.Strength -= absorbed;
-            if (slot.Strength <= 0f) _slots.Remove(slot);
+            if (slot.Strength <= 0f && removeWhenEmpty) _slots.Remove(slot);
             return absorbed;
+        }
+
+        /// <summary>Raises an effect present on the target by <paramref name="amount"/>, up to <paramref name="max"/>. Returns what it added.</summary>
+        public float Restore(EffectKind kind, float amount, float max)
+        {
+            var slot = Find(kind);
+            if (slot == null || amount <= 0f || slot.Strength >= max) return 0f;
+            float before = slot.Strength;
+            slot.Strength = Math.Min(max, slot.Strength + amount);
+            return slot.Strength - before;
+        }
+
+        /// <summary>The strongest single source's strength for the effect (its full value from one giver), or 0.</summary>
+        public float SingleStrengthOf(EffectKind kind)
+        {
+            var s = Find(kind);
+            return s == null ? 0f : s.SingleStrength;
         }
 
         public bool Remove(EffectKind kind)

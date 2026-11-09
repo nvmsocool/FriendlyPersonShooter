@@ -110,8 +110,10 @@ namespace FriendlyPersonShooter.Core.Progression
                 case EnemyFamily.Wisp: return 20;
                 case EnemyFamily.Skitter: return 30;
                 case EnemyFamily.Glimmer: return 4;
-                // The raid boss pays out through the raid's clear reward.
-                case EnemyFamily.Bulwark: return 0;
+                case EnemyFamily.Sentinel: return 35;
+                case EnemyFamily.Diver: return 30;
+                // A roaming Bulwark (raid bosses pay through the raid's clear reward instead).
+                case EnemyFamily.Bulwark: return 60;
                 default: return 5;
             }
         }

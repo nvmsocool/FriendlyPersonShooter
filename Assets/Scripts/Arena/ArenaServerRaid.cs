@@ -11,13 +11,15 @@ using Vector3 = System.Numerics.Vector3;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Red and Green
+    /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Blue, Purple and Green
     /// toward its key (carried first, then the party bank), strangers into the same key. With a full key,
     /// anyone at the door presses E to start a countdown; whoever stands at the door when it ends goes up together for a run (see
     /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
     /// group on the raid arena (<see cref="RaidArena"/>). Beating it blows the boss apart and pays everyone
-    /// inside a level's worth of XP, some Yellow and an item; they can stay up there, and each goes home
+    /// inside a level's worth of XP and an item (raids never pay essence); they can stay up there, and each goes home
     /// through the exit portal (or all at once when the hang-out ends). A wipe or the time limit sends them back down.
+    /// The layer has several doors, one open at a time (<see cref="RaidDoorRotation"/>): a clear spends the door it
+    /// was entered by, and the next one opens somewhere else.
     /// </summary>
     public partial class ArenaServerSystem
     {
@@ -34,6 +36,9 @@ namespace FriendlyPersonShooter.Arena
 
         private readonly BulwarkSettings _bulwark = new BulwarkSettings();
         private RaidDoor _raid;
+        private RaidDoorRotation _doors;
+        /// <summary>The door the running raid was entered by; raiders come home to it.</summary>
+        private Vector2 _raidEntry;
         private readonly List<int> _atDoor = new List<int>();
         private readonly List<int> _raidScratch = new List<int>();
         private int _raidWaveDue;
@@ -46,9 +51,16 @@ namespace FriendlyPersonShooter.Arena
         private void CreateRaid()
         {
             _raid = new RaidDoor();
+            _doors = new RaidDoorRotation(ExpeditionWorld.RaidDoors.Count);
+            ExpeditionWorld.RaidDoorIndex = _doors.Active;
+            ExpeditionWorld.RaidDoorsSpent = 0;
             RaidArena.Ensure();
-            var door = ExpeditionWorld.RaidDoor;
-            Debug.Log($"[Raid] door at ({door.X:0},{door.Y:0}) {_map.Describe(door)}; key {_raid.Settings.RedCost} Red + {_raid.Settings.GreenCost} Green");
+            for (int i = 0; i < ExpeditionWorld.RaidDoors.Count; i++)
+            {
+                var door = ExpeditionWorld.RaidDoors[i];
+                Debug.Log($"[Raid] door {i} at ({door.X:0},{door.Y:0}) {_map.Describe(door)}{(i == _doors.Active ? " (open)" : "")}");
+            }
+            Debug.Log($"[Raid] key {_raid.Settings.BlueCost} Blue + {_raid.Settings.PurpleCost} Purple + {_raid.Settings.GreenCost} Green");
         }
 
         private bool InsideRaid(int id) => _raid != null && _raid.IsInside(id);
@@ -125,6 +137,7 @@ namespace FriendlyPersonShooter.Arena
         {
             var inside = _raid.Participants;
             int n = inside.Count;
+            _raidEntry = RaidDoorPoint;
             _run = new RaidRun(NextSeed(), n, null, DebugRaidRoom, DebugRaidModifier, DebugRaidBoss);
             _run.Begin(_time);
             _raidWaveDue = 0;
@@ -305,7 +318,7 @@ namespace FriendlyPersonShooter.Arena
 
         /// <summary>
         /// The boss died: it blows apart (clients draw it), the fight's leftovers go, and everyone inside is paid
-        /// on the spot (the downed get back up; each gets XP, Yellow and a rare-or-better item at their feet).
+        /// on the spot (the downed get back up; each gets XP and a pick of three rare-or-better items).
         /// They stay up there until they leave through the exit portal.
         /// </summary>
         private void WinRaid(EntityCommandBuffer ecb)
@@ -326,9 +339,9 @@ namespace FriendlyPersonShooter.Arena
                     st.Revive = null;
                 }
                 AddXp(id, _raid.Settings.ClearXp);
-                WalletOf(id).PickUp(EssenceColor.Yellow, _raid.Settings.ClearYellow);
-                GiveBossLoot(id, EntityManager.GetComponentData<LocalTransform>(e).Position, ecb);
+                GiveBossLoot(id);
             }
+            SpendDoor();
             _raidsCleared++;
             _announce.Add((AnnounceKind.RaidCleared, (int)took, 0, 0));
             Debug.Log($"[Raid] Cleared after {took:0}s with {_raidScratch.Count} player(s) inside; the exit portal is open");
@@ -353,11 +366,21 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        /// <summary>Puts a raider back on the ground in a ring around the door.</summary>
+        /// <summary>The open door's raid was cleared: that door goes dark and the next one opens.</summary>
+        private void SpendDoor()
+        {
+            int was = _doors.Active;
+            ExpeditionWorld.RaidDoorIndex = _doors.Cleared();
+            ExpeditionWorld.RaidDoorsSpent = _doors.SpentMask;
+            var door = RaidDoorPoint;
+            Debug.Log($"[Raid] door {was} is spent; door {_doors.Active} opened at ({door.X:0},{door.Y:0}) {_map.Describe(door)}");
+        }
+
+        /// <summary>Puts a raider back on the ground in a ring around the door they went in by.</summary>
         private float3 SendHome(int id, int index, int count)
         {
             float a = 2f * math.PI * index / math.max(1, count);
-            var spot = ExpeditionWorld.ToFloat3(RaidDoorPoint) + new float3(math.sin(a) * 4f, 0f, math.cos(a) * 4f);
+            var spot = ExpeditionWorld.ToFloat3(_raidEntry) + new float3(math.sin(a) * 4f, 0f, math.cos(a) * 4f);
             var landed = ExpeditionTerrain.OnGround(ExpeditionWorld.Wrap(spot));
             TeleportPlayer(id, landed);
             return landed;
@@ -393,11 +416,10 @@ namespace FriendlyPersonShooter.Arena
                         st.Revive = null;
                     }
                     AddXp(id, _raid.Settings.ClearXp);
-                    WalletOf(id).PickUp(EssenceColor.Yellow, _raid.Settings.ClearYellow);
                 }
-                var landed = SendHome(id, i, _raidScratch.Count);
-                // A clear also pays each raider a rare-or-better item, waiting at their feet.
-                if (pay) GiveBossLoot(id, landed, ecb);
+                SendHome(id, i, _raidScratch.Count);
+                // A clear also offers each raider three rare-or-better items to pick one from.
+                if (pay) GiveBossLoot(id);
             }
 
             if (celebrated)
@@ -407,6 +429,7 @@ namespace FriendlyPersonShooter.Arena
             }
             if (outcome == RaidOutcome.Cleared)
             {
+                SpendDoor();
                 _raidsCleared++;
                 _announce.Add((AnnounceKind.RaidCleared, (int)took, 0, 0));
             }
@@ -460,8 +483,18 @@ namespace FriendlyPersonShooter.Arena
             if (_raid.Phase == RaidPhase.Collecting && toDoor <= RaidNoticeRadius)
             {
                 objective = new ExpeditionObjective(phase,
-                    $"Raid door: stand at it to pledge Red and Green. Key: Red {_raid.Pledged(EssenceColor.Red)}/{_raid.Cost(EssenceColor.Red)}, " +
+                    $"Raid door: stand at it to pledge {RaidKey.ColorList()}. Key: Blue {_raid.Pledged(EssenceColor.Blue)}/{_raid.Cost(EssenceColor.Blue)}, " +
+                    $"Purple {_raid.Pledged(EssenceColor.Purple)}/{_raid.Cost(EssenceColor.Purple)}, " +
                     $"Green {_raid.Pledged(EssenceColor.Green)}/{_raid.Cost(EssenceColor.Green)}", true, door, "raid door");
+                return true;
+            }
+            // At a dark door: point at the open one.
+            var doors = ExpeditionWorld.RaidDoors;
+            for (int i = 0; i < doors.Count; i++)
+            {
+                if (i == _doors.Active || _map.Distance(pos, doors[i]) > RaidNoticeRadius) continue;
+                string why = _doors.IsSpent(i) ? "This raid door is spent (its raid was cleared)" : "This raid door is dark for now";
+                objective = new ExpeditionObjective(phase, $"{why}. The open raid door is {toDoor:0} m away", true, door, "raid door");
                 return true;
             }
             return false;
@@ -472,9 +505,10 @@ namespace FriendlyPersonShooter.Arena
             if (_raid == null) return;
             status.RaidPhase = _raid.Phase;
             status.InRaid = _raid.IsInside(id);
-            status.KeyRed = _raid.Pledged(EssenceColor.Red);
-            status.KeyGreen = _raid.Pledged(EssenceColor.Green);
+            status.Key = RaidKey.Pack(_raid);
             status.RaidTimer = (float)_raid.TimeLeft(_time);
+            status.RaidDoorIndex = (byte)_doors.Active;
+            status.RaidDoorsSpent = (byte)_doors.SpentMask;
             WriteRoomStatus(id, ref status);
         }
 
@@ -483,7 +517,7 @@ namespace FriendlyPersonShooter.Arena
             if (_raid == null) return "";
             float bossHealth = -1f;
             foreach (var s in _enemies.Values) if (s.Family == EnemyFamily.Bulwark && s.Raid) bossHealth = System.Math.Max(0f, bossHealth) + s.Vitals.Health;
-            return $"phase={_raid.Phase} key=R{_raid.Pledged(EssenceColor.Red)}/G{_raid.Pledged(EssenceColor.Green)} pledged={_raidPledged} " +
+            return $"phase={_raid.Phase} key=B{_raid.Pledged(EssenceColor.Blue)}/P{_raid.Pledged(EssenceColor.Purple)}/G{_raid.Pledged(EssenceColor.Green)} pledged={_raidPledged} " +
                    $"inside=[{(_raid.Phase == RaidPhase.Running ? string.Join(",", _raid.Participants) : "")}] boss={bossHealth:0} started={_raidsStarted} cleared={_raidsCleared} " +
                    $"failed={_raidsFailed} results=[{_raidResults}] {RunLog()}";
         }

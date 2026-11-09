@@ -6,9 +6,40 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// <summary>Tunables for generating one layer. Distances in metres.</summary>
     public sealed class LayerSettings
     {
-        /// <summary>Colors zones can lean toward. Each must have an enemy family (Yellow, Red, Green for now).</summary>
-        public IReadOnlyList<EssenceColor> Palette { get; set; } =
-            new[] { EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green };
+        /// <summary>Colors zones can lean toward (each spawns its family). All six by default.</summary>
+        public IReadOnlyList<EssenceColor> Palette { get; set; } = new[]
+        {
+            EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green, EssenceColor.Blue, EssenceColor.Purple, EssenceColor.Orange,
+        };
+
+        /// <summary>Which layer this is (1 = the top; deeper is harder).</summary>
+        public int Layer { get; set; } = 1;
+        /// <summary>Enemy difficulty tier (see <see cref="Combat.EnemyTiers"/>): the layer number.</summary>
+        public int Tier { get; set; } = 1;
+        /// <summary>Chance a spawn group of a family with an elite kind is led by an elite (see <see cref="SpawnSettings.EliteChance"/>).</summary>
+        public float EliteChance { get; set; } = 0.06f;
+        /// <summary>Share of each zone's spawn points active in a wave (see <see cref="SpawnSettings.ActiveShare"/>).</summary>
+        public float ActiveShare { get; set; } = 0.5f;
+        /// <summary>Chance a zone hosts a bloom in a slot (see <see cref="BloomSettings.ChancePerZonePerSlot"/>).</summary>
+        public float BloomChance { get; set; } = 0.1f;
+        /// <summary>The gate down: the color it costs and its first price.</summary>
+        public EssenceColor GateColor { get; set; } = EssenceColor.Yellow;
+        public int GateCost { get; set; } = 40;
+        /// <summary>The deepest layer: its gate ends the expedition instead of leading further down.</summary>
+        public bool Deepest { get; set; }
+
+        /// <summary>How many layers the world has.</summary>
+        public const int LayerCount = 3;
+
+        /// <summary>Layer 1 uses the world seed as is; deeper layers get their own seed from it, so each layer is a new map.</summary>
+        public static uint SeedFor(uint worldSeed, int layer) =>
+            layer <= 1 ? worldSeed : SeedHash.Of(worldSeed, SeedHash.DepthSalt, layer);
+
+        public SpawnSettings Spawns() => new SpawnSettings { EliteChance = EliteChance, ActiveShare = ActiveShare };
+
+        public BloomSettings Blooms() => new BloomSettings { ChancePerZonePerSlot = BloomChance };
+
+        public GateSettings Gate() => new GateSettings { Color = GateColor, Cost = GateCost };
 
         /// <summary>
         /// When set, every zone leans only toward this color and spawns only its family, whatever the
@@ -68,13 +99,37 @@ namespace FriendlyPersonShooter.Core.Expedition
             };
         }
 
+        /// <summary>The playtest's first layer (see <see cref="ForLayer"/>).</summary>
+        public static LayerSettings ForPlaytest() => ForLayer(1);
+
         /// <summary>
-        /// The playtest layer: zones lean toward Yellow, Red or Green (Wisps, Skitters, Mites), so the
-        /// raid key's Red and Green can be hunted; one gate (still Yellow).
+        /// The three layers:
+        /// 1. Tier 1, every color, a few elites; the gate costs 40 Yellow.
+        /// 2. Tier 2, denser spawns, more zones mixing two colors, and many more elites; the gate costs 40 Blue.
+        /// 3. Tier 3, only the hardest families (Skitters, Sentinels, Bulwarks, Divers), elites everywhere and blooms half
+        ///    as often; its gate (40 Purple) ends the expedition.
         /// </summary>
-        public static LayerSettings ForPlaytest()
+        public static LayerSettings ForLayer(int layer)
         {
-            return new LayerSettings { GateCount = 1 };
+            layer = System.Math.Max(1, System.Math.Min(LayerCount, layer));
+            var s = new LayerSettings { Layer = layer, Tier = layer, GateCount = 1, Deepest = layer == LayerCount };
+            if (layer == 2)
+            {
+                s.EliteChance = 0.2f;
+                s.ActiveShare = 0.6f;
+                s.SecondColorChance = 0.7f;
+                s.GateColor = EssenceColor.Blue;
+            }
+            else if (layer == 3)
+            {
+                s.Palette = new[] { EssenceColor.Red, EssenceColor.Blue, EssenceColor.Purple, EssenceColor.Orange };
+                s.EliteChance = 0.3f;
+                s.ActiveShare = 0.6f;
+                s.SecondColorChance = 0.6f;
+                s.BloomChance = 0.05f;
+                s.GateColor = EssenceColor.Purple;
+            }
+            return s;
         }
 
         /// <summary>

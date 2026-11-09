@@ -123,7 +123,7 @@ namespace FriendlyPersonShooter.Core.Tests
                 }
             }
             Assert.That(drops, Is.InRange(420, 580), "about 25% of kills drop");
-            Assert.That(colors, Is.EquivalentTo(new[] { EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green }));
+            Assert.That(colors, Is.EquivalentTo(EssenceColors.All), "any of the six colors");
             Assert.That(EnemyAttackSettings.For(EnemyFamily.Glimmer).Damage, Is.EqualTo(0f));
             Assert.That(new CombatSettings().EnemyHealth(EnemyFamily.Glimmer), Is.LessThanOrEqualTo(10f), "one base shot kills");
         }

@@ -58,6 +58,8 @@ namespace FriendlyPersonShooter.Arena
             /// <summary>The box being picked from, and where the player stood when they opened it.</summary>
             public int PickBox = -1;
             public float3 PickAt;
+            /// <summary>Boss rewards not yet picked from; each opens as a pick once no other pick is open.</summary>
+            public System.Collections.Generic.Queue<LootItem[]> Rewards = new System.Collections.Generic.Queue<LootItem[]>();
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
@@ -106,6 +108,16 @@ namespace FriendlyPersonShooter.Arena
             /// <summary>The Colossus, the open-world boss (Family Bulwark, but its own behavior).</summary>
             public bool WorldBoss;
             public ColossusBehavior Colossus;
+            /// <summary>Difficulty tier (the layer it spawned on); raid and arena enemies are tier 1.</summary>
+            public int Tier = 1;
+            /// <summary>An elite (two families mixed), or None.</summary>
+            public EliteKind Elite;
+            /// <summary>A Bulwark roaming the world (not a raid boss, not the Colossus).</summary>
+            public bool Roaming;
+            public SentinelBehavior Sentinel;
+            public DiverBehavior Diver;
+            /// <summary>A Blinker elite (a Skitter): seconds to its next blink.</summary>
+            public float BlinkTime;
         }
 
         private readonly CombatSettings _combat = new CombatSettings();
@@ -286,7 +298,7 @@ namespace FriendlyPersonShooter.Arena
                 var revive = state.Revive;
                 vitals.ValueRW = new ArenaVitals
                 {
-                    Health = v.Health, MaxHealth = v.MaxHealth, Shield = v.Shield,
+                    Health = v.Health, MaxHealth = v.MaxHealth, Shield = v.TotalShield,
                     RespawnIn = revive != null ? revive.BleedOutLeft : 0f,
                     ReviveProgress = revive != null ? revive.ProgressFraction : 0f,
                 };
@@ -306,6 +318,13 @@ namespace FriendlyPersonShooter.Arena
                     ChainLinks = holding ? chain.Links : 0,
                     ChainTimeLeft = holding ? chain.TimeLeft : 0f,
                     Blitz = v.IsBlitzed,
+                    FireRate = v.FireRateMultiplier,
+                    FrenzyRemaining = v.Buffs.RemainingOf(EffectKind.Frenzied),
+                    Ward = v.Ward,
+                    WardRemaining = v.Buffs.RemainingOf(EffectKind.Warded),
+                    Focus = v.WeakPointBonus,
+                    FocusRemaining = v.Buffs.RemainingOf(EffectKind.Focused),
+                    Combos = Combos.OnPlayer(v.Buffs),
                 };
                 loadout.ValueRW = LoadoutGhost(state);
                 WriteProgress(entity, state);
@@ -385,16 +404,22 @@ namespace FriendlyPersonShooter.Arena
             var prefab = SystemAPI.GetSingleton<ArenaEnemyPrefab>().Value;
             var e = EntityManager.Instantiate(prefab);
             int id = _nextEnemyId++;
+            if (state.Roaming && state.MaxHealth <= 0f) state.MaxHealth = _combat.WorldBulwarkHealth;
+            if (state.Elite != EliteKind.None)
+            {
+                float baseHealth = state.MaxHealth > 0f ? state.MaxHealth : _combat.EnemyHealth(state.Family);
+                state.MaxHealth = baseHealth * Elites.HealthMultiplier;
+            }
             state.Vitals = state.MaxHealth > 0f
                 ? new EnemyVitals(id, state.Family, _combat, state.MaxHealth)
                 : new EnemyVitals(id, state.Family, _combat);
-            state.AttackSettings = EnemyAttackSettings.For(state.Family);
+            state.AttackSettings = AttackFor(state);
             state.Attack = EnemyAttack.Create(NextSeed(), state.AttackSettings);
             EntityManager.SetComponentData(e, LocalTransform.FromPosition(ToFloat3(position)));
             EntityManager.SetComponentData(e, new ArenaEnemy
             {
                 Family = state.Family, Health = state.Vitals.Health, MaxHealth = state.Vitals.Health, Hittable = true,
-                Yaw = state.Boss.Yaw, World = state.WorldBoss,
+                Yaw = state.Boss.Yaw, World = state.WorldBoss, Boss = IsRaidBoss(state), Tier = (byte)state.Tier, Elite = state.Elite,
             });
             _enemies[e] = state;
             _enemyById[id] = e;
@@ -404,36 +429,39 @@ namespace FriendlyPersonShooter.Arena
 
         private uint NextSeed() => _seed = _seed * 1664525u + 1013904223u;
 
-        private void SpawnWisp(Vector3? home = null)
+        private void SpawnWisp(Vector3? home = null, int tier = 1)
         {
-            var state = new EnemyState { Family = EnemyFamily.Wisp };
-            state.Wisp = WispBehavior.Create(home ?? RandomHome(2.2f), NextSeed(), _wisp);
+            var state = new EnemyState { Family = EnemyFamily.Wisp, Tier = EnemyTiers.Clamp(tier) };
+            state.Wisp = WispBehavior.Create(home ?? RandomHome(2.2f), NextSeed(), WispOf(state));
             SpawnEnemy(state, state.Wisp.Position);
         }
 
-        private void SpawnSkitter(Vector3? home = null)
+        private void SpawnSkitter(Vector3? home = null, int tier = 1, EliteKind elite = EliteKind.None)
         {
-            var state = new EnemyState { Family = EnemyFamily.Skitter };
-            state.Skitter = SkitterBehavior.Create(home ?? RandomHome(_skitter.BodyRadius), NextSeed(), _skitter);
+            var state = new EnemyState { Family = EnemyFamily.Skitter, Tier = EnemyTiers.Clamp(tier), Elite = elite, BlinkTime = BlinkerInterval };
+            state.Skitter = SkitterBehavior.Create(home ?? RandomHome(_skitter.BodyRadius), NextSeed(), SkitterOf(state));
             SpawnEnemy(state, state.Skitter.Position);
         }
 
-        private void SpawnSwarm(Vector3? home = null)
+        private void SpawnSwarm(Vector3? home = null, int tier = 1)
         {
-            var swarm = new MiteSwarm(home ?? RandomHome(1.5f), NextSeed(), _mites);
+            tier = EnemyTiers.Clamp(tier);
+            var swarm = new MiteSwarm(home ?? RandomHome(1.5f), NextSeed(), _mitesTier[tier]);
             for (int i = 0; i < swarm.Mites.Length; i++)
             {
-                var state = new EnemyState { Family = EnemyFamily.Mite, Swarm = swarm, MiteIndex = i };
+                var state = new EnemyState { Family = EnemyFamily.Mite, Swarm = swarm, MiteIndex = i, Tier = tier };
                 SpawnEnemy(state, swarm.Mites[i].Position);
             }
         }
 
         /// <summary>A Skitter runs over the generated ground: up and down slopes and steps, turning back at walls and drops.</summary>
-        private void FollowGround(ref SkitterBehavior k, Vector3 before)
+        private void FollowGround(ref SkitterBehavior k, Vector3 before, bool blinked = false)
         {
             float r = _skitter.BodyRadius;
             var p = k.Position;
-            if (ExpeditionTerrain.SurfaceNear(p.X, p.Z, before.Y - r, 1.2f, 2.5f, out float ground))
+            // A blink may land on a ledge well above or below: search further for the ground.
+            float up = blinked ? 6f : 1.2f, down = blinked ? 8f : 2.5f;
+            if (ExpeditionTerrain.SurfaceNear(p.X, p.Z, before.Y - r, up, down, out float ground))
             {
                 k.Position = new Vector3(p.X, ground + r, p.Z);
             }
@@ -478,7 +506,7 @@ namespace FriendlyPersonShooter.Arena
                 switch (s.Family)
                 {
                     case EnemyFamily.Wisp:
-                        teleported = s.Wisp.Step(moveDt, _wisp);
+                        teleported = s.Wisp.Step(moveDt, WispOf(s));
                         if (ExpeditionTerrain.Active) KeepAboveGround(ref s.Wisp.Position, 0.8f);
                         position = s.Wisp.Position;
                         hittable = s.Wisp.IsHittable;
@@ -486,11 +514,18 @@ namespace FriendlyPersonShooter.Arena
                     case EnemyFamily.Skitter:
                         var before = s.Skitter.Position;
                         if (s.CoreRunner) SteerRunner(ref s.Skitter);
-                        s.Skitter.Step(moveDt, _skitter);
-                        if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before);
+                        s.Skitter.Step(moveDt, SkitterOf(s));
+                        if (s.Elite == EliteKind.Blinker && BlinkSkitter(s, moveDt)) teleported = true;
+                        if (ExpeditionTerrain.Active) FollowGround(ref s.Skitter, before, teleported);
                         if (s.Raid) KeepInRoom(ref s.Skitter, before);
                         if (s.CoreRunner && RunnerBurst(s.Skitter.Position)) _expired.Add(e);
                         position = s.Skitter.Position;
+                        break;
+                    case EnemyFamily.Sentinel:
+                        position = StepSentinel(s, dt);
+                        break;
+                    case EnemyFamily.Diver:
+                        position = StepDiver(ecb, s, dt, out teleported);
                         break;
                     case EnemyFamily.Glimmer:
                         position = GlimmerPosition(s);
@@ -501,6 +536,11 @@ namespace FriendlyPersonShooter.Arena
                         if (s.WorldBoss)
                         {
                             position = StepColossus(ecb, s, dt);
+                            break;
+                        }
+                        if (s.Roaming)
+                        {
+                            position = StepRoamingBulwark(s, dt);
                             break;
                         }
                         float fraction = s.Vitals.Health / System.Math.Max(1f, s.Vitals.MaxHealth);
@@ -526,9 +566,12 @@ namespace FriendlyPersonShooter.Arena
                     if (ExpeditionWorld.Active) NearCandidates(position);
                     // Enemies look from a little above their centre (a Skitter's centre is close to the ground).
                     var eye = position + new Vector3(0f, 0.3f, 0f);
-                    var attack = s.Attack.Step(dt, eye, _candidates, s.AttackSettings, SightTest);
+                    // Jam slows its attack clock; Pinned stops it.
+                    var attack = s.Attack.Step(dt * s.Vitals.AttackTimeScale, eye, _candidates, s.AttackSettings, SightTest);
                     if (attack.Kind == AttackEventKind.TelegraphStarted) s.Telegraph = true;
                     else if (attack.Kind != AttackEventKind.None) s.Telegraph = false;
+                    // A Sentinel's eye is open for its wind-up and a moment after the shot.
+                    if (s.Family == EnemyFamily.Sentinel) s.Sentinel.Step(0f, s.Telegraph, attack.Kind == AttackEventKind.Fired, null, SentinelOf(s));
                     if (attack.Kind == AttackEventKind.Fired)
                     {
                         var a = s.AttackSettings;
@@ -543,13 +586,15 @@ namespace FriendlyPersonShooter.Arena
                 EntityManager.SetComponentData(e, new ArenaEnemy
                 {
                     Family = s.Family, Health = s.Vitals.Health, MaxHealth = s.Vitals.MaxHealth,
-                    Hittable = hittable, Telegraph = s.Telegraph,
-                    Yaw = s.WorldBoss ? s.Colossus.Yaw : s.Boss.Yaw,
-                    PlateOpen = s.WorldBoss ? s.Colossus.Exposed : s.Boss.Open,
-                    PlateWarn = s.WorldBoss ? s.Colossus.Warning : s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(_bulwark),
-                    World = s.WorldBoss,
+                    Hittable = hittable, Telegraph = s.Telegraph || (s.Family == EnemyFamily.Diver && s.Diver.Telegraph),
+                    Yaw = EnemyYaw(s),
+                    PlateOpen = s.WorldBoss ? s.Colossus.Exposed : s.Family == EnemyFamily.Sentinel ? s.Sentinel.EyeOpen : s.Boss.Open,
+                    PlateWarn = s.WorldBoss ? s.Colossus.Warning : s.Family == EnemyFamily.Bulwark && s.Boss.OpeningSoon(BulwarkOf(s)),
+                    World = s.WorldBoss, Boss = IsRaidBoss(s), Tier = (byte)s.Tier, Elite = s.Elite, Pitch = EnemyPitch(s),
                     Withered = s.Vitals.Debuffs.Has(EffectKind.Wither), Exposed = s.Vitals.Debuffs.Has(EffectKind.Expose),
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
+                    Jammed = s.Vitals.Debuffs.Has(EffectKind.Jam), Brittle = s.Vitals.Debuffs.Has(EffectKind.Brittle),
+                    Marked = s.Vitals.Debuffs.Has(EffectKind.Mark), Frozen = s.Vitals.IsFrozen, Shattered = s.Vitals.IsShattered,
                 });
                 if (wither > 0f && s.Vitals.IsDead) _scratch.Add(e);
             }
@@ -583,7 +628,7 @@ namespace FriendlyPersonShooter.Arena
                 if (s.Family == EnemyFamily.Bulwark)
                 {
                     if (s.WorldBoss) WorldBossKilled(s, ecb);
-                    else RaidBossKilled(s);
+                    else if (s.Raid) RaidBossKilled(s);
                 }
                 if (s.Raid && s.Family == EnemyFamily.Wisp && _run != null && _run.Room == RaidRoomKind.WispStorm) _run.Storm.Kill();
                 if (s.Raid && InLanterns && !_run.Solved) _run.Lanterns.Killed();
@@ -682,37 +727,58 @@ namespace FriendlyPersonShooter.Arena
                 var center = p + new Vector3(0f, ArenaWeapon.PlayerHitHeight, 0f);
                 _targets.Add(HitTarget.Body(kv.Value.Vitals.Id, center, ArenaWeapon.PlayerHitRadius, isPlayer: true));
             }
+            // Focus: the shooter's own weak points are larger.
+            float focus = 1f;
+            if (_playerById.TryGetValue(shooterId, out var shooterEntity) && _players.TryGetValue(shooterEntity, out var shooterState))
+            {
+                focus += shooterState.Vitals.WeakPointBonus;
+            }
             foreach (var kv in _enemies)
             {
                 var s = kv.Value;
                 var past = s.History.SampleState(tick, 0f);
                 past.Position = NearVec(past.Position, eye);
                 HitTarget target;
+                float grow = s.Elite != EliteKind.None ? Elites.SizeMultiplier : 1f;
                 switch (s.Family)
                 {
                     case EnemyFamily.Wisp:
-                        target = HitTarget.Body(s.Vitals.Id, past.Position, _wisp.BodyRadius);
+                        target = HitTarget.Body(s.Vitals.Id, past.Position, WispOf(s).BodyRadius * grow);
                         break;
                     case EnemyFamily.Skitter:
-                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _skitter.BodyRadius,
-                            past.Position + _skitter.CoreOffset, _skitter.CoreRadius);
+                    {
+                        var k = SkitterOf(s);
+                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, k.BodyRadius * grow,
+                            past.Position + k.CoreOffset, k.CoreRadius * grow);
+                        break;
+                    }
+                    case EnemyFamily.Sentinel:
+                        target = SentinelTarget(s, past, grow);
+                        break;
+                    case EnemyFamily.Diver:
+                        target = DiverTarget(s, past, grow);
                         break;
                     case EnemyFamily.Glimmer:
                         target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
                         break;
                     case EnemyFamily.Bulwark:
+                    {
+                        var b = BulwarkOf(s);
                         target = s.WorldBoss
                             ? HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _colossus.BodyRadius,
                                 ColossusBehavior.CoreCenterOf(past.Position, _colossus), _colossus.CoreRadius)
-                            : HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _bulwark.BodyRadius,
-                                BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, _bulwark), _bulwark.PlateRadius);
+                            : HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, b.BodyRadius * grow,
+                                BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, b), b.PlateRadius * grow);
                         target.WeakPointOnSurface = true;
                         break;
+                    }
                     default:
-                        target = HitTarget.Body(s.Vitals.Id, past.Position, _mites.MiteRadius);
+                        target = HitTarget.Body(s.Vitals.Id, past.Position, _mitesTier[EnemyTiers.Clamp(s.Tier)].MiteRadius);
                         break;
                 }
                 target.Hittable = past.Hittable;
+                // Mark grows weak points for everyone.
+                if (target.HasWeakPoint) target.WeakPointRadius *= focus * s.Vitals.WeakPointScale;
                 _targets.Add(target);
             }
             // Soul fragments, rewound like everything else. A downed player can't shoot their own.

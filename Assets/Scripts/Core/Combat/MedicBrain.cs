@@ -217,6 +217,9 @@ namespace FriendlyPersonShooter.Core.Combat
                 case PayloadKind.Vigor: return c.ShieldDuration;
                 case PayloadKind.Haste: return c.HasteDuration;
                 case PayloadKind.Relay: return c.RelayDuration;
+                case PayloadKind.Frenzy: return c.FrenzyDuration;
+                case PayloadKind.Ward: return c.WardDuration;
+                case PayloadKind.Focus: return c.FocusDuration;
                 default: return c.MightDuration;
             }
         }

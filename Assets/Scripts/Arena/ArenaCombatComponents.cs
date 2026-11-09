@@ -44,6 +44,17 @@ namespace FriendlyPersonShooter.Arena
         [GhostField(Quantization = 10)] public float ChainTimeLeft;
         /// <summary>Haste + Might combo: Empower doubled.</summary>
         [GhostField] public bool Blitz;
+        /// <summary>Frenzy: fire-rate (and reload-speed) multiplier, 0 read as 1. Read by the client to draw its own shots.</summary>
+        [GhostField(Quantization = 100)] public float FireRate;
+        [GhostField(Quantization = 10)] public float FrenzyRemaining;
+        /// <summary>Ward: shield points left and seconds left.</summary>
+        [GhostField(Quantization = 10)] public float Ward;
+        [GhostField(Quantization = 10)] public float WardRemaining;
+        /// <summary>Focus: weak-point radius bonus (0.35 = +35%) and seconds left.</summary>
+        [GhostField(Quantization = 100)] public float Focus;
+        [GhostField(Quantization = 10)] public float FocusRemaining;
+        /// <summary>Combos active on this player (Blitz, Overdrive, Deadeye, Bastion).</summary>
+        [GhostField] public ComboKind Combos;
         /// <summary>Raid Low Gravity: players' gravity multiplier (0 is read as 1). Read by predicted movement.</summary>
         [GhostField(Quantization = 100)] public float GravityMultiplier;
         /// <summary>Raid Lanterns: seconds this player still glows (an ally's payload lit them).</summary>
@@ -99,6 +110,8 @@ namespace FriendlyPersonShooter.Arena
         Start = 1,
         /// <summary>A loot box's offer (can be left for later).</summary>
         Box = 2,
+        /// <summary>A boss reward (raid clear or world boss): three rare-or-better items, one must be taken.</summary>
+        Reward = 3,
     }
 
     /// <summary>Client-to-server: I pick this choice (index into my open pick), or <see cref="Leave"/> it for now.</summary>
@@ -129,6 +142,12 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public bool Withered;
         [GhostField] public bool Exposed;
         [GhostField] public bool Slowed;
+        /// <summary>Frenzy, Ward and Focus debuffs, and combos (Pinned freezes it; Shatter broke its armor).</summary>
+        [GhostField] public bool Jammed;
+        [GhostField] public bool Brittle;
+        [GhostField] public bool Marked;
+        [GhostField] public bool Frozen;
+        [GhostField] public bool Shattered;
         [GhostField] public bool Tagged;
         /// <summary>Raid boss: which way its weak plate faces (degrees), and whether the plate is open or about to open.</summary>
         [GhostField(Quantization = 10)] public float Yaw;
@@ -136,6 +155,14 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public bool PlateWarn;
         /// <summary>The Colossus, the open-world boss: a Bulwark drawn and hit at a bigger size.</summary>
         [GhostField] public bool World;
+        /// <summary>A raid boss (a Bulwark, the Twins or the Weaver), drawn big with its health on the HUD.</summary>
+        [GhostField] public bool Boss;
+        /// <summary>Difficulty tier (1 to 3, see Core.Combat.EnemyTiers): drawn smaller on higher tiers. 0 reads as 1.</summary>
+        [GhostField] public byte Tier;
+        /// <summary>An elite (two families mixed): drawn bigger, with an aura in its second family's color.</summary>
+        [GhostField] public EliteKind Elite;
+        /// <summary>A Diver's nose pitch (degrees, down is positive), so a dive reads from the ground.</summary>
+        [GhostField(Quantization = 10)] public float Pitch;
     }
 
     /// <summary>A downed player's soul fragment. Shoot it to help revive them.</summary>
@@ -229,6 +256,13 @@ namespace FriendlyPersonShooter.Arena
         TetherSnapped = 24,
         /// <summary>Player shot a thread apart.</summary>
         TetherCut = 25,
+        /// <summary>
+        /// Layers: Player started the group's move to layer Other; Value = seconds until it goes. Value 0 =
+        /// the move was called off (a raid started).
+        /// </summary>
+        LayerTravel = 26,
+        /// <summary>Layers: the group arrived on layer Value, from layer Other.</summary>
+        LayerArrived = 27,
     }
 
     /// <summary>A player's level, XP and skills, replicated for the HUD and the skill tree.</summary>

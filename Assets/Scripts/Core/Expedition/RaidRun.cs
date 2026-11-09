@@ -10,10 +10,9 @@ namespace FriendlyPersonShooter.Core.Expedition
         public int RoomCount { get; set; } = 3;
         /// <summary>Once someone steps into an open portal: seconds until everyone moves on.</summary>
         public double PortalSeconds { get; set; } = 5.0;
-        /// <summary>Paid to everyone inside when a room is solved.</summary>
+        /// <summary>Paid to everyone inside when a room is solved (raids pay XP and loot, never essence).</summary>
         public int RoomXp { get; set; } = 75;
-        public int RoomYellow { get; set; } = 3;
-        /// <summary>Brittle: damage players take, and room pay.</summary>
+        /// <summary>Brittle: damage players take, and room XP.</summary>
         public float BrittleDamage { get; set; } = 1.3f;
         public float BrittlePay { get; set; } = 1.5f;
         /// <summary>Swift Bolts: enemy bolt speed.</summary>
@@ -98,7 +97,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float BoltSpeedMultiplier => Modifier == RaidModifier.SwiftBolts ? Settings.SwiftBoltSpeed : 1f;
         /// <summary>Players' gravity inside the run (Low Gravity lowers it).</summary>
         public float GravityMultiplier => Modifier == RaidModifier.LowGravity ? Settings.LowGravity : 1f;
-        public int RoomYellow => Modifier == RaidModifier.Brittle ? (int)Math.Round(Settings.RoomYellow * Settings.BrittlePay) : Settings.RoomYellow;
         public int RoomXp => Modifier == RaidModifier.Brittle ? (int)Math.Round(Settings.RoomXp * Settings.BrittlePay) : Settings.RoomXp;
 
         /// <summary>How the current room stands, 0..1, for the HUD.</summary>

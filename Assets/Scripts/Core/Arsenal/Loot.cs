@@ -85,13 +85,19 @@ namespace FriendlyPersonShooter.Core.Arsenal
         /// A loot box's offer: <paramref name="count"/> box rolls to pick one from. No two are the same kind of
         /// thing (two guns never share a frame, two mods never share a kind).
         /// </summary>
-        public static LootItem[] BoxChoices(uint seed, int count = BoxChoiceCount)
+        public static LootItem[] BoxChoices(uint seed, int count = BoxChoiceCount) => Choices(LootSource.Box, seed, count);
+
+        /// <summary>A boss reward (raid clear or world boss): three rare-or-better rolls to pick one from.</summary>
+        public static LootItem[] BossChoices(uint seed, int count = BoxChoiceCount) => Choices(LootSource.Boss, seed, count);
+
+        /// <summary><paramref name="count"/> rolls from <paramref name="source"/>, no two the same kind of thing.</summary>
+        public static LootItem[] Choices(LootSource source, uint seed, int count = BoxChoiceCount)
         {
             var items = new LootItem[Math.Max(1, count)];
             int found = 0;
             for (uint attempt = 0; found < items.Length; attempt++)
             {
-                var item = Roll(LootSource.Box, SeedHash.Of(seed, 0xC401, (int)attempt));
+                var item = Roll(source, SeedHash.Of(seed, 0xC401, (int)attempt));
                 bool repeat = false;
                 for (int i = 0; i < found && !repeat; i++) repeat = SameKind(items[i], item);
                 // After many tries take repeats rather than loop forever (can't happen with today's tables).
@@ -154,8 +160,13 @@ namespace FriendlyPersonShooter.Core.Arsenal
         public const float EdgeMargin = 20f;
         private const int Salt = 0x10B7;
 
-        public static IReadOnlyList<LootBox> For(LayerMap map)
+        /// <summary>Ids on a deeper layer start this far apart, so opened boxes never clash between layers.</summary>
+        public const int LayerIdStride = 100000;
+
+        /// <summary>The layer's boxes; <paramref name="layer"/> offsets their ids (layer 1 keeps ids from 0).</summary>
+        public static IReadOnlyList<LootBox> For(LayerMap map, int layer = 1)
         {
+            int idBase = (Math.Max(1, layer) - 1) * LayerIdStride;
             if (map == null) throw new ArgumentNullException(nameof(map));
             var boxes = new List<LootBox>();
             var door = RaidSite.DoorFor(map);
@@ -186,7 +197,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
                         if (Vector2.DistanceSquared(a, spot) < Clearance * Clearance) { clear = false; break; }
                     }
                     if (!clear) continue;
-                    boxes.Add(new LootBox(index * IdStride + placed, zone.Coord, spot));
+                    boxes.Add(new LootBox(idBase + index * IdStride + placed, zone.Coord, spot));
                     avoid.Add(spot);
                     placed++;
                 }

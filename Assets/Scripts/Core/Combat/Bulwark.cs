@@ -28,6 +28,16 @@ namespace FriendlyPersonShooter.Core.Combat
         public float HoverHeight { get; set; } = 3.4f;
         public float BobHeight { get; set; } = 0.3f;
 
+        /// <summary>
+        /// The Bulwark that roams the world: about half the raid boss's size, a quicker plate rhythm and turn, no add
+        /// waves (a Guarded elite brings its own Mites).
+        /// </summary>
+        public static BulwarkSettings ForWorld() => new BulwarkSettings
+        {
+            BodyRadius = 1.3f, PlateRadius = 0.6f, PlateOut = 0.05f, ClosedTime = 3.5f, OpenTime = 2.2f, WarnTime = 0.8f,
+            TurnSpeed = 35f, EnragedTurnSpeed = 55f, AddWaveAt = new float[0], HoverHeight = 1.9f, BobHeight = 0.15f,
+        };
+
         /// <summary>Boss health for a group of <paramref name="players"/> (at least one).</summary>
         public static float HealthFor(int players, CombatSettings combat) => combat.BulwarkHealth * Math.Max(1, players);
     }

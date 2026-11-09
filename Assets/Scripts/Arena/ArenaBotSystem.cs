@@ -164,8 +164,24 @@ namespace FriendlyPersonShooter.Arena
                 {
                     var enemy = EntityManager.GetComponentData<ArenaEnemy>(_target);
                     aimPoint = tpos;
-                    radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f : enemy.Family == EnemyFamily.Glimmer ? 0.4f : 0.15f;
-                    if (enemy.Family == EnemyFamily.Bulwark && enemy.World)
+                    radius = enemy.Family == EnemyFamily.Wisp ? 0.35f : enemy.Family == EnemyFamily.Skitter ? 0.6f
+                        : enemy.Family == EnemyFamily.Glimmer ? 0.4f : enemy.Family == EnemyFamily.Diver ? 0.4f : 0.15f;
+                    radius *= EnemyTiers.Size(enemy.Tier);
+                    if (enemy.Family == EnemyFamily.Sentinel)
+                    {
+                        // The eye while it is open and facing us; otherwise wait it out on the body.
+                        var shape = EnemyTiers.Sentinel(enemy.Tier);
+                        var eyeAt = SentinelBehavior.EyeCenterOf(ToVec(tpos), enemy.Yaw, shape);
+                        var toMe = math.normalizesafe(eye - tpos);
+                        var facing = BulwarkBehavior.FacingOf(enemy.Yaw);
+                        if (enemy.PlateOpen && facing.X * toMe.x + facing.Z * toMe.z > 0.3f)
+                        {
+                            aimPoint = new float3(eyeAt.X, eyeAt.Y, eyeAt.Z);
+                            radius = shape.EyeRadius;
+                        }
+                        else radius = shape.BodyRadius * 0.8f;
+                    }
+                    else if (enemy.Family == EnemyFamily.Bulwark && enemy.World)
                     {
                         // The Colossus: its core on top while it's stunned, else anywhere on the shell.
                         if (enemy.PlateOpen)
@@ -179,7 +195,7 @@ namespace FriendlyPersonShooter.Arena
                     else if (enemy.Family == EnemyFamily.Bulwark)
                     {
                         // Aim at the plate while it's open and facing us; otherwise at the shell.
-                        var shape = BossShape;
+                        var shape = enemy.Boss ? BossShape : EnemyTiers.Bulwark(enemy.Tier);
                         var plate = BulwarkBehavior.PlateCenterOf(ToVec(tpos), enemy.Yaw, shape);
                         var toMe = math.normalizesafe(eye - tpos);
                         var facing = BulwarkBehavior.FacingOf(enemy.Yaw);

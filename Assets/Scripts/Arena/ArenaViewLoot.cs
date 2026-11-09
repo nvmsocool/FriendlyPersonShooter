@@ -204,7 +204,7 @@ namespace FriendlyPersonShooter.Arena
                 if (_boxesMap != map)
                 {
                     _boxesMap = map;
-                    _boxes = LootBoxSites.For(map);
+                    _boxes = LootBoxSites.For(map, ExpeditionWorld.Layer);
                     _boxY = new float[_boxes.Count];
                     for (int i = 0; i < _boxY.Length; i++) _boxY[i] = float.NaN;
                 }
@@ -284,7 +284,7 @@ namespace FriendlyPersonShooter.Arena
         private bool CanStartRaid(Vector3 feet)
         {
             if (!TryGetStatus(out var s) || s.InRaid || s.RaidPhase != RaidPhase.Collecting) return false;
-            if (s.KeyRed < RaidRules.RedCost || s.KeyGreen < RaidRules.GreenCost || RaidArena.InRaidSpace(feet)) return false;
+            if (!RaidKey.Full(s.Key) || RaidArena.InRaidSpace(feet)) return false;
             var door = ExpeditionWorld.Near(ExpeditionWorld.ToFloat3(RaidArena.Door), feet);
             return math.distance(door.xz, ((float3)feet).xz) <= RaidRules.UseRadius;
         }

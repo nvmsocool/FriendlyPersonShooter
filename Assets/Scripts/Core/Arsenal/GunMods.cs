@@ -27,6 +27,9 @@ namespace FriendlyPersonShooter.Core.Arsenal
         Might = 33,
         Haste = 34,
         Relay = 35,
+        Frenzy = 36,
+        Ward = 37,
+        Focus = 38,
     }
 
     public enum ModTier : byte
@@ -63,7 +66,10 @@ namespace FriendlyPersonShooter.Core.Arsenal
             ModKind.Damage, ModKind.FireRate, ModKind.Range, ModKind.Stability, ModKind.Scope, ModKind.Magazine, ModKind.Reload,
         };
         public static readonly ModKind[] SpecialKinds = { ModKind.Split, ModKind.Ricochet, ModKind.Conductor, ModKind.SelfShare };
-        public static readonly ModKind[] PayloadKinds = { ModKind.Vigor, ModKind.Might, ModKind.Haste, ModKind.Relay };
+        public static readonly ModKind[] PayloadKinds =
+        {
+            ModKind.Vigor, ModKind.Might, ModKind.Haste, ModKind.Relay, ModKind.Frenzy, ModKind.Ward, ModKind.Focus,
+        };
 
         /// <summary>A tier's share of a mod's effect: an epic mod is 30% better than a common one.</summary>
         public static float TierScale(ModTier tier) => tier == ModTier.Epic ? 1.3f : tier == ModTier.Rare ? 1.15f : 1f;
@@ -90,7 +96,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
         /// <summary>Ricochet: an ally hit bounces to the nearest other ally within this distance.</summary>
         public const float RicochetRange = 10f;
 
-        public static bool IsPayload(ModKind k) => k >= ModKind.Vigor && k <= ModKind.Relay;
+        public static bool IsPayload(ModKind k) => k >= ModKind.Vigor && k <= ModKind.Focus;
         public static bool IsSpecial(ModKind k) => k >= ModKind.Split && k <= ModKind.SelfShare;
         public static bool IsStat(ModKind k) => k >= ModKind.Damage && k <= ModKind.Reload;
 
@@ -102,6 +108,9 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 case ModKind.Might: return PayloadKind.Might;
                 case ModKind.Haste: return PayloadKind.Haste;
                 case ModKind.Relay: return PayloadKind.Relay;
+                case ModKind.Frenzy: return PayloadKind.Frenzy;
+                case ModKind.Ward: return PayloadKind.Ward;
+                case ModKind.Focus: return PayloadKind.Focus;
                 default: return PayloadKind.None;
             }
         }
@@ -114,6 +123,9 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 case PayloadKind.Might: return ModKind.Might;
                 case PayloadKind.Haste: return ModKind.Haste;
                 case PayloadKind.Relay: return ModKind.Relay;
+                case PayloadKind.Frenzy: return ModKind.Frenzy;
+                case PayloadKind.Ward: return ModKind.Ward;
+                case PayloadKind.Focus: return ModKind.Focus;
                 default: return ModKind.None;
             }
         }
@@ -150,6 +162,9 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 case ModKind.Might: return "allies deal more damage; enemies take more";
                 case ModKind.Haste: return "allies move faster; slows enemies";
                 case ModKind.Relay: return "allies' shots carry your other gun's payload; tags enemies";
+                case ModKind.Frenzy: return "allies fire and reload faster; jams enemies";
+                case ModKind.Ward: return "shields allies; makes enemy armor brittle";
+                case ModKind.Focus: return "allies get bigger weak points; marks enemy weak points";
                 default: return "";
             }
         }

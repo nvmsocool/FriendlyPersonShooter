@@ -44,22 +44,27 @@ namespace FriendlyPersonShooter.Core.Arsenal
 
         /// <summary>
         /// Advances one gun to <paramref name="now"/> and returns how many bullets (pulses, projectiles)
-        /// it fires. <paramref name="rateScale"/> speeds up firing (skills): 1.1 = 10% faster.
+        /// it fires. <paramref name="rateScale"/> speeds up firing (skills, Frenzy): 1.1 = 10% faster;
+        /// <paramref name="reloadScale"/> speeds up reloads the same way (Frenzy). With <paramref name="noReload"/>
+        /// (Overdrive) shots use no ammo, and a reload in progress finishes at once.
         /// </summary>
-        public static int Step(ref GunState st, GunStats s, double now, bool trigger, bool reloadPressed, float rateScale = 1f)
+        public static int Step(ref GunState st, GunStats s, double now, bool trigger, bool reloadPressed, float rateScale = 1f,
+            float reloadScale = 1f, bool noReload = false)
         {
             if (s == null) return 0;
             if (st.ReloadEnds > 0)
             {
-                if (now < st.ReloadEnds) return 0;
+                if (now < st.ReloadEnds && !noReload) return 0;
                 st.ReloadEnds = 0;
                 st.Ammo = s.Magazine;
             }
-            if (reloadPressed && st.Ammo < s.Magazine)
+            if (reloadPressed && st.Ammo < s.Magazine && !noReload)
             {
-                StartReload(ref st, s, now);
+                StartReload(ref st, s, now, reloadScale);
                 return 0;
             }
+            // Overdrive: a free bullet for every one fired, so the magazine never runs down.
+            int spare = noReload ? 1 : 0;
             if (now < st.ReadyAt) return 0;
 
             float interval = s.Interval / Math.Max(0.1f, rateScale);
@@ -70,17 +75,17 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 {
                     if (now < st.NextShot) break;
                     if (st.Ammo <= 0) { st.BurstLeft = 0; break; }
-                    st.Ammo--;
+                    st.Ammo -= 1 - spare;
                     shots++;
                     st.BurstLeft--;
                     st.NextShot = st.BurstLeft > 0 ? st.NextShot + s.BurstGap : st.CycleEnds;
-                    if (st.Ammo == 0) { st.BurstLeft = 0; StartReload(ref st, s, now); break; }
+                    if (st.Ammo == 0) { st.BurstLeft = 0; StartReload(ref st, s, now, reloadScale); break; }
                     continue;
                 }
                 if (!trigger || now < st.NextShot) break;
                 if (st.Ammo <= 0)
                 {
-                    StartReload(ref st, s, now);
+                    StartReload(ref st, s, now, reloadScale);
                     break;
                 }
                 // Don't bank up shots while the trigger was up: a fresh pull starts from now.
@@ -92,23 +97,23 @@ namespace FriendlyPersonShooter.Core.Arsenal
                     st.CycleEnds = start + interval;
                     continue;
                 }
-                st.Ammo--;
+                st.Ammo -= 1 - spare;
                 shots++;
                 st.NextShot = start + interval;
                 if (st.Ammo == 0)
                 {
-                    StartReload(ref st, s, now);
+                    StartReload(ref st, s, now, reloadScale);
                     break;
                 }
             }
             return shots;
         }
 
-        public static void StartReload(ref GunState st, GunStats s, double now)
+        public static void StartReload(ref GunState st, GunStats s, double now, float reloadScale = 1f)
         {
             st.BurstLeft = 0;
-            st.ReloadTime = s.Reload;
-            st.ReloadEnds = now + s.Reload;
+            st.ReloadTime = s.Reload / Math.Max(0.1f, reloadScale);
+            st.ReloadEnds = now + st.ReloadTime;
         }
 
         /// <summary>Call on the gun being swapped to: a short delay before it fires; a reload in progress restarts later.</summary>

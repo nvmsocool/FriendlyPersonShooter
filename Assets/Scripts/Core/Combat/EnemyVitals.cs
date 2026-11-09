@@ -40,8 +40,37 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>Damage multiplier from Expose (1 when not exposed).</summary>
         public float DamageTakenMultiplier => 1f + Debuffs.StrengthOf(EffectKind.Expose);
 
-        /// <summary>Multiply the enemy's move speed by this (1 when not Slowed; never below the Slow floor).</summary>
-        public float MoveMultiplier => Math.Max(_slowFloor, 1f - Debuffs.StrengthOf(EffectKind.Slow));
+        /// <summary>Multiply the enemy's move speed by this (1 when not Slowed; never below the Slow floor; 0 while frozen).</summary>
+        public float MoveMultiplier => IsFrozen ? 0f : Math.Max(_slowFloor, 1f - Debuffs.StrengthOf(EffectKind.Slow));
+
+        /// <summary>Run the enemy's attack clock at this speed: slower when Jammed, stopped while frozen.</summary>
+        public float AttackTimeScale => IsFrozen ? 0f : 1f / (1f + Debuffs.StrengthOf(EffectKind.Jam));
+
+        /// <summary>Multiply its weak points' radius by this (Mark; 1 when not Marked).</summary>
+        public float WeakPointScale => 1f + Debuffs.StrengthOf(EffectKind.Mark);
+
+        /// <summary>
+        /// The damage multiplier for a hit on its armor or shell (<paramref name="armor"/>, for example 0.3): Brittle moves
+        /// it toward full damage, and Shatter (Expose + Brittle) breaks it outright.
+        /// </summary>
+        public float Armor(float armor)
+        {
+            if (armor >= 1f || IsShattered) return 1f;
+            float brittle = Math.Min(1f, Debuffs.StrengthOf(EffectKind.Brittle));
+            return armor + (1f - armor) * brittle;
+        }
+
+        /// <summary>True while Slow and Mark sit on it together (Pinned).</summary>
+        public bool IsPinned => Debuffs.Has(EffectKind.Slow) && Debuffs.Has(EffectKind.Mark);
+
+        /// <summary>True while Expose and Brittle sit on it together (Shatter).</summary>
+        public bool IsShattered => Debuffs.Has(EffectKind.Expose) && Debuffs.Has(EffectKind.Brittle);
+
+        /// <summary>Seconds it stays frozen (Pinned): it neither moves, turns nor attacks.</summary>
+        public float FrozenTime { get; private set; }
+        public bool IsFrozen => FrozenTime > 0f;
+
+        public void Freeze(float seconds) => FrozenTime = Math.Max(FrozenTime, seconds);
 
         /// <summary>Multiply the enemy's turn speed by this. Slow affects turning as much as moving.</summary>
         public float TurnMultiplier => MoveMultiplier;
@@ -80,6 +109,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 dealt = TakeDamage(dps * covered * DamageTakenMultiplier);
             }
             Debuffs.Tick(dt);
+            if (FrozenTime > 0f) FrozenTime = Math.Max(0f, FrozenTime - dt);
             return dealt;
         }
     }

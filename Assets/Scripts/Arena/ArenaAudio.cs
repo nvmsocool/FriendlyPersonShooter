@@ -295,6 +295,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Haste: length = 0.11f; break;
                 case PayloadKind.Relay: length = 0.22f; break;
                 case PayloadKind.Vigor: length = 0.16f; break;
+                case PayloadKind.Frenzy: length = 0.09f; break;
+                case PayloadKind.Ward: length = 0.2f; break;
+                case PayloadKind.Focus: length = 0.18f; break;
                 default: length = 0.14f; break;
             }
             int n = (int)(Rate * length);
@@ -328,6 +331,36 @@ namespace FriendlyPersonShooter.Arena
                         float tri = 1f - 4f * Mathf.Abs(Mathf.Repeat(phase, 1f) - 0.5f);
                         float env = attack * (1f - u) * (1f - u);
                         s = tri * 0.9f * env;
+                        break;
+                    }
+                    case PayloadKind.Frenzy:
+                    {
+                        // A buzzy double tick: two short square bursts.
+                        float f = 760f * tune;
+                        phase += f / Rate;
+                        float sq = Mathf.Repeat(phase, 1f) < 0.5f ? 1f : -1f;
+                        float gate = u < 0.4f || (u > 0.55f && u < 0.85f) ? 1f : 0f;
+                        float env = attack * gate * (1f - u * 0.6f);
+                        s = sq * 0.45f * env;
+                        break;
+                    }
+                    case PayloadKind.Ward:
+                    {
+                        // A low knock with a soft metal ring over it.
+                        float f = Mathf.Lerp(240f, 160f, u) * tune;
+                        phase += f / Rate;
+                        phase2 += 1870f * tune / Rate;
+                        float env = attack * Mathf.Exp(-u * 6f);
+                        s = (0.8f * Mathf.Sin(phase * 2f * Mathf.PI) + 0.22f * bright * Mathf.Sin(phase2 * 2f * Mathf.PI) * Mathf.Exp(-u * 3f)) * env;
+                        break;
+                    }
+                    case PayloadKind.Focus:
+                    {
+                        // A clean high ping that bends up a little.
+                        float f = Mathf.Lerp(1500f, 1750f, u) * tune;
+                        phase += f / Rate;
+                        float env = attack * Mathf.Exp(-u * 4.5f);
+                        s = Mathf.Sin(phase * 2f * Mathf.PI) * 0.75f * env;
                         break;
                     }
                     case PayloadKind.Relay:

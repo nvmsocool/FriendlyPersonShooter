@@ -19,6 +19,10 @@ namespace FriendlyPersonShooter.Arena
 
         private Material _wispMat, _wispDimMat, _skitterMat, _coreMat, _miteMat, _telegraphMat;
         private Material _vigorMat, _mightMat, _barBackMat, _barHealthMat, _barShieldMat, _witherMat, _exposeMat;
+        private Material _frenzyMat, _wardMat, _focusMat, _jamMat, _brittleMat, _markMat, _frozenMat;
+        private readonly List<Matrix4x4> _tFrenzy = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _tWard = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _tFocus = new List<Matrix4x4>();
         private Material _hasteMat, _relayMat, _slowMat, _tagMat, _fragmentMat, _fragmentFadeMat, _downedMat, _chainMat;
         private EntityQuery _enemies, _vitals, _fragmentQuery;
         private readonly List<Matrix4x4> _g = new List<Matrix4x4>();
@@ -60,6 +64,14 @@ namespace FriendlyPersonShooter.Arena
             _fragmentFadeMat = MakeMat(new Color(0.35f, 0.5f, 0.55f));
             _downedMat = MakeMat(new Color(0.5f, 0.5f, 0.6f));
             _chainMat = MakeMat(new Color(1f, 0.85f, 0.2f));
+            _frenzyMat = MakeMat(ArenaHud.PayloadColor(PayloadKind.Frenzy));
+            _wardMat = MakeMat(ArenaHud.PayloadColor(PayloadKind.Ward));
+            _focusMat = MakeMat(ArenaHud.PayloadColor(PayloadKind.Focus));
+            _jamMat = MakeMat(new Color(0.9f, 0.25f, 0.5f));
+            _brittleMat = MakeMat(new Color(0.75f, 0.8f, 0.9f));
+            _markMat = MakeGlow(new Color(1f, 0.9f, 0.3f), 2.5f);
+            _frozenMat = MakeGlow(new Color(0.6f, 0.9f, 1f), 1.8f);
+            CreateFamilyMaterials();
         }
 
         private Material PayloadMat(PayloadKind p)
@@ -69,6 +81,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return _vigorMat;
                 case PayloadKind.Haste: return _hasteMat;
                 case PayloadKind.Relay: return _relayMat;
+                case PayloadKind.Frenzy: return _frenzyMat;
+                case PayloadKind.Ward: return _wardMat;
+                case PayloadKind.Focus: return _focusMat;
                 case PayloadKind.None: return _plainMat;
                 default: return _mightMat;
             }
@@ -124,53 +139,98 @@ namespace FriendlyPersonShooter.Arena
             var exposed = new List<Matrix4x4>();
             var slowed = new List<Matrix4x4>();
             var tagged = new List<Matrix4x4>();
+            var jammed = new List<Matrix4x4>();
+            var brittle = new List<Matrix4x4>();
+            var marked = new List<Matrix4x4>();
+            var frozen = new List<Matrix4x4>();
             var glimmers = new List<Matrix4x4>();
             _bossSeen = false;
             _colossusSeen = false;
+            ClearFamilyLists();
             for (int i = 0; i < enemies.Length; i++)
             {
                 var en = enemies[i];
                 Vector3 p = Near(transforms[i].Position);
                 float size;
+                float scale = DrawScale(en);
+                bool bar = true;
                 switch (en.Family)
                 {
                     case EnemyFamily.Wisp:
-                        size = 0.7f;
+                        size = 0.7f * scale;
                         var wm = Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 90f, 45f), Vector3.one * (en.Hittable ? size : size * 0.6f));
                         (en.Telegraph ? _f : en.Hittable ? _a : _b).Add(wm);
                         break;
                     case EnemyFamily.Skitter:
-                        size = 1.2f;
-                        (en.Telegraph ? _f : _c).Add(Matrix4x4.TRS(p, Quaternion.identity, new Vector3(size, 0.9f, size)));
-                        cores.Add(Matrix4x4.TRS(p + Vector3.up * 0.1f, Quaternion.identity, Vector3.one * 0.4f));
+                        size = 1.2f * scale;
+                        (en.Telegraph ? _f : _c).Add(Matrix4x4.TRS(p, Quaternion.identity, new Vector3(size, 0.9f * scale, size)));
+                        cores.Add(Matrix4x4.TRS(p + Vector3.up * 0.1f, Quaternion.identity, Vector3.one * 0.4f * scale));
+                        break;
+                    case EnemyFamily.Sentinel:
+                        size = 1.4f * scale;
+                        AddSentinel(en, p);
+                        break;
+                    case EnemyFamily.Diver:
+                        size = 1f * scale;
+                        AddDiver(en, p);
                         break;
                     case EnemyFamily.Glimmer:
                         // A small spinning yellow diamond: one shot pops it for a little Yellow.
                         size = 0.5f;
+                        bar = false;
                         float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 9f);
                         glimmers.Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 200f, 45f), new Vector3(size, size * 1.4f, size) * pulse));
+                        break;
+                    case EnemyFamily.Bulwark when !en.World && !en.Boss:
+                        // A Bulwark roaming the world (the raid boss and the Colossus are drawn below).
+                        size = 2.4f * scale;
+                        AddRoamingBulwark(en, p);
                         break;
                     case EnemyFamily.Bulwark:
                         // The raid boss: a big shell with a plate on one side (its health bar is on the HUD).
                         size = en.World ? 12f : 4.2f;
+                        bar = false;
                         AddBoss(en, p);
                         break;
                     default:
                         // A bright green spinning chip, a little bigger than its hit sphere so swarms read from afar.
-                        size = 0.4f;
+                        size = 0.4f * scale;
+                        bar = false;
                         (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 180f + i * 37f, 45f), Vector3.one * size));
                         break;
                 }
 
-                if (en.Family != EnemyFamily.Mite && en.Family != EnemyFamily.Glimmer && en.Family != EnemyFamily.Bulwark)
+                if (bar)
                 {
-                    AddBar(p + Vector3.up * (size * 0.5f + 0.5f), barRot, 1f, en.Health / math.max(en.MaxHealth, 1f), 0f, _d, _e, null);
+                    AddBar(p + Vector3.up * (size * 0.5f + 0.5f), barRot, en.Elite != EliteKind.None ? 1.5f : 1f,
+                        en.Health / math.max(en.MaxHealth, 1f), 0f, _d, _e, null);
                 }
                 Vector3 top = p + Vector3.up * (size * 0.5f + 0.75f);
+                AddEliteMark(en, top);
                 if (en.Withered) withered.Add(Matrix4x4.TRS(top + barRot * Vector3.left * 0.2f, barRot, Vector3.one * 0.15f));
                 if (en.Exposed) exposed.Add(Matrix4x4.TRS(top + barRot * Vector3.right * 0.2f, barRot, Vector3.one * 0.15f));
                 if (en.Slowed) slowed.Add(Matrix4x4.TRS(top + barRot * Vector3.left * 0.6f, barRot, Vector3.one * 0.15f));
                 if (en.Tagged) tagged.Add(Matrix4x4.TRS(top + barRot * Vector3.right * 0.6f, barRot, Vector3.one * 0.15f));
+                Vector3 top2 = top + Vector3.up * 0.25f;
+                if (en.Jammed) jammed.Add(Matrix4x4.TRS(top2 + barRot * Vector3.left * 0.4f, barRot, Vector3.one * 0.15f));
+                if (en.Brittle || en.Shattered)
+                {
+                    brittle.Add(Matrix4x4.TRS(top2, en.Shattered ? barRot * Quaternion.Euler(0f, 0f, 45f) : barRot,
+                        Vector3.one * (en.Shattered ? 0.3f : 0.15f)));
+                }
+                // Marked: a glowing ring of chips round the enemy, so everyone sees its weak points are bigger.
+                if (en.Marked)
+                {
+                    marked.Add(Matrix4x4.TRS(top2 + barRot * Vector3.right * 0.4f, barRot, Vector3.one * 0.15f));
+                    float ring = size * 0.5f + 0.35f;
+                    for (int k = 0; k < 6; k++)
+                    {
+                        float ang = Time.time * 2f + k * Mathf.PI / 3f;
+                        marked.Add(Matrix4x4.TRS(p + new Vector3(Mathf.Cos(ang) * ring, 0f, Mathf.Sin(ang) * ring), Quaternion.Euler(45f, 0f, 45f), Vector3.one * 0.12f));
+                    }
+                }
+                // Pinned: an icy shell while it is frozen.
+                if (en.Frozen) frozen.Add(Matrix4x4.TRS(p, Quaternion.Euler(0f, 45f, 0f), Vector3.one * (size + 0.3f)));
             }
             DrawList(_a, _wispMat);
             DrawList(_b, _wispDimMat);
@@ -179,6 +239,7 @@ namespace FriendlyPersonShooter.Arena
             DrawList(mites, _miteMat);
             DrawList(glimmers, _glimmerMat);
             DrawBosses();
+            DrawFamilies();
             DrawList(_f, _telegraphMat);
             DrawList(_d, _barBackMat);
             DrawList(_e, _barHealthMat);
@@ -186,6 +247,10 @@ namespace FriendlyPersonShooter.Arena
             DrawList(exposed, _exposeMat);
             DrawList(slowed, _slowMat);
             DrawList(tagged, _tagMat);
+            DrawList(jammed, _jamMat);
+            DrawList(brittle, _brittleMat);
+            DrawList(marked, _markMat);
+            DrawList(frozen, _frozenMat);
         }
 
         /// <summary>A flat bar facing the camera: background, health fill and an optional shield fill on top.</summary>
@@ -274,7 +339,11 @@ namespace FriendlyPersonShooter.Arena
                 _localGun.Ammo = 999;
                 _localGun.ReloadEnds = 0;
                 if (!loaded) _localGun.BurstLeft = 0;
-                int shots = loaded ? FireControl.Step(ref _localGun, stats, now, firing, false, PlayerProgress.FireRateFor(ranks)) : 0;
+                var myBuffs = em.GetComponentData<ArenaBuffs>(local);
+                float frenzy = myBuffs.FireRate > 0f ? myBuffs.FireRate : 1f;
+                bool overdrive = (myBuffs.Combos & ComboKind.Overdrive) != 0;
+                loaded |= overdrive;
+                int shots = loaded ? FireControl.Step(ref _localGun, stats, now, firing, false, PlayerProgress.FireRateFor(ranks) * frenzy) : 0;
                 for (int n = 0; n < shots; n++)
                 {
                     var look = ArenaLocalInputSystem.LocalLook;
@@ -306,7 +375,7 @@ namespace FriendlyPersonShooter.Arena
             }
             _shotsHeardUpTo = heardUpTo;
 
-            _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear(); _plainTracers.Clear();
+            _a.Clear(); _b.Clear(); _g.Clear(); _h.Clear(); _plainTracers.Clear(); _tFrenzy.Clear(); _tWard.Clear(); _tFocus.Clear();
             for (int i = _localTracers.Count - 1; i >= 0; i--)
             {
                 var t = _localTracers[i];
@@ -329,6 +398,9 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_g, _hasteMat);
             DrawList(_h, _relayMat);
             DrawList(_plainTracers, _plainMat);
+            DrawList(_tFrenzy, _frenzyMat);
+            DrawList(_tWard, _wardMat);
+            DrawList(_tFocus, _focusMat);
         }
 
         /// <summary>The beam's pulses overlap into a steady line; a marksman's shot lingers a moment.</summary>
@@ -353,6 +425,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return _a;
                 case PayloadKind.Haste: return _g;
                 case PayloadKind.Relay: return _h;
+                case PayloadKind.Frenzy: return _tFrenzy;
+                case PayloadKind.Ward: return _tWard;
+                case PayloadKind.Focus: return _tFocus;
                 case PayloadKind.None: return _plainTracers;
                 default: return _b;
             }
@@ -383,6 +458,9 @@ namespace FriendlyPersonShooter.Arena
                 if (b.EmpowerRemaining > 0f) hud.Buffs.Append($"<color=#FF9A4D>MIGHT</color> +{b.Empower * 100f:0}% damage  {b.EmpowerRemaining:0.0}s{(b.Blitz ? "   <color=#FFD84D>BLITZ</color> (Haste + Might: double damage bonus)" : "")}\n");
                 if (b.ShieldRemaining > 0f) hud.Buffs.Append($"<color=#7FDBFF>SHIELD</color>  {b.ShieldRemaining:0.0}s\n");
                 if (b.HasteRemaining > 0f) hud.Buffs.Append($"<color=#66D9FF>HASTE</color> x{b.MoveMultiplier:0.00} speed  {b.HasteRemaining:0.0}s\n");
+                if (b.FrenzyRemaining > 0f) hud.Buffs.Append($"<color=#FF5A99>FRENZY</color> x{b.FireRate:0.00} fire rate and reload  {b.FrenzyRemaining:0.0}s{((b.Combos & ComboKind.Overdrive) != 0 ? "   <color=#FFD84D>OVERDRIVE</color> (Haste + Frenzy: no reloads)" : "")}\n");
+                if (b.WardRemaining > 0f) hud.Buffs.Append($"<color=#D1E6FF>WARD</color> {b.Ward:0} shield  {b.WardRemaining:0.0}s{((b.Combos & ComboKind.Bastion) != 0 ? "   <color=#FFD84D>BASTION</color> (Vigor + Ward: shield regenerates)" : "")}\n");
+                if (b.FocusRemaining > 0f) hud.Buffs.Append($"<color=#FFE64D>FOCUS</color> +{b.Focus * 100f:0}% weak points  {b.FocusRemaining:0.0}s{((b.Combos & ComboKind.Deadeye) != 0 ? "   <color=#FFD84D>DEADEYE</color> (Might + Focus: weak points x3)" : "")}\n");
                 if (b.RelayHits > 0) hud.Buffs.Append($"<color=#D98CFF>RELAY</color>  next {b.RelayHits} hits also carry {b.RelayPayload}\n");
 
                 string chain = null;
@@ -465,6 +543,21 @@ namespace FriendlyPersonShooter.Arena
             }
         }
     
+        private static string ComboText(ComboKind kind)
+        {
+            switch (kind)
+            {
+                case ComboKind.Plague: return "PLAGUE  (Wither + Tag: damage over time spreads between enemies)";
+                case ComboKind.Blitz: return "BLITZ  (Haste + Might on one ally: damage bonus doubled)";
+                case ComboKind.Overdrive: return "OVERDRIVE  (Haste + Frenzy on one ally: no reloads)";
+                case ComboKind.Deadeye: return "DEADEYE  (Might + Focus on one ally: weak-point hits x3)";
+                case ComboKind.Bastion: return "BASTION  (Vigor shield + Ward on one ally: the shield regenerates)";
+                case ComboKind.Pinned: return "PINNED  (Slow + Mark: the enemy freezes for a second)";
+                case ComboKind.Shatter: return "SHATTER  (Expose + Brittle: armor breaks outright)";
+                default: return kind.ToString().ToUpperInvariant();
+            }
+        }
+
         private const float AnnounceSeconds = 3.5f;
         private int _announceLocalId;
 
@@ -483,10 +576,7 @@ namespace FriendlyPersonShooter.Arena
                 switch (m.Kind)
                 {
                     case AnnounceKind.ComboDiscovered:
-                        var kind = (ComboKind)m.Value;
-                        lines.Append(kind == ComboKind.Plague
-                            ? "COMBO DISCOVERED: PLAGUE  (Wither + Tag: damage over time spreads between enemies)\n"
-                            : "COMBO DISCOVERED: BLITZ  (Haste + Might on one ally: damage bonus doubled)\n");
+                        lines.Append($"COMBO DISCOVERED: {ComboText((ComboKind)m.Value)}\n");
                         break;
                     case AnnounceKind.Revived:
                         lines.Append($"{PlayerColors.Tag(m.PlayerNetworkId)} revived by {PlayerColors.Tag(m.OtherNetworkId)}\n");

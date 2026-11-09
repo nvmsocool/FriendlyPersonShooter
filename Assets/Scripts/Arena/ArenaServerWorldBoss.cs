@@ -175,7 +175,7 @@ namespace FriendlyPersonShooter.Arena
             foreach (int id in hitters)
             {
                 AddXp(id, _world.Settings.Xp);
-                if (_playerById.TryGetValue(id, out var pe)) GiveBossLoot(id, EntityManager.GetComponentData<LocalTransform>(pe).Position, ecb);
+                GiveBossLoot(id);
             }
             _announce.Add((AnnounceKind.WorldBossDown, hitters.Count, 0, 0));
             Debug.Log($"[WorldBoss] the Colossus fell to {hitters.Count} player(s)");

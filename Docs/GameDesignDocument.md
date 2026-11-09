@@ -60,7 +60,13 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 
 **Glimmers** keep you shooting between fights. They appear often and die to any single hit. Each kill has a 25% chance to drop 1 essence of a random color (Yellow, Red or Green), so they're a small bonus, never a reliable source of any color.
 
-**Difficulty tiers.** Each family has tiers that scale hitbox size, speed, pattern randomness and how long the weak point stays open. Elites combine two families (a Skitter that blinks, a Bulwark guarded by Mites), so higher regions test mixed skills.
+**Difficulty tiers.** Each family has tiers that scale hitbox size, speed, pattern randomness and how long the weak point stays open. The tier is the layer's number. Tier 2 is 88% size, 115% speed and 85% open time; tier 3 is 76%, 130% and 70%. Health and damage stay the same, so deeper enemies are harder to hit, not harder to survive. Elites combine two families (a Skitter that blinks, a Bulwark guarded by Mites), so higher regions test mixed skills.
+
+- **Elites** have 2.5× health, are 1.2× bigger and wear a gold crown. They drop 3× their main color plus 1 of the second family's color, and give double kill XP. One of a spawn group can be an elite (6% of groups on layer 1, 20% on layer 2, 30% on layer 3).
+- **The four elites:** Blinker (a Skitter that blinks like a Wisp), Guarded (a Bulwark with a Mite swarm), Soaring (a Sentinel that circles 7 m up) and Phasing (a Diver that blinks between circling points). Wisps and Mites have no elite.
+- **Bulwarks also live in the open world.** They're smaller than the raid boss and hover in one spot, turning and firing. The plate opens for 2.2 s after 3.5 s shut, and the shell takes 20% damage.
+- **Sentinels** turn to face their target. The eye opens for 1.2 s (less on higher tiers) before each bolt. The body takes 30% damage, and the eye is the weak point.
+- **Divers** circle 10 m up for 3.5–5.5 s, warn for 0.7 s, then dive at 20 m/s and strike for 10 damage. The wings are the weak point, and they climb back up after a dive.
 
 **Enemy design rules**
 
@@ -84,14 +90,14 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 
 **Carried vs. banked**
 
-- Essence you pick up is *carried* until you bank it at the layer's **raid door** or a **gate** (stand by one). Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. At the raid door, Red and Green go to the raid key first if it needs them.
+- Essence you pick up is *carried* until you bank it at a **raid door** or a **gate** (stand by one). Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. At the open raid door, Red and Green go to the raid key first if it needs them.
 - Banked essence goes into your **party's shared bank** (a party is a group you've teamed up with): everyone in the party banks into it and spends from it. Carried essence and caches stay personal. A solo player's bank is their own.
 - When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Any player who picks up your cache sends it back to you and gets a small kudos reward. Returning a friend's lost essence becomes a common good deed.
 
 **What it's for**
 
 - **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access. An opening lasts 90 seconds; then the gate shuts and the next opening costs 20 more (40, 60, 80...), so the gate stays a goal instead of a door left open.
-- **Raid keys** cost several colors at once (for example 30 Blue + 30 Purple + 20 Green). One player rarely has the mix, so groups pool essence.
+- **Raid keys** cost several colors at once (today 12 Blue + 8 Purple + 12 Green). One player rarely has the mix, so groups pool essence.
 - **Attunement** (small, optional): spend essence to reroll a mod's secondary stat.
 
 **Gifting, not trading.** Players can give essence to anyone nearby, for free, including players outside their party. There's no market, no currency and no way to ask for something in return inside the game. This keeps the economy social and gives bots and sellers nothing to sell.
@@ -157,7 +163,9 @@ A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cash
 | Plague | Wither + Tag (enemy) | Damage over time spreads to nearby enemies |
 | Blitz | Haste + Might (ally) | Might's damage bonus doubles while both last |
 
-The prototype (MVP step 3) has Plague and Blitz, the two combos possible with Vigor, Might, Haste and Relay. Plague spreads a Wither at 75% strength to enemies within 4 m every second.
+All seven combos are built. Plague spreads a Wither at 75% strength to enemies within 4 m every second. Overdrive keeps the magazine full and ends a reload at once. Deadeye makes weak-point hits deal 3×. Bastion regenerates the Ward at 8 a second, up to one Ward (20). Pinned freezes the enemy for 1 s when the combo forms (moving and attacking), not on every hit. Shatter makes armor take full damage.
+
+Built numbers for the new payloads: Frenzy is +30% fire rate and reload speed for 6 s; Jam slows an enemy's attacks to 1/1.6 of normal. Ward is a 20-point shield for 6 s that soaks damage after Vigor's shield; the same giver tops a drained Ward back up. Brittle closes half the gap between an armor's damage and full damage. Focus grows the ally's weak points by 35%; Mark grows the enemy's by 40% for everyone. Every new payload has a mod, a shot sound and a HUD line.
 
 ## Downed and revive
 
@@ -203,7 +211,7 @@ Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mo
 
 - **Starting gun.** A new player picks one of three starting guns, each with a common payload mod. The three never share a frame or a payload, so the choice is real. Bots get their role's kit instead.
 - **Loot boxes** stand around every zone. Each player who opens a box gets their own offer of three items (guns or mods, no two of the same kind) and picks one, so nobody competes for loot. Each card shows what taking it would swap out. A player can leave the offer and come back: the box stays shut, with the same three inside, until they pick.
-- **Bosses** drop gear for everyone who fought them; a raid clear gives each player a guaranteed rare or better item.
+- **Bosses** drop gear for everyone who fought them; a raid clear lets each player pick one of three rare-or-better items.
 - **Equip on the spot.** There is no inventory: picking up a gun replaces the gun in your hand, and picking up a mod puts it on your current gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it.
 - **Starting kit:** one random gun with one random payload mod. The second gun slot starts empty.
 - Gear lasts one session for now, like levels; it becomes account-bound once accounts are saved.
@@ -226,10 +234,21 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 
 1. **Layer 1 (tier 1).** Soloable. Each zone leans toward one or two essence colors.
 2. **Layer 2 (tier 2).** Denser elites and mixed enemy families. Built for duos and small groups.
-3. **Layer 3 (tier 3).** Hardest families, rarer blooms. Launch ships these 3 layers; the MVP proves only layer 1.
+3. **Layer 3 (tier 3).** Hardest families, rarer blooms. Launch ships these 3 layers.
+
+**Moving between layers (built).** The group moves together, so friends are never on different layers.
+
+- Walking through the open gate on layer 1 or 2 starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then the whole group goes to the next layer's start.
+- On layers 2 and 3, an **up-portal** (a stone ring with a blue beam) stands 12 m from the start. Stepping into it starts the same countdown back up, and the group lands just in front of the upper gate. That gate stays open to them for free, so they can go back down.
+- Layer 3's gate ends the expedition.
+- Moving can't start while a raid gathers, runs or celebrates. A countdown already going is called off if a raid starts.
+- Each layer has its own map from the world seed, with its own enemies, gate, raid doors, loot boxes and Colossus. Carried essence, the party bank, the raid key, kudos and the run clock carry over. Dropped caches go back to their owners.
+- Gate colors: 40 Yellow on layer 1, 40 Blue on layer 2, 40 Purple on layer 3.
+- Layer 2 has more spawns and more zones mixing two colors. Layer 3 has only Skitters, Sentinels, Bulwarks and Divers, and half as many blooms.
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
-- **Raids** are doors in the world. Once its key is fully pooled, anyone at the door presses E to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot, and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
+- **Raids** are doors in the world. Once its key is fully pooled, anyone at the door presses E to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot (XP and an item; raids never pay essence, and enemies inside drop none), and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
+- **Several raid doors, one open at a time.** A layer has 4 raid doors by shrines, spread at least 150 m apart; the first stands near the start. Only one is open. Clearing its raid spends it: it goes dark, and the next door opens somewhere else, so the group travels to raid again. Once all four are spent they all come back except the one just cleared. A wipe or a timeout leaves the door open. Every door banks essence, open or dark.
 - **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. The build order lives in `Docs/RaidDevPlan.md`.
 - **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it. A world boss fights differently from raid bosses: raid bosses test aim under pressure in a closed room, world bosses test movement in the open (dodging, jumping, using cover).
 
@@ -241,7 +260,7 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 - Neighboring zones meet at the same ground height all along their shared edge, so the seams don't show.
 - Zones are stitched from hand-built tiles (ruins, rivers, towers, canyons) using the seed. Hand-built pieces keep the shooting spaces good; the seed changes their layout and color bias.
 - Every zone has a few named **landmarks** ("the Broken Tower", "Twin Falls") so players can give directions: "purple's past the Broken Tower." The compass and quick-chat use these names.
-- Every zone has a few **shrines** for respawning. Banking happens at the raid door and gates (one raid door per layer for now; add more if the walk back feels long).
+- Every zone has a few **shrines** for respawning. Banking happens at the raid door and gates (every raid door banks, open or dark).
 - **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown). You keep your carried essence but can't bank it for 60 seconds.
 - **No visible edge.** Fog and draw distance end inside the loaded neighbor zones, so players never see past what's loaded.
 - Crossing into a new zone blends the sky's colors only, never its cloud pattern.
@@ -409,12 +428,12 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 | 2. Shooting feel | Arena with Wisps, Skitters and a Mite swarm; Vigor and Might; lag-compensated hitscan; bot allies that strafe and jump | Healing matters: with no healer bots go down 4 times in 90 s |
 | 3. Chains and revives | Haste and Relay, chains with the bonus, Plague and Blitz combos, soul-fragment revive, Medic bot | Bots cash 2-link chains, form combos and revive downed allies (8 fragment hits in about 20 s), also on a 150 ms link |
 | 4. First layer and gate | Expedition mode: generated wrapping layer of zones (a 4x4 grid of 250 m squares at first, a rhombitrihexagonal tiling since Nov 5, 2026), landmarks, shrines, seeded spawns and blooms, essence, caches, one 40-Yellow gate, objective HUD with a light beam | A Might bot hunted 40 Yellow, banked it and passed the gate in 14:21; a Haste bot that mostly buffed earned only 9 |
-| 5. Talking and helping | Quick-chat (fixed lines with color and landmark slots, 60 m earshot, rate limits), sightings and shared map knowledge, kudos with anti-farming rules, encounter-exchange measurement | Wired into the expedition: number keys say lines, K gives kudos, bots call for a res and say thanks. The real check needs several humans |
+| 5. Talking and helping | Quick-chat (fixed lines with color and landmark slots, 60 m earshot, rate limits), kudos with anti-farming rules, encounter-exchange measurement. Sightings and shared map knowledge exist in Core with tests but are not in the game yet | Quick-chat and kudos are wired into the expedition: number keys say lines, K gives kudos, bots call for a res and say thanks. The real check needs several humans |
 | 6. First raid | A raid door near the start shrine with a 20 Red + 12 Green key pledged from carried or banked essence; with the key full, anyone at the door presses E to start a 20 s countdown, then whoever stands at the door goes in (up to 8); a floating arena; the Bulwark boss (health scales per player, armored shell, a turning plate that opens for full damage, add waves at 75/50/25%); clear gives 300 XP and 10 Yellow; wipe, timeout (8 min) and reset | 4 bots cleared it in 2:40 with one down and a revive; 1 player alone wiped in 22 s. Bots don't yet gather Red and Green or answer the gather call; a bot at the door presses E once a full key has waited 30 s, so people normally choose when to go |
 
 **First human playtest (Nov 3, 2026).** Friends played a hosted build over Relay. Fixed right after: a HUD in place of the debug text (help moved to the Esc menu), Reset position, player colors, per-payload shot sounds, and the sky that seemed to spin when crossing zones. Added next: party-shared bank, clearer damage taken, your own quick-chat in the feed, a player-only minimap, levels with a skill tree, damage numbers, Glimmers, filled pits, and no view past the loaded zones.
 
-**Guns (built Nov 4, 2026; not yet playtested).** The found-gun system from the Guns section replaces the single rifle and the Q payload cycle. It has all six frames (Pistol, burst Rifle, SMG, Marksman, Beam and a Launcher whose shells burst on landing), 3 mod slots plus a payload slot, and stat, special and payload mods in three tiers. Everyone starts with one random gun with one random payload mod, and bots get their role's payload. Q swaps guns, R reloads, right mouse zooms, and E opens a loot box or takes an item. Shift sprints at 1.5× speed while moving forward and not zoomed, with no stamina. Each zone has 9 boxes (3 before the second playtest), and every player gets their own roll from each box once. A raid clear leaves each raider a rare-or-better item. A swapped-out item stays on the ground for 2 minutes for anyone to take. Checked in the Editor with bots: every frame fires, and boxes, pickups, swaps and drops work.
+**Guns (built Nov 4, 2026; not yet playtested).** The found-gun system from the Guns section replaces the single rifle and the Q payload cycle. It has all six frames (Pistol, burst Rifle, SMG, Marksman, Beam and a Launcher whose shells burst on landing), 3 mod slots plus a payload slot, and stat, special and payload mods in three tiers. Everyone starts with one random gun with one random payload mod, and bots get their role's payload. Q swaps guns, R reloads, right mouse zooms, and E opens a loot box or takes an item. Shift sprints at 1.5× speed while moving forward and not zoomed, with no stamina. Each zone has 9 boxes (3 before the second playtest), and every player gets their own roll from each box once. A raid clear offers each raider three rare-or-better items to pick one from. A swapped-out item stays on the ground for 2 minutes for anyone to take. Checked in the Editor with bots: every frame fires, and boxes, pickups, swaps and drops work.
 
 **Avatars (built Nov 4, 2026; not yet playtested).** Players are goofy floating robots in the zones' low-poly style, based on a legless hovering robot with a visor face. Each player gets a random robot when they join: head (ball, box, can or bean), ears (cat ears, antenna, propeller, bunny ears, headphones or twin antennae), eyes (a mismatched pair, one huge eye, three eyes or googly eyes), mouth, body (egg, barrel, cone or ball), a short or springy neck, one or two thrusters, and big mitts or three-fingered hands. Shells are mostly white; the chest plate, cuffs and ears use the player's team colour. Robots bob, lean into movement and wobble their heads. Their floating hands hold the gun on its grip and fore-end, and tracers leave from the gun's muzzle. You see your own hands on your gun. Downed robots lie on their backs.
 
@@ -426,7 +445,7 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
   - It first lands 4 minutes in, then 8 minutes after each kill, on open ground about 30 m from a landmark 90–320 m from a player.
   - Health is 1.5× the raid Bulwark's for at least 3 players.
   - It calls Skitters and Mites at 75%, 50% and 25%.
-  - Everyone who hits it gets 12 Yellow, 12 Red and 12 Green, 300 XP and a rare-or-better item.
+  - Everyone who hits it gets 12 Yellow, 12 Red and 12 Green, 300 XP and a pick of three rare-or-better items.
   - An orange beam and a HUD line show where it is and its health.
 
 **After the second playtest (built Nov 4, 2026; not yet playtested).**
@@ -445,7 +464,7 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **Sweeper Gauntlet** (skill): 12 stepping stones about 2 m apart over the void, with low turning arms on four of them. Jump the arms (6 damage) and the gaps (a fall sends you back to the start, 5 damage). Gauntlet damage never takes anyone below 10 health. Everyone up must stand on the far pad.
 - **Wisp Storm** (skill): kill 8 + 2 per player Wisps in 90 s. The storm's Wisps don't shoot back; running out of time starts the count over.
 - **Portals:** a solved room pays everyone inside 75 XP and 3 Yellow and opens a portal. When someone steps in, everyone moves on 5 s later, the downed get up, and everyone is healed.
-- **Modifiers** (one per run): Swarming (twice the adds; the storm needs 4 more kills), Swift Bolts (enemy bolts 40% faster), Brittle (players take 30% more damage; rooms pay 50% more).
+- **Modifiers** (one per run): Swarming (twice the adds; the storm needs 4 more kills), Swift Bolts (enemy bolts 40% faster), Brittle (players take 30% more damage; rooms pay 50% more XP).
 - Checked in the Editor with 3 bots, which solve every room on their own (gauntlet 25 s, plates 27 s, Color Locks 13 s, storm 67 s) and reach the Bulwark; they wiped at about 25% boss health, so the boss clear waits for the playtest. The storm was made easier (and its Wisps passive) after bots kept failing it while being shot. Standing on a sweeper's pivot always gets you hit, so cross beside it.
 
 **Raid runs, phase 2 (built Nov 5, 2026; not yet playtested).** The room pool grows to 6, the boss is rolled per run, and every room gets a new shape each run.
@@ -461,7 +480,9 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - **Raid ending:** the boss explodes (a fireball, a shockwave along the floor, flying armor and a flash of light), rewards land right away, and an exit portal opens on the boss platform. Bots hang about for 15 s, then leave through it. The raid ends when the last raider has gone home, or after 5 minutes.
 - **Pings and minimap arrows** (see Talking without typing).
 - **Launcher:** splash radius 3.5 m → 5.5 m.
-- **Loot box picks:** a box offers three items on the same pick screen as the starting gun, and the picked one is equipped at once (what it replaces drops at your feet). E, Esc, the Leave button, walking 6 m away or going down leaves the offer for later.
+- **Raids pay no essence:** rooms pay 75 XP (no Yellow), the clear pays 300 XP and an item (no Yellow), and enemies killed inside a raid drop no essence.
+- **Raid doors move:** 4 doors per layer, one open at a time; a clear spends the door (drawn dark, with a HUD line pointing at the open one) and opens the next. The raid platforms stay above the first door.
+- **Loot box picks:** a box offers three items on the same pick screen as the starting gun, and the picked one is equipped at once (what it replaces drops at your feet). E, Esc, the Leave button, walking 6 m away or going down leaves the offer for later. Boss rewards (a raid clear, the Colossus) use the same screen: three rare-or-better items, one must be taken, and the screen waits until any other pick is closed. Bots keep their role's kit.
 - Checked in the Editor with 3 bots: the pick, a ping on the terrain, rim arrows for two bots sent 200–250 m away, and two won raids (the Weaver and the Bulwark) with the explosion, the hang-out and the exit portal.
 
 **Raid runs, phase 3 (built Nov 5, 2026; not yet playtested).** Two strange rooms (8 in the pool), a third boss, and two more run modifiers.
@@ -472,6 +493,13 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - Checked in the Editor with 3 bots: Lanterns solved in 32 s, Sentinel Eye (with Fog) in 59 s, and the Low Gravity gauntlet crossed with no falls. Against the Weaver (Low Gravity) the bots cut 16 of 18 threads and dealt about 73% before wiping, close to the other bosses, so its clear is left to the playtest.
 
 **Zone tiling (built Nov 5, 2026; not yet playtested).** The square 4x4 grid of 250 m zones is replaced by a wrapping rhombitrihexagonal tiling of 54 zones: 9 hexagons (250 m tall), 27 squares and 18 triangles, about 1 km across. Zones are named like "2.1" (a hexagon) and "2.1a" to "2.1e" (its squares and triangles). Features and loot boxes scale with zone area, players start in a hexagon, and the gate stands in a far hexagon. The generated ground follows each zone's outline and meets its neighbors exactly at the border height. Zones load around you by distance instead of by grid neighbor, and bot pathfinding follows paths across the wrap.
+
+**All enemies, six payloads and three layers (built Nov 8, 2026; not yet playtested).**
+- **Enemies and essence:** Sentinels (Blue), Divers (Orange) and smaller Bulwarks (Purple) spawn in the open world. Elites and tiers 1 to 3 are in. The HUD shows all six colors and the layer number. The raid key is now 12 Blue + 8 Purple + 12 Green.
+- **Payloads and combos:** Frenzy, Ward and Focus are in, with all seven combos. Enemies show markers for Jam, Brittle, Mark, Pinned (an ice shell) and Shatter.
+- **Layers 2 and 3:** see Moving between layers.
+- Checked in the Editor with a bot: every new family spawns, moves, attacks and is drawn. Bots kill elites. Pinned, Shatter, Jam, Overdrive and Frenzy work on the host and show on the client. The group went down through the gate to layer 2, back up through the portal, and through layer 3's gate to the end. 379 Core tests pass.
+- Not built: Attunement and the weekly reseed.
 
 **Open questions from the prototype**
 

@@ -15,7 +15,8 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// </summary>
     public static class LayerGenerator
     {
-        private const int FamilyCount = 3;
+        /// <summary>Weights are indexed by family (Glimmers never get a weight).</summary>
+        private const int FamilyCount = 7;
 
         public static LayerMap Generate(uint seed, ZoneTiling tiling, LayerSettings settings = null)
         {

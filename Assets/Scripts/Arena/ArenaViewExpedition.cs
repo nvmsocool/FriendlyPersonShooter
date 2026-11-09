@@ -18,7 +18,7 @@ namespace FriendlyPersonShooter.Arena
     public partial class ArenaView
     {
         private Material[] _tileMats;
-        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _beaconMat, _worldBossBeaconMat;
+        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _beaconMat, _worldBossBeaconMat, _upPortalMat, _upPortalCoreMat;
         private EntityQuery _cacheQuery, _statusQuery;
         private readonly List<Matrix4x4> _x = new List<Matrix4x4>();
         private float3 _camRef;
@@ -43,6 +43,19 @@ namespace FriendlyPersonShooter.Arena
             _cacheMat = MakeMat(new Color(1f, 0.85f, 0.1f));
             _beaconMat = MakeMat(new Color(1f, 1f, 0.6f));
             _worldBossBeaconMat = MakeMat(new Color(1f, 0.55f, 0.15f));
+            _upPortalMat = MakeMat(new Color(0.55f, 0.6f, 0.7f));
+            _upPortalCoreMat = MakeGlow(new Color(0.45f, 0.8f, 1f), 1.2f);
+        }
+
+        /// <summary>
+        /// A remote client follows the server's layer from its status (the map, terrain and boxes follow it).
+        /// On the host the server already set it, and a status a tick behind must not set it back.
+        /// </summary>
+        private void FollowLayer()
+        {
+            var server = Unity.NetCode.ClientServerBootstrap.ServerWorld;
+            if (server != null && server.IsCreated) return;
+            if (TryGetStatus(out var s) && s.Layer != 0 && s.Layer != ExpeditionWorld.Layer) ExpeditionWorld.Layer = s.Layer;
         }
 
         private void CreateExpeditionQueries(EntityManager em)
@@ -62,6 +75,7 @@ namespace FriendlyPersonShooter.Arena
 
         private void DrawExpeditionWorld()
         {
+            FollowLayer();
             var map = ExpeditionWorld.Map;
             var tiling = map.Tiling;
             var camZone = tiling.ZoneAt(_camRef.x, _camRef.z);
@@ -124,6 +138,25 @@ namespace FriendlyPersonShooter.Arena
             }
             DrawList(_x, open ? _gateOpenMat : _gateMat);
 
+            // The up-portal by the start (layers 2 and 3): a stone ring with a glowing, turning core.
+            if (LayerTravel.TryPortal(map, ExpeditionWorld.Layer, out var portal))
+            {
+                var p = Near(ExpeditionWorld.ToFloat3(portal, GroundAt(portal)));
+                float r = LayerTravel.PortalRadius;
+                _x.Clear();
+                for (int i = 0; i < 8; i++)
+                {
+                    float a = i * Mathf.PI / 4f;
+                    _x.Add(Matrix4x4.TRS(p + new Vector3(Mathf.Cos(a) * r, 1.6f, Mathf.Sin(a) * r), Quaternion.Euler(0f, -a * Mathf.Rad2Deg, 0f), new Vector3(0.5f, 3.2f, 0.9f)));
+                }
+                DrawList(_x, _upPortalMat);
+                _x.Clear();
+                float pulse = 1f + 0.08f * Mathf.Sin(Time.time * 4f);
+                _x.Add(Matrix4x4.TRS(p + Vector3.up * 1.6f, Quaternion.Euler(0f, spin, 0f), new Vector3(r * 1.4f, 2.6f, r * 1.4f) * pulse));
+                _x.Add(Matrix4x4.TRS(p + Vector3.up * 20f, Quaternion.identity, new Vector3(0.5f, 40f, 0.5f)));
+                DrawList(_x, _upPortalCoreMat);
+            }
+
             _x.Clear();
             using (var caches = _cacheQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp))
             {
@@ -175,12 +208,17 @@ namespace FriendlyPersonShooter.Arena
             int minutes = (int)(s.Elapsed / 60f), seconds = (int)(s.Elapsed % 60f);
             var e = _hud.Expedition;
             e.Append($"<b>EXPEDITION</b>   {minutes:00}:{seconds:00} / 20:00\n");
-            // Every color at a glance: carried in bold, then the party bank (the gate's price after Yellow).
-            e.Append($"<color=#FFE14D>Yellow</color> <b>{s.Carried}</b> +{s.Banked}/{s.Goal}   " +
-                     $"<color=#FF6B5B>Red</color> <b>{s.CarriedRed}</b> +{s.BankedRed}   " +
-                     $"<color=#7BE07B>Green</color> <b>{s.CarriedGreen}</b> +{s.BankedGreen}   <color=#B8B0D8>carried +banked</color>");
+            // Every color at a glance: carried in bold, then the party bank (the gate's color shows its price).
+            e.Append($"Layer {math.max(1, (int)s.Layer)}   ");
+            foreach (var c in EssenceColors.All)
+            {
+                int carried = EssencePack.Get(s.CarriedAll, c), banked = EssencePack.Get(s.BankedAll, c);
+                e.Append($"{EssencePack.Named(c)} <b>{carried}</b> +{banked}{(c == s.GoalColor ? $"/{s.Goal}" : "")}  ");
+            }
+            e.Append("<color=#B8B0D8>carried +banked</color>");
             if (s.Kudos > 0) e.Append($"   kudos {s.Kudos}");
             e.Append($"\n{s.Objective}\n");
+            WriteLayerHud(s, e);
             WriteRaidHud(s, e);
             WriteWorldBossHud(s, e);
             if (s.HasTarget && !s.Complete)
@@ -191,13 +229,36 @@ namespace FriendlyPersonShooter.Arena
                 float relative = Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing);
                 e.Append($"<color=#FFE14D>{distance:0} m {Direction(relative)}</color>  (follow the light beam)\n");
             }
-            if (s.BloomNear) e.Append("<color=#FFE14D>A Yellow BLOOM is running nearby: lots of Wisps!</color>\n");
+            if (s.BloomNear)
+            {
+                string prey = EssenceColors.TryGetFamily(s.GoalColor, out var family) ? EssenceColors.Plural(family) : "enemies";
+                e.Append($"<color=#FFE14D>A {s.GoalColor} BLOOM is running nearby: lots of {prey}!</color>\n");
+            }
             e.Append($"<color=#B8B0D8>You are {s.Location}</color>");
             WriteSocial();
             if (s.Complete)
             {
                 _center.text = $"EXPEDITION COMPLETE in {minutes:00}:{seconds:00}!";
             }
+        }
+
+        /// <summary>The group's layer move: a countdown, and where the portal is on lower layers.</summary>
+        private void WriteLayerHud(ExpeditionStatus s, System.Text.StringBuilder e)
+        {
+            if (s.LayerNext != 0)
+            {
+                bool down = s.LayerNext > s.Layer;
+                int left = Mathf.CeilToInt(s.LayerCountdown);
+                e.Append($"<color=#9AD8FF><b>{(down ? "DROPPING" : "CLIMBING")} TO LAYER {s.LayerNext} in {left}s</b>: the whole group moves together</color>\n");
+                if (left <= 5 && !s.InRaid) _center.text = $"Layer {s.LayerNext} in {left}";
+                return;
+            }
+            if (!LayerTravel.TryPortal(ExpeditionWorld.Map, ExpeditionWorld.Layer, out var portal)) return;
+            var delta = ExpeditionWorld.Near(new float3(portal.X, 0f, portal.Y), _camRef) - _camRef;
+            float distance = math.length(delta.xz);
+            if (distance > 60f) return;
+            float bearing = math.degrees(math.atan2(delta.x, delta.z));
+            e.Append($"<color=#9AD8FF>Up-portal to layer {s.Layer - 1}</color> {distance:0} m {Direction(Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing))}\n");
         }
 
         private const float ChatSeconds = 10f;

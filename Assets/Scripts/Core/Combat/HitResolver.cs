@@ -105,7 +105,7 @@ namespace FriendlyPersonShooter.Core.Combat
         public float EnemyDamage(PlayerVitals shooter, EnemyVitals target, float baseDamage, bool weakPoint)
         {
             float damage = baseDamage * (1f + shooter.DamageBonus) * target.DamageTakenMultiplier;
-            if (weakPoint) damage *= Settings.WeakPointMultiplier;
+            if (weakPoint) damage *= shooter.IsDeadeye ? Settings.DeadeyeWeakPointMultiplier : Settings.WeakPointMultiplier;
             return damage;
         }
 
@@ -150,6 +150,7 @@ namespace FriendlyPersonShooter.Core.Combat
 
             // Read before the hit changes anything: Tag splashes only if it was already there.
             float splashShare = target.SplashShare;
+            bool pinnedBefore = target.IsPinned;
             bool relayed = shooter.HasRelay;
             int relaySource = shooter.RelaySourceId;
 
@@ -179,6 +180,8 @@ namespace FriendlyPersonShooter.Core.Combat
                 result.SecondOutcome = ApplyDebuff(target, shooter.Id, fx.Second, fx.SecondStrength);
             }
             if (relayed) result.RelayedOutcome = ApplyDebuff(target, relaySource, result.RelayedPayload, 1f);
+            // Pinned freezes it once, as the combo forms.
+            if (!pinnedBefore && target.IsPinned) target.Freeze(Settings.PinnedFreeze);
             return result;
         }
 
@@ -324,6 +327,9 @@ namespace FriendlyPersonShooter.Core.Combat
                 case PayloadKind.Vigor: return target.Debuffs.Apply(EffectKind.Wither, sourceId, s.WitherDps * strength, s.WitherDuration);
                 case PayloadKind.Haste: return target.Debuffs.Apply(EffectKind.Slow, sourceId, Math.Min(0.8f, s.SlowAmount * strength), s.SlowDuration);
                 case PayloadKind.Relay: return target.Debuffs.Apply(EffectKind.Tag, sourceId, s.TagSplashShare * strength, s.TagDuration);
+                case PayloadKind.Frenzy: return target.Debuffs.Apply(EffectKind.Jam, sourceId, s.JamAmount * strength, s.JamDuration);
+                case PayloadKind.Ward: return target.Debuffs.Apply(EffectKind.Brittle, sourceId, Math.Min(1f, s.BrittleAmount * strength), s.BrittleDuration);
+                case PayloadKind.Focus: return target.Debuffs.Apply(EffectKind.Mark, sourceId, s.MarkWeakPointBonus * strength, s.MarkDuration);
                 default: return target.Debuffs.Apply(EffectKind.Expose, sourceId, s.ExposeBonus * strength, s.ExposeDuration);
             }
         }
@@ -348,6 +354,20 @@ namespace FriendlyPersonShooter.Core.Combat
                 }
                 case PayloadKind.Haste:
                     return target.Buffs.Apply(EffectKind.Hasted, sourceId, s.HasteMoveBonus * power, s.HasteDuration * time);
+                case PayloadKind.Frenzy:
+                    return target.Buffs.Apply(EffectKind.Frenzied, sourceId, s.FrenzyBonus * power, s.FrenzyDuration * time);
+                case PayloadKind.Focus:
+                    return target.Buffs.Apply(EffectKind.Focused, sourceId, s.FocusWeakPointBonus * power, s.FocusDuration * time);
+                case PayloadKind.Ward:
+                {
+                    float points = s.WardShield * power;
+                    float before = target.Ward;
+                    var outcome = target.Buffs.Apply(EffectKind.Warded, sourceId, points, s.WardDuration * time);
+                    // A hit from the same giver tops a drained Ward back up to one hit's worth.
+                    target.Buffs.Restore(EffectKind.Warded, points, points);
+                    result.ShieldGained += target.Ward - before;
+                    return outcome;
+                }
                 case PayloadKind.Relay:
                 {
                     var outcome = target.Buffs.Apply(EffectKind.Relayed, sourceId, 1f, s.RelayDuration * time);

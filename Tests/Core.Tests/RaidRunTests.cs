@@ -55,7 +55,7 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var run = new RaidRun(3, 4, modifier: RaidModifier.Brittle);
             Assert.That(run.DamageTakenMultiplier, Is.GreaterThan(1f));
-            Assert.That(run.RoomYellow, Is.GreaterThan(new RaidRunSettings().RoomYellow));
+            Assert.That(run.RoomXp, Is.GreaterThan(new RaidRunSettings().RoomXp));
             Assert.That(new RaidRun(3, 4, modifier: RaidModifier.Swarming).AddsMultiplier, Is.EqualTo(2));
         }
 

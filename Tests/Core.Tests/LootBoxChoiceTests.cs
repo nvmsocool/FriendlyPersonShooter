@@ -27,6 +27,22 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
+        public void BossRewardOffersThreeRareOrBetter()
+        {
+            for (uint seed = 1; seed < 300; seed++)
+            {
+                var items = LootRolls.BossChoices(seed);
+                Assert.That(items.Length, Is.EqualTo(LootRolls.BoxChoiceCount));
+                for (int i = 0; i < items.Length; i++)
+                {
+                    Assert.That(items[i].IsNone, Is.False);
+                    if (!items[i].IsGun) Assert.That(items[i].Mod.Tier, Is.GreaterThanOrEqualTo(ModTier.Rare), $"seed {seed}: {items[i]}");
+                    for (int j = 0; j < i; j++) Assert.That(LootRolls.SameKind(items[i], items[j]), Is.False);
+                }
+            }
+        }
+
+        [Test]
         public void BoxOfferIsTheSameForTheSameSeed()
         {
             var a = LootRolls.BoxChoices(42);

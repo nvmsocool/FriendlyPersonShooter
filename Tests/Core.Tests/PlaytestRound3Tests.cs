@@ -27,7 +27,8 @@ namespace FriendlyPersonShooter.Core.Tests
                 }
             }
             Assert.That(LootRolls.StartingChoices(7)[0].Pack(), Is.EqualTo(LootRolls.StartingChoices(7)[0].Pack()), "same seed, same pick");
-            Assert.That(LootRolls.StartingChoices(1, 10).Length, Is.EqualTo(GunMods.PayloadKinds.Length), "never more than the payloads");
+            Assert.That(LootRolls.StartingChoices(1, 10).Length,
+                Is.EqualTo(System.Math.Min(GunMods.PayloadKinds.Length, GunFrames.All.Length)), "never more than the frames or payloads");
         }
 
         [Test]

@@ -21,16 +21,21 @@ namespace FriendlyPersonShooter.Arena
         public readonly int SpawnPointId;
         public readonly long Wave;
         public readonly bool Bloom;
+        /// <summary>
+        /// False for the default key, which enemies not made by a spawn event carry (debug spawns, boss adds), so
+        /// they never match spawn point 0's first wave and leave with it.
+        /// </summary>
+        public readonly bool IsSet;
 
         public SpawnKey(int spawnPointId, long wave, bool bloom)
         {
             SpawnPointId = spawnPointId;
             Wave = wave;
             Bloom = bloom;
+            IsSet = true;
         }
 
-        public bool IsSet => SpawnPointId != 0 || Wave != 0 || Bloom;
-        public bool Equals(SpawnKey o) => SpawnPointId == o.SpawnPointId && Wave == o.Wave && Bloom == o.Bloom;
+        public bool Equals(SpawnKey o) => IsSet == o.IsSet && SpawnPointId == o.SpawnPointId && Wave == o.Wave && Bloom == o.Bloom;
         public override bool Equals(object obj) => obj is SpawnKey o && Equals(o);
         public override int GetHashCode() => (SpawnPointId * 397) ^ Wave.GetHashCode() ^ (Bloom ? 0x5555 : 0);
     }
@@ -72,18 +77,22 @@ namespace FriendlyPersonShooter.Arena
 
         private void CreateExpedition()
         {
+            // Every session starts at the top (the static outlives play mode with domain reload off).
+            ExpeditionWorld.Layer = 1;
+            _travel = new LayerTravel(1);
             _map = ExpeditionWorld.Map;
-            _blooms = new BloomSchedule(_map, new BloomSettings());
-            _schedule = new SpawnSchedule(_map, _blooms, new SpawnSettings());
+            var layer = ExpeditionWorld.Settings;
+            _blooms = new BloomSchedule(_map, layer.Blooms());
+            _schedule = new SpawnSchedule(_map, _blooms, layer.Spawns());
             _ledger = new DropLedger(seed: (uint)System.Environment.TickCount);
-            _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed);
+            _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed, layer.Gate());
             _caches = new CacheRegistry();
             CreateSocial();
             CreateRaid();
             CreateWorldBoss();
             // Doors bank, shrines don't: shrines are where bleeding out and Reset position put you.
             _banking = new Banking(_map);
-            _banking.AddSite(RaidDoorPoint, _raid.Settings.UseRadius);
+            foreach (var door in ExpeditionWorld.RaidDoors) _banking.AddSite(door, _raid.Settings.UseRadius);
             foreach (var g in _map.Gates) _banking.AddSite(g.Point.World, ExpeditionWorld.GateUseRadius);
             Debug.Log($"[Expedition] seed={NetTestSettings.WorldSeed} tiling={_map.Tiling.Width}x{_map.Tiling.Height} cells, {_map.Tiling.Count} zones, edge={_map.Tiling.Edge}m " +
                       $"start={_map.StartZone} gate={_map.Gates[0].Point.Zone} landmarks={_map.Landmarks.Count} shrines={_map.Shrines.Count}");
@@ -139,8 +148,17 @@ namespace FriendlyPersonShooter.Arena
             // Everyone who hit it gets the kill's XP.
             _intScratch.Clear();
             _intScratch.AddRange(_ledger.HittersOf(s.Vitals.Id));
-            foreach (int hitter in _intScratch) AddXp(hitter, XpRewards.Kill(s.Family));
-            var awards = _ledger.Killed(s.Vitals.Id, s.Family);
+            // Bosses pay through their own rewards (the pick screen), not kill XP or drops.
+            bool boss = s.WorldBoss || IsRaidBoss(s);
+            int xp = boss ? 0 : XpRewards.Kill(s.Family) * (s.Elite != EliteKind.None ? 2 : 1);
+            foreach (int hitter in _intScratch) AddXp(hitter, xp);
+            // Raids pay XP and loot, never essence.
+            if (s.Raid || boss)
+            {
+                _ledger.Killed(s.Vitals.Id, s.Family, s.Elite);
+                return;
+            }
+            var awards = _ledger.Killed(s.Vitals.Id, s.Family, s.Elite);
             foreach (var a in awards) _essenceAwarded += a.Amount;
             DropLedger.Pay(awards, WalletOf);
         }
@@ -168,7 +186,9 @@ namespace FriendlyPersonShooter.Arena
                 _nextStatus = _time + StatusInterval;
                 StepRaid(ecb);
                 StepWorldBoss();
+                StepDebugFamilies();
                 StepGate();
+                StepLayers(ecb);
                 UpdateExpeditionPlayers();
                 _caches.ExpireOld(_time);
                 SyncCaches(ecb);
@@ -213,7 +233,7 @@ namespace FriendlyPersonShooter.Arena
             _scratch.Clear();
             foreach (var kv in _enemies)
             {
-                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && !kv.Value.WorldBoss && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
+                if (kv.Value.Family != EnemyFamily.Glimmer && !kv.Value.Raid && !kv.Value.WorldBoss && kv.Value.Spawn.IsSet && ended.Contains(kv.Value.Spawn)) _scratch.Add(kv.Key);
             }
             foreach (var e in _scratch)
             {
@@ -233,6 +253,7 @@ namespace FriendlyPersonShooter.Arena
         {
             var random = new Unity.Mathematics.Random((uint)(key.GetHashCode() * 2654435761u) | 1u);
             var point = ev.Point.World;
+            int tier = ExpeditionWorld.Settings.Tier;
             _spawned.Clear();
             switch (ev.Family)
             {
@@ -240,18 +261,39 @@ namespace FriendlyPersonShooter.Arena
                     for (int i = 0; i < ev.Count; i++)
                     {
                         var o = random.NextFloat2Direction() * random.NextFloat(0f, 5f);
-                        SpawnWisp(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + 2.2f, point.Y + o.y));
+                        SpawnWisp(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + 2.2f, point.Y + o.y), tier);
                     }
                     break;
                 case EnemyFamily.Skitter:
                     for (int i = 0; i < ev.Count; i++)
                     {
                         var o = random.NextFloat2Direction() * random.NextFloat(0f, 5f);
-                        SpawnSkitter(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + _skitter.BodyRadius, point.Y + o.y));
+                        // One Skitter of an elite group is the elite.
+                        SpawnSkitter(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y) + _skitter.BodyRadius, point.Y + o.y),
+                            tier, i == 0 ? ev.Elite : EliteKind.None);
                     }
                     break;
+                case EnemyFamily.Sentinel:
+                    for (int i = 0; i < ev.Count; i++)
+                    {
+                        var o = random.NextFloat2Direction() * (i == 0 ? 0f : random.NextFloat(6f, 10f));
+                        SpawnSentinel(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y), point.Y + o.y),
+                            tier, i == 0 ? ev.Elite : EliteKind.None);
+                    }
+                    break;
+                case EnemyFamily.Diver:
+                    for (int i = 0; i < ev.Count; i++)
+                    {
+                        var o = random.NextFloat2Direction() * random.NextFloat(0f, 6f);
+                        SpawnDiver(new Vector3(point.X + o.x, SpawnGround(point.X + o.x, point.Y + o.y), point.Y + o.y),
+                            tier, i == 0 ? ev.Elite : EliteKind.None);
+                    }
+                    break;
+                case EnemyFamily.Bulwark:
+                    SpawnWorldBulwark(new Vector3(point.X, SpawnGround(point.X, point.Y), point.Y), tier, ev.Elite);
+                    break;
                 default:
-                    SpawnSwarm(new Vector3(point.X, SpawnGround(point.X, point.Y) + 1.5f, point.Y));
+                    SpawnSwarm(new Vector3(point.X, SpawnGround(point.X, point.Y) + 1.5f, point.Y), tier);
                     break;
             }
             foreach (var s in _spawned) s.Spawn = key;
@@ -294,9 +336,10 @@ namespace FriendlyPersonShooter.Arena
                     {
                         _gateUnlocks++;
                         foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
-                        _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, 0));
+                        _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, (int)_gate.Color));
                     }
-                    if (toGate <= ExpeditionWorld.GatePassRadius && tracker.PassedGate(_time))
+                    // Layers 1 and 2: the gate leads down (the whole group, after a countdown). The deepest ends the run.
+                    if (toGate <= ExpeditionWorld.GatePassRadius && !TryGoDown(id) && tracker.PassedGate(_time))
                     {
                         _completions++;
                         _announce.Add((AnnounceKind.ExpeditionComplete, (int)tracker.Elapsed(_time), id, 0));
@@ -344,11 +387,13 @@ namespace FriendlyPersonShooter.Arena
                 {
                     Carried = wallet.Carried(color),
                     Banked = wallet.Banked(color),
-                    CarriedRed = wallet.Carried(EssenceColor.Red),
-                    BankedRed = wallet.Banked(EssenceColor.Red),
-                    CarriedGreen = wallet.Carried(EssenceColor.Green),
-                    BankedGreen = wallet.Banked(EssenceColor.Green),
+                    CarriedAll = EssencePack.Pack(wallet.CarriedAll()),
+                    BankedAll = EssencePack.Pack(wallet.BankedAll()),
                     Goal = tracker.GoalAmount,
+                    GoalColor = color,
+                    Layer = (byte)ExpeditionWorld.Layer,
+                    LayerCountdown = _travel != null ? _travel.SecondsLeft(_time) : 0f,
+                    LayerNext = (byte)(_travel != null && _travel.Pending ? _travel.Target : 0),
                     Phase = tracker.Phase,
                     HasTarget = objective.HasTarget,
                     Target = new float2(objective.Target.X, objective.Target.Y),
@@ -373,14 +418,14 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!_gate.Step(_time)) return;
             foreach (var t in _trackers.Values) t.GateClosed(_time);
-            _announce.Add((AnnounceKind.GateClosed, _gate.Cost, 0, 0));
+            _announce.Add((AnnounceKind.GateClosed, _gate.Cost, 0, (int)_gate.Color));
             Debug.Log($"[Expedition] gate shut; next opening costs {_gate.Cost} {_gate.Color}");
         }
 
         private const float PreySearchRadius = 400f;
 
         private static string FamilyName(EssenceColor color) =>
-            EssenceColors.TryGetFamily(color, out var f) ? (f == EnemyFamily.Mite ? "Mites" : f + "s") : "Prey";
+            EssenceColors.TryGetFamily(color, out var f) ? EssenceColors.Plural(f) : "Prey";
 
         /// <summary>The nearest live enemy whose drop is <paramref name="color"/>, within reach.</summary>
         private bool TryNearestPrey(Vector2 from, EssenceColor color, out Vector2 prey)
@@ -463,7 +508,7 @@ namespace FriendlyPersonShooter.Arena
             Debug.Log($"[Social] t={_time:0} {SocialLog()}");
             Debug.Log($"[Raid] t={_time:0} {RaidLog()}");
             Debug.Log($"[Bolts] t={_time:0} {BoltLog()}");
-            Debug.Log($"[WorldBoss] t={_time:0} {WorldBossLog()} gate={(_gate.IsOpen ? "open" : "shut")}/{_gate.Cost}");
+            Debug.Log($"[WorldBoss] t={_time:0} {WorldBossLog()} gate={(_gate.IsOpen ? "open" : "shut")}/{_gate.Cost} {_gate.Color} {LayerLog()}");
         }
     }
 }

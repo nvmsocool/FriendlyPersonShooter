@@ -57,7 +57,32 @@ namespace FriendlyPersonShooter.Core.Combat
         }
         public EffectSet Buffs { get; }
 
+        /// <summary>Vigor's shield (from heal overflow).</summary>
         public float Shield => Buffs.StrengthOf(EffectKind.Shield);
+
+        /// <summary>Ward's shield; absorbs damage after Vigor's.</summary>
+        public float Ward => Buffs.StrengthOf(EffectKind.Warded);
+
+        /// <summary>Both shields together.</summary>
+        public float TotalShield => Shield + Ward;
+
+        /// <summary>Multiply fire rate by this (Frenzy; 1 when not Frenzied).</summary>
+        public float FireRateMultiplier => 1f + Buffs.StrengthOf(EffectKind.Frenzied);
+
+        /// <summary>Divide reload time by this (Frenzy; 1 when not Frenzied).</summary>
+        public float ReloadSpeedMultiplier => 1f + Buffs.StrengthOf(EffectKind.Frenzied);
+
+        /// <summary>How much larger weak points are for this player's hits (Focus; 0 when not Focused).</summary>
+        public float WeakPointBonus => Buffs.StrengthOf(EffectKind.Focused);
+
+        /// <summary>Overdrive (Haste + Frenzy): shots use no ammo, so the gun never reloads.</summary>
+        public bool NoReload => Buffs.Has(EffectKind.Hasted) && Buffs.Has(EffectKind.Frenzied);
+
+        /// <summary>Deadeye (Might + Focus): weak-point hits deal 3x.</summary>
+        public bool IsDeadeye => Buffs.Has(EffectKind.Empower) && Buffs.Has(EffectKind.Focused);
+
+        /// <summary>Bastion (Vigor's shield + Ward): the Ward shield regenerates.</summary>
+        public bool IsBastion => Buffs.Has(EffectKind.Shield) && Buffs.Has(EffectKind.Warded);
 
         /// <summary>
         /// Fraction added to this player's shot damage by Empower (Might). Doubled (by default) while
@@ -140,6 +165,8 @@ namespace FriendlyPersonShooter.Core.Combat
             wentDown = false;
             if (amount <= 0f || IsDown) return 0f;
             float rest = amount - Buffs.DrainShield(amount);
+            // An emptied Ward stays (at 0) until it runs out, so Bastion can refill it.
+            rest -= Buffs.Drain(EffectKind.Warded, rest, false);
             float lost = Math.Min(rest, Health);
             Health -= lost;
             if (IsDown)
@@ -173,6 +200,7 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>Counts down buffs.</summary>
         public void Tick(float dt)
         {
+            if (IsBastion) Buffs.Restore(EffectKind.Warded, _settings.BastionRegen * dt, Buffs.SingleStrengthOf(EffectKind.Warded));
             Buffs.Tick(dt);
             if (!Buffs.Has(EffectKind.Relayed)) RelayHitsLeft = 0;
         }

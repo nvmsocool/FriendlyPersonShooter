@@ -23,9 +23,44 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>A Mite group is one swarm of this many Mites.</summary>
         public int MinMites { get; set; } = 8;
         public int MaxMites { get; set; } = 14;
+        public int MinSentinels { get; set; } = 1;
+        public int MaxSentinels { get; set; } = 1;
+        public int MinDivers { get; set; } = 1;
+        public int MaxDivers { get; set; } = 2;
+        /// <summary>Bulwarks come alone: one is a long fight.</summary>
+        public int MinBulwarks { get; set; } = 1;
+        public int MaxBulwarks { get; set; } = 1;
+        /// <summary>
+        /// Chance a group of a family that has an elite kind (see <see cref="Elites.For"/>) is led by an elite.
+        /// Rises with the layer (see <see cref="LayerSettings.EliteChance"/>).
+        /// </summary>
+        public float EliteChance { get; set; } = 0.06f;
 
-        public int MinCount(EnemyFamily f) => f == EnemyFamily.Wisp ? MinWisps : f == EnemyFamily.Skitter ? MinSkitters : MinMites;
-        public int MaxCount(EnemyFamily f) => f == EnemyFamily.Wisp ? MaxWisps : f == EnemyFamily.Skitter ? MaxSkitters : MaxMites;
+        public int MinCount(EnemyFamily f)
+        {
+            switch (f)
+            {
+                case EnemyFamily.Wisp: return MinWisps;
+                case EnemyFamily.Skitter: return MinSkitters;
+                case EnemyFamily.Sentinel: return MinSentinels;
+                case EnemyFamily.Diver: return MinDivers;
+                case EnemyFamily.Bulwark: return MinBulwarks;
+                default: return MinMites;
+            }
+        }
+
+        public int MaxCount(EnemyFamily f)
+        {
+            switch (f)
+            {
+                case EnemyFamily.Wisp: return MaxWisps;
+                case EnemyFamily.Skitter: return MaxSkitters;
+                case EnemyFamily.Sentinel: return MaxSentinels;
+                case EnemyFamily.Diver: return MaxDivers;
+                case EnemyFamily.Bulwark: return MaxBulwarks;
+                default: return MaxMites;
+            }
+        }
     }
 
     /// <summary>A group of enemies that should be alive at one spot for a stretch of time.</summary>
@@ -40,9 +75,13 @@ namespace FriendlyPersonShooter.Core.Expedition
         public readonly double End;
         public readonly long Wave;
         public readonly bool IsBloom;
+        /// <summary>The group is led by an elite of this kind (one of its <see cref="Count"/>), or None.</summary>
+        public readonly EliteKind Elite;
 
-        public SpawnEvent(MapPoint point, int spawnPointId, EnemyFamily family, int count, double start, double end, long wave, bool isBloom)
+        public SpawnEvent(MapPoint point, int spawnPointId, EnemyFamily family, int count, double start, double end, long wave, bool isBloom,
+            EliteKind elite = EliteKind.None)
         {
+            Elite = elite;
             Point = point;
             SpawnPointId = spawnPointId;
             Family = family;
@@ -55,7 +94,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         public ZoneCoord Zone => Point.Zone;
 
-        public override string ToString() => $"{Count} {Family} at {Point} {Start:0}-{End:0}s{(IsBloom ? " (bloom)" : "")}";
+        public override string ToString() => $"{Count} {Family}{(Elite != EliteKind.None ? $" ({Elite} elite)" : "")} at {Point} {Start:0}-{End:0}s{(IsBloom ? " (bloom)" : "")}";
     }
 
     /// <summary>
@@ -110,7 +149,10 @@ namespace FriendlyPersonShooter.Core.Expedition
                     SeedHash.Low(wave), SeedHash.High(wave)));
                 if (!random.Chance(_settings.ActiveShare)) continue;
                 int count = Count(point.Family, ref random);
-                result.Add(new SpawnEvent(point.Point, point.Id, point.Family, count, waveStart, waveEnd, wave, false));
+                // Rolled after the count so adding elites didn't move anything else.
+                var elite = Elites.For(point.Family);
+                if (elite != EliteKind.None && !random.Chance(_settings.EliteChance)) elite = EliteKind.None;
+                result.Add(new SpawnEvent(point.Point, point.Id, point.Family, count, waveStart, waveEnd, wave, false, elite));
             }
 
             if (_blooms == null) return;

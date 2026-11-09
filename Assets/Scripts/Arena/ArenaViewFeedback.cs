@@ -190,7 +190,9 @@ namespace FriendlyPersonShooter.Arena
                 case EnemyFamily.Wisp: return "A Wisp (yellow, flies)";
                 case EnemyFamily.Skitter: return "A Skitter (red, ground)";
                 case EnemyFamily.Mite: return "Mites (green swarm)";
-                case EnemyFamily.Bulwark: return "A boss";
+                case EnemyFamily.Sentinel: return "A Sentinel (blue pillar, shoots from afar)";
+                case EnemyFamily.Diver: return "A Diver (orange, dives from above)";
+                case EnemyFamily.Bulwark: return "A Bulwark or boss";
                 default: return f.ToString();
             }
         }
@@ -271,14 +273,15 @@ namespace FriendlyPersonShooter.Arena
                 {
                     var family = enemies[i].Family;
                     if (family == EnemyFamily.Glimmer) continue;
+                    bool boss = family == EnemyFamily.Bulwark && (enemies[i].World || enemies[i].Boss);
                     Vector3 p = Near(enemyAt[i].Position);
                     var o = new Vector2(p.x - feet.x, p.z - feet.z);
                     if (o.magnitude > ArenaHud.MapRange) continue;
-                    var color = family == EnemyFamily.Wisp ? new Color(1f, 0.88f, 0.3f)
-                        : family == EnemyFamily.Skitter ? new Color(1f, 0.35f, 0.3f)
-                        : family == EnemyFamily.Mite ? new Color(0.45f, 1f, 0.45f)
-                        : new Color(1f, 0.6f, 0.2f);
-                    float size = family == EnemyFamily.Bulwark ? 14f : family == EnemyFamily.Mite ? 5f : 8f;
+                    // Each in its essence color; bosses white.
+                    var color = Color.white;
+                    if (!boss) ColorUtility.TryParseHtmlString(EssencePack.Hex(Core.Expedition.EssenceColors.Of(family)), out color);
+                    float size = boss ? 14f : family == EnemyFamily.Bulwark ? 11f : family == EnemyFamily.Mite ? 5f
+                        : enemies[i].Elite != EliteKind.None ? 11f : 8f;
                     if (_hud.SetEnemyDot(enemyDot, true, new Vector2(Vector2.Dot(o, right), Vector2.Dot(o, forward)), color, size)) enemyDot++;
                 }
             }

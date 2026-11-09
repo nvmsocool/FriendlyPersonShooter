@@ -9,17 +9,17 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// </summary>
     public enum EssenceColor : byte
     {
-        /// <summary>Dropped by Wisps (flicking). The only color the MVP layer uses.</summary>
+        /// <summary>Dropped by Wisps (flicking).</summary>
         Yellow = 0,
         /// <summary>Dropped by Skitters (tracking).</summary>
         Red = 1,
         /// <summary>Dropped by Mite swarms (target switching).</summary>
         Green = 2,
-        /// <summary>Dropped by Sentinels (long-range precision). No family yet.</summary>
+        /// <summary>Dropped by Sentinels (long-range precision).</summary>
         Blue = 3,
-        /// <summary>Dropped by Bulwarks (timing). No family yet.</summary>
+        /// <summary>Dropped by Bulwarks (timing).</summary>
         Purple = 4,
-        /// <summary>Dropped by Divers (vertical tracking). No family yet.</summary>
+        /// <summary>Dropped by Divers (vertical tracking).</summary>
         Orange = 5,
     }
 
@@ -38,7 +38,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Every color, in enum order.</summary>
         public static IReadOnlyList<EssenceColor> All => AllColors;
 
-        /// <summary>The color a family drops: Wisp → Yellow, Skitter → Red, Mite → Green.</summary>
+        /// <summary>
+        /// The color a family drops: Wisp → Yellow, Skitter → Red, Mite → Green, Sentinel → Blue, Bulwark → Purple,
+        /// Diver → Orange.
+        /// </summary>
         public static EssenceColor Of(EnemyFamily family)
         {
             switch (family)
@@ -47,14 +50,13 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case EnemyFamily.Skitter: return EssenceColor.Red;
                 case EnemyFamily.Glimmer: return EssenceColor.Yellow;
                 case EnemyFamily.Bulwark: return EssenceColor.Purple;
+                case EnemyFamily.Sentinel: return EssenceColor.Blue;
+                case EnemyFamily.Diver: return EssenceColor.Orange;
                 default: return EssenceColor.Green;
             }
         }
 
-        /// <summary>
-        /// The family that drops a color. False for Blue, Purple and Orange until Sentinels,
-        /// Bulwarks and Divers are built.
-        /// </summary>
+        /// <summary>The family that drops a color (every color has one).</summary>
         public static bool TryGetFamily(EssenceColor color, out EnemyFamily family)
         {
             switch (color)
@@ -62,8 +64,14 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case EssenceColor.Yellow: family = EnemyFamily.Wisp; return true;
                 case EssenceColor.Red: family = EnemyFamily.Skitter; return true;
                 case EssenceColor.Green: family = EnemyFamily.Mite; return true;
+                case EssenceColor.Blue: family = EnemyFamily.Sentinel; return true;
+                case EssenceColor.Purple: family = EnemyFamily.Bulwark; return true;
+                case EssenceColor.Orange: family = EnemyFamily.Diver; return true;
                 default: family = default; return false;
             }
         }
+
+        /// <summary>A family's name in a sentence ("Mites", "Sentinels").</summary>
+        public static string Plural(EnemyFamily family) => family == EnemyFamily.Mite ? "Mites" : family + "s";
     }
 }

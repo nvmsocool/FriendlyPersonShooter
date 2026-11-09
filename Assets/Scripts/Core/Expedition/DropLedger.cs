@@ -20,6 +20,12 @@ namespace FriendlyPersonShooter.Core.Expedition
         public float SkitterDrop { get; set; } = 2f;
         /// <summary>Green per single Mite; a 12-Mite swarm is worth 3.</summary>
         public float MiteDrop { get; set; } = 0.25f;
+        /// <summary>Blue per Sentinel: it takes patience to catch its eye open.</summary>
+        public float SentinelDrop { get; set; } = 2f;
+        /// <summary>Purple per roaming Bulwark: a long fight, so a big drop.</summary>
+        public float BulwarkDrop { get; set; } = 4f;
+        /// <summary>Orange per Diver.</summary>
+        public float DiverDrop { get; set; } = 2f;
         /// <summary>
         /// Chance that a Glimmer kill drops one essence of a random color (among the colors enemies drop
         /// today): a small bonus for always having something to shoot, never a reliable source of any color.
@@ -39,8 +45,10 @@ namespace FriendlyPersonShooter.Core.Expedition
                 case EnemyFamily.Skitter: return SkitterDrop;
                 // Glimmers roll a chance at a random color instead (see GlimmerChance).
                 case EnemyFamily.Glimmer: return 0f;
-                // The raid boss pays out through the raid's clear reward instead.
-                case EnemyFamily.Bulwark: return 0f;
+                // Roaming Bulwarks only: raid bosses pay through the raid's clear reward (raids never pay essence).
+                case EnemyFamily.Bulwark: return BulwarkDrop;
+                case EnemyFamily.Sentinel: return SentinelDrop;
+                case EnemyFamily.Diver: return DiverDrop;
                 default: return MiteDrop;
             }
         }
@@ -88,8 +96,11 @@ namespace FriendlyPersonShooter.Core.Expedition
             _rng = new CombatRandom(seed == 0 ? 1u : seed);
         }
 
-        /// <summary>The colors a Glimmer can drop: those some enemy drops today.</summary>
-        private static readonly EssenceColor[] GlimmerColors = { EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green };
+        /// <summary>The colors a Glimmer can drop: any of the six.</summary>
+        private static readonly EssenceColor[] GlimmerColors =
+        {
+            EssenceColor.Yellow, EssenceColor.Red, EssenceColor.Green, EssenceColor.Blue, EssenceColor.Purple, EssenceColor.Orange,
+        };
 
         /// <summary>Notes that a player hit an enemy. Repeat hits by the same player count once.</summary>
         public void RecordHit(int enemyId, int playerId)
@@ -138,7 +149,13 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// The enemy died: returns what each hitter earns and forgets the enemy. A player whose share
         /// is still a fraction below 1 is left out until a later kill tops it up.
         /// </summary>
-        public IReadOnlyList<EssenceAward> Killed(int enemyId, EnemyFamily family)
+        public IReadOnlyList<EssenceAward> Killed(int enemyId, EnemyFamily family) => Killed(enemyId, family, EliteKind.None);
+
+        /// <summary>
+        /// As above for an elite: <see cref="Elites.DropMultiplier"/> times the main color, plus
+        /// <see cref="Elites.SecondDrop"/> of the second family's color.
+        /// </summary>
+        public IReadOnlyList<EssenceAward> Killed(int enemyId, EnemyFamily family, EliteKind elite)
         {
             var awards = new List<EssenceAward>();
             if (!_hitters.TryGetValue(enemyId, out var list)) return awards;
@@ -156,9 +173,10 @@ namespace FriendlyPersonShooter.Core.Expedition
             }
 
             var color = EssenceColors.Of(family);
-            float drop = _settings.DropFor(family);
+            float drop = _settings.DropFor(family) * (elite != EliteKind.None ? Elites.DropMultiplier : 1f);
             foreach (int player in list)
             {
+                if (elite != EliteKind.None) awards.Add(new EssenceAward(player, EssenceColors.Of(Elites.Second(elite)), Elites.SecondDrop));
                 var key = (player, color);
                 _fractions.TryGetValue(key, out float owed);
                 owed += drop;

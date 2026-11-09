@@ -8,10 +8,11 @@ namespace FriendlyPersonShooter.Core.Expedition
     public sealed class RaidSettings
     {
         /// <summary>
-        /// The key: two colors, so one player rarely has the mix and groups pool. Red and Green, so it
-        /// never competes with the Yellow gate. About 10 Skitters and 4 Mite swarms for one player.
+        /// The key: three colors, so one player rarely has the mix and groups pool. Blue, Purple and Green, so it never
+        /// competes with the Yellow gate. About 6 Sentinels, 2 Bulwarks and 4 Mite swarms for one player.
         /// </summary>
-        public int RedCost { get; set; } = 20;
+        public int BlueCost { get; set; } = 12;
+        public int PurpleCost { get; set; } = 8;
         public int GreenCost { get; set; } = 12;
         /// <summary>Stand this close to the door to pledge, to start the countdown (E), and to be counted in.</summary>
         public float UseRadius { get; set; } = 7f;
@@ -22,16 +23,19 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>Seconds after a run before the door takes pledges again.</summary>
         public float ResetSeconds { get; set; } = 20f;
         public int MaxPlayers { get; set; } = 8;
-        /// <summary>Clear reward for everyone still in the raid: XP (one level) and some Yellow toward the gate.</summary>
+        /// <summary>Clear reward for everyone still in the raid: XP (one level), plus an item. Raids never pay essence.</summary>
         public int ClearXp { get; set; } = 300;
-        public int ClearYellow { get; set; } = 10;
         /// <summary>
         /// After the boss dies, the raiders can stay up there this long (seconds) before the door sends whoever
         /// is left home. Each one leaves sooner through the exit portal.
         /// </summary>
         public float VictorySeconds { get; set; } = 300f;
 
-        public int Cost(EssenceColor color) => color == EssenceColor.Red ? RedCost : color == EssenceColor.Green ? GreenCost : 0;
+        public int Cost(EssenceColor color) =>
+            color == EssenceColor.Blue ? BlueCost : color == EssenceColor.Purple ? PurpleCost : color == EssenceColor.Green ? GreenCost : 0;
+
+        /// <summary>All three costs together.</summary>
+        public int TotalCost => BlueCost + PurpleCost + GreenCost;
     }
 
     public enum RaidPhase : byte
@@ -68,7 +72,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// A raid door (MVP step 6). Players standing at it pledge Red and Green essence toward its key,
+    /// A raid door (MVP step 6). Players standing at it pledge Blue, Purple and Green essence toward its key,
     /// carried first, then from their party bank; strangers pool into the same key. Once the key is
     /// full, anyone at the door can press E to start a short countdown (<see cref="Begin"/>), so the
     /// group decides when it is ready; whoever is standing at the door when it ends goes in together
@@ -77,7 +81,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// </summary>
     public sealed class RaidDoor
     {
-        public static readonly EssenceColor[] KeyColors = { EssenceColor.Red, EssenceColor.Green };
+        public static readonly EssenceColor[] KeyColors = { EssenceColor.Blue, EssenceColor.Purple, EssenceColor.Green };
 
         private readonly EssenceAmounts _pledged = new EssenceAmounts();
         private readonly List<int> _participants = new List<int>();
@@ -235,6 +239,51 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
     }
 
+    /// <summary>
+    /// Which of a layer's raid doors is open. One at a time: clearing its raid spends it (it goes dark) and opens
+    /// the next one that hasn't been cleared. Once every door is spent they all come back, except the one just cleared.
+    /// </summary>
+    public sealed class RaidDoorRotation
+    {
+        private ulong _spent;
+
+        public RaidDoorRotation(int count)
+        {
+            if (count < 1 || count > 64) throw new ArgumentOutOfRangeException(nameof(count));
+            Count = count;
+        }
+
+        public int Count { get; }
+        /// <summary>The open door.</summary>
+        public int Active { get; private set; }
+        /// <summary>Spent doors as bits (bit i = door i).</summary>
+        public ulong SpentMask => _spent;
+
+        public bool IsSpent(int door) => (_spent & (1UL << door)) != 0;
+
+        /// <summary>The open door's raid was cleared: it goes dark and the next door opens. Returns the new open door.</summary>
+        public int Cleared()
+        {
+            int cleared = Active;
+            _spent |= 1UL << cleared;
+            if (Count == 1)
+            {
+                _spent = 0;
+                return Active;
+            }
+            ulong all = Count == 64 ? ulong.MaxValue : (1UL << Count) - 1;
+            if ((_spent & all) == all) _spent = 1UL << cleared;
+            for (int step = 1; step <= Count; step++)
+            {
+                int next = (cleared + step) % Count;
+                if (IsSpent(next)) continue;
+                Active = next;
+                break;
+            }
+            return Active;
+        }
+    }
+
     /// <summary>Where a layer's raid door stands: by a shrine near the start, on open ground away from the world's wrap seam.</summary>
     public static class RaidSite
     {
@@ -264,6 +313,44 @@ namespace FriendlyPersonShooter.Core.Expedition
             // No shrine fits: a spot a little way from the start (wrapped into the world).
             return map.Locate(start + new Vector2(MinFromStart, 0f)).World;
         }
+
+        /// <summary>How many raid doors a layer has (fewer if it lacks shrines to put them by).</summary>
+        public const int DoorCount = 4;
+
+        /// <summary>
+        /// The layer's raid doors: the first is <see cref="DoorFor"/> (near the start, and the raid platforms float
+        /// above it); each next one is by the shrine farthest from the doors already placed, so they spread out.
+        /// </summary>
+        public static IReadOnlyList<Vector2> DoorsFor(LayerMap map, int count = DoorCount)
+        {
+            var doors = new List<Vector2> { DoorFor(map) };
+            var spots = new List<Vector2>();
+            foreach (var s in map.Shrines)
+            {
+                var door = s.Point.World + new Vector2(ShrineOffset, 0f);
+                if (ClearOfSeam(map, door)) spots.Add(door);
+            }
+            while (doors.Count < count)
+            {
+                int best = -1;
+                float bestDistance = MinApart;
+                for (int i = 0; i < spots.Count; i++)
+                {
+                    float nearest = float.MaxValue;
+                    foreach (var d in doors) nearest = Math.Min(nearest, map.Distance(spots[i], d));
+                    if (nearest <= bestDistance) continue;
+                    bestDistance = nearest;
+                    best = i;
+                }
+                if (best < 0) break;
+                doors.Add(spots[best]);
+                spots.RemoveAt(best);
+            }
+            return doors;
+        }
+
+        /// <summary>Two doors stand at least this far apart.</summary>
+        public const float MinApart = 150f;
 
         /// <summary>True when everything within <see cref="EdgeMargin"/> of the spot is on the same side of the wrap seam.</summary>
         public static bool ClearOfSeam(LayerMap map, Vector2 spot)

@@ -66,14 +66,17 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void PlaytestLayer_SpawnsAllThreeFamilies()
+        public void PlaytestLayer_SpawnsEveryFamily()
         {
             var families = new HashSet<EnemyFamily>();
             foreach (var z in Map.Zones)
             {
                 foreach (var p in z.SpawnPoints) families.Add(p.Family);
             }
-            Assert.That(families, Is.EquivalentTo(new[] { EnemyFamily.Wisp, EnemyFamily.Skitter, EnemyFamily.Mite }));
+            Assert.That(families, Is.EquivalentTo(new[]
+            {
+                EnemyFamily.Wisp, EnemyFamily.Skitter, EnemyFamily.Mite, EnemyFamily.Sentinel, EnemyFamily.Bulwark, EnemyFamily.Diver,
+            }));
         }
     }
 }

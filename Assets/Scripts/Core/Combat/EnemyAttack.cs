@@ -35,11 +35,29 @@ namespace FriendlyPersonShooter.Core.Combat
             BoltSpeed = 22f, BoltRadius = 0.7f,
         };
 
+        /// <summary>The Sentinel: a long look (its eye is open the whole wind-up), then a fast bolt from far away.</summary>
+        public static EnemyAttackSettings ForSentinel() => new EnemyAttackSettings
+        {
+            Range = 55f, Damage = 12f, TelegraphTime = new SentinelSettings().EyeOpenTime, MinCooldown = 3.2f, MaxCooldown = 4.8f,
+            BoltSpeed = 30f, BoltRadius = 0.3f,
+        };
+
+        /// <summary>A Bulwark roaming the world: a slow, heavy bolt at short range.</summary>
+        public static EnemyAttackSettings ForWorldBulwark() => new EnemyAttackSettings
+        {
+            Range = 25f, Damage = 12f, TelegraphTime = 1f, MinCooldown = 3f, MaxCooldown = 4.5f, BoltSpeed = 15f, BoltRadius = 0.5f,
+        };
+
+        /// <summary>Divers attack by diving (see <see cref="DiverBehavior"/>), not with this.</summary>
+        public static EnemyAttackSettings ForDiver() => ForGlimmer();
+
         public static EnemyAttackSettings For(EnemyFamily family)
         {
             switch (family)
             {
                 case EnemyFamily.Wisp: return ForWisp();
+                case EnemyFamily.Sentinel: return ForSentinel();
+                case EnemyFamily.Diver: return ForDiver();
                 case EnemyFamily.Bulwark: return ForBulwark();
                 case EnemyFamily.Skitter: return ForSkitter();
                 case EnemyFamily.Glimmer: return ForGlimmer();

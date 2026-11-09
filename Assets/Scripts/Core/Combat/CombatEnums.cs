@@ -2,14 +2,19 @@ namespace FriendlyPersonShooter.Core.Combat
 {
     /// <summary>
     /// What a gun's bullets carry. Each payload buffs a player it hits and debuffs an enemy it hits.
-    /// Values are fixed so they can be sent over the network; Frenzy, Ward and Focus come later.
+    /// Values are fixed so they can be sent over the network.
     /// </summary>
     public enum PayloadKind : byte
     {
         Vigor = 0,
         Might = 1,
         Haste = 2,
-        // Frenzy = 3, Ward = 4, Focus = 5 (not built yet)
+        /// <summary>Allies fire and reload faster; enemies are Jammed (attack less often).</summary>
+        Frenzy = 3,
+        /// <summary>Allies get a damage shield; enemies turn Brittle (armor and shells weaken).</summary>
+        Ward = 4,
+        /// <summary>Allies get larger weak points on their own hits; enemies are Marked (weak points grow for everyone).</summary>
+        Focus = 5,
         Relay = 6,
         /// <summary>A gun with an empty payload slot: damages enemies, heals allies a tiny bit, starts no chains.</summary>
         None = 7,
@@ -24,6 +29,12 @@ namespace FriendlyPersonShooter.Core.Combat
         Empower = 1,
         /// <summary>Player buff from Haste. Strength is a move-speed bonus fraction (0.3 = +30%); jumps grow in proportion.</summary>
         Hasted = 2,
+        /// <summary>Player buff from Frenzy. Strength is a fire-rate and reload-speed bonus fraction (0.3 = 30% faster).</summary>
+        Frenzied = 3,
+        /// <summary>Player buff from Ward. Strength is shield points; absorbs damage after Vigor's shield.</summary>
+        Warded = 4,
+        /// <summary>Player buff from Focus. Strength is how much larger weak points are for this player's hits (0.35 = +35% radius).</summary>
+        Focused = 5,
         /// <summary>
         /// Player buff from Relay: the player's next few hits also carry the relayer's payload and
         /// count as a chain link. Strength is unused (1); the carried payload and hits left live on
@@ -36,6 +47,12 @@ namespace FriendlyPersonShooter.Core.Combat
         Expose = 65,
         /// <summary>Enemy debuff from Haste. Strength is the share of speed lost (0.35 = moves and turns 35% slower).</summary>
         Slow = 66,
+        /// <summary>Enemy debuff from Frenzy. Strength is how much slower its attacks come (0.6 = its attack clock runs at 1/1.6).</summary>
+        Jam = 67,
+        /// <summary>Enemy debuff from Ward. Strength is the share of its armor that stops working (0.5 = half way to full damage).</summary>
+        Brittle = 68,
+        /// <summary>Enemy debuff from Focus. Strength is how much larger its weak points are for everyone (0.4 = +40% radius).</summary>
+        Mark = 69,
         /// <summary>Enemy debuff from Relay. Strength is the share of each hit's damage that splashes to nearby enemies.</summary>
         Tag = 70,
         /// <summary>No effect (a hit without a payload).</summary>
@@ -50,7 +67,7 @@ namespace FriendlyPersonShooter.Core.Combat
         NoOne = 2,
     }
 
-    /// <summary>The enemy families in the MVP arena.</summary>
+    /// <summary>The enemy families. Each trains one aim skill and drops one essence color.</summary>
     public enum EnemyFamily : byte
     {
         Wisp = 0,
@@ -58,8 +75,15 @@ namespace FriendlyPersonShooter.Core.Combat
         Mite = 2,
         /// <summary>A small, short-lived target that pops up near players: one shot, a little Yellow, no attack.</summary>
         Glimmer = 3,
-        /// <summary>The raid boss: an armored shell whose weak plate opens on a rhythm and turns (see <see cref="BulwarkBehavior"/>).</summary>
+        /// <summary>
+        /// An armored shell whose weak plate opens on a rhythm and turns (see <see cref="BulwarkBehavior"/>): the raid
+        /// boss, and a smaller kind that roams the world (timing and patience; Purple).
+        /// </summary>
         Bulwark = 4,
+        /// <summary>Stands far off and opens a head-sized eye briefly before firing (long-range precision; Blue). See <see cref="SentinelBehavior"/>.</summary>
+        Sentinel = 5,
+        /// <summary>Circles overhead, then dives at a player (vertical tracking; Orange). See <see cref="DiverBehavior"/>.</summary>
+        Diver = 6,
     }
 
     /// <summary>What happened when an effect was offered to a set of slots.</summary>
@@ -107,6 +131,16 @@ namespace FriendlyPersonShooter.Core.Combat
         Plague = 1,
         /// <summary>Haste + Might on a player: their Empower damage bonus counts double.</summary>
         Blitz = 2,
+        /// <summary>Haste + Frenzy on a player: their shots use no ammo (no reloads) while both last.</summary>
+        Overdrive = 4,
+        /// <summary>Might + Focus on a player: their weak-point hits deal 3x instead of the normal bonus.</summary>
+        Deadeye = 8,
+        /// <summary>Vigor (its shield) + Ward on a player: the Ward shield regenerates while both last.</summary>
+        Bastion = 16,
+        /// <summary>Slow + Mark on an enemy: it freezes for a moment when the combo forms.</summary>
+        Pinned = 32,
+        /// <summary>Expose + Brittle on an enemy: its armor and shell break outright (every hit does full damage).</summary>
+        Shatter = 64,
     }
 
     /// <summary>Maps payloads to the effect they put on an ally or an enemy.</summary>
@@ -119,6 +153,9 @@ namespace FriendlyPersonShooter.Core.Combat
             {
                 case PayloadKind.Vigor: return EffectKind.Shield;
                 case PayloadKind.Haste: return EffectKind.Hasted;
+                case PayloadKind.Frenzy: return EffectKind.Frenzied;
+                case PayloadKind.Ward: return EffectKind.Warded;
+                case PayloadKind.Focus: return EffectKind.Focused;
                 case PayloadKind.Relay: return EffectKind.Relayed;
                 case PayloadKind.None: return EffectKind.None;
                 default: return EffectKind.Empower;
@@ -132,6 +169,9 @@ namespace FriendlyPersonShooter.Core.Combat
             {
                 case PayloadKind.Vigor: return EffectKind.Wither;
                 case PayloadKind.Haste: return EffectKind.Slow;
+                case PayloadKind.Frenzy: return EffectKind.Jam;
+                case PayloadKind.Ward: return EffectKind.Brittle;
+                case PayloadKind.Focus: return EffectKind.Mark;
                 case PayloadKind.Relay: return EffectKind.Tag;
                 case PayloadKind.None: return EffectKind.None;
                 default: return EffectKind.Expose;

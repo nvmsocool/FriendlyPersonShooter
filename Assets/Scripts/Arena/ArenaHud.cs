@@ -395,6 +395,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return new Color(0.4f, 1f, 0.55f);
                 case PayloadKind.Haste: return new Color(0.4f, 0.85f, 1f);
                 case PayloadKind.Relay: return new Color(0.85f, 0.55f, 1f);
+                case PayloadKind.Frenzy: return new Color(1f, 0.35f, 0.6f);
+                case PayloadKind.Ward: return new Color(0.82f, 0.9f, 1f);
+                case PayloadKind.Focus: return new Color(1f, 0.9f, 0.3f);
                 case PayloadKind.None: return new Color(0.75f, 0.75f, 0.75f);
                 default: return new Color(1f, 0.6f, 0.3f);
             }
@@ -408,6 +411,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return "Allies: heal + shield     Enemies: wither";
                 case PayloadKind.Haste: return "Allies: +30% speed, +20% jump     Enemies: slow";
                 case PayloadKind.Relay: return "Allies: next 5 hits carry your other payload     Enemies: tag (splash)";
+                case PayloadKind.Frenzy: return "Allies: +30% fire rate and reload speed     Enemies: jam (attack less)";
+                case PayloadKind.Ward: return "Allies: 20-point shield     Enemies: brittle (armor weakens)";
+                case PayloadKind.Focus: return "Allies: bigger weak points for them     Enemies: mark (weak points grow for all)";
                 case PayloadKind.None: return "No payload: damages enemies, heals allies a tiny bit. Find a payload mod to add one.";
                 default: return "Allies: +damage     Enemies: expose";
             }

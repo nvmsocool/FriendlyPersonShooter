@@ -46,7 +46,7 @@ namespace FriendlyPersonShooter.Arena
         private void DoorPress(float3 pos, in ExpeditionStatus s, ref ArenaInput input)
         {
             bool ready = !s.InRaid && s.RaidPhase == RaidPhase.Collecting &&
-                         s.KeyRed >= DoorRules.RedCost && s.KeyGreen >= DoorRules.GreenCost;
+                         RaidKey.Full(s.Key);
             if (!ready)
             {
                 _doorReadySince = -1.0;

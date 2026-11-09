@@ -51,6 +51,7 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<(PlayerState State, float3 Feet)> _interacts = new List<(PlayerState, float3)>();
         private readonly LootBoxLedger _boxLedger = new LootBoxLedger();
         private IReadOnlyList<LootBox> _boxes;
+        private int _boxesLayer;
         private readonly Dictionary<int, Entity> _connections = new Dictionary<int, Entity>();
         private int _boxesOpened, _itemsTaken, _blastCount, _ricochets;
         /// <summary>Playtest tuning numbers (humans only), logged as a [Guns] line.</summary>
@@ -108,6 +109,14 @@ namespace FriendlyPersonShooter.Arena
             int index = request.Index;
             if (index >= s.Choices.Length) return;
             var item = s.Choices[index];
+            if (s.Pick == PickKind.Reward)
+            {
+                ClosePick(s);
+                var feet = new float3(s.Position.X, s.Position.Y, s.Position.Z);
+                if (!Take(s, item, feet, ecb)) SpawnItem(item, s.Vitals.Id, ExpeditionWorld.Wrap(feet + new float3(0f, 1.1f, 0f)), PersonalItemLife);
+                UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked boss reward {item}");
+                return;
+            }
             if (s.Pick == PickKind.Start)
             {
                 ClosePick(s);
@@ -131,12 +140,16 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        /// <summary>A box pick closes if its player goes down or walks away from the box.</summary>
+        /// <summary>
+        /// A box pick closes if its player goes down or walks away from the box. A waiting boss reward opens once
+        /// no other pick is open.
+        /// </summary>
         private void StepPicks()
         {
             foreach (var kv in _players)
             {
                 var s = kv.Value;
+                if (s.Pick == PickKind.None && s.Rewards.Count > 0 && s.Loadout != null) OpenPick(s, PickKind.Reward, s.Rewards.Dequeue());
                 if (s.Pick != PickKind.Box) continue;
                 var pos = new float3(s.Position.X, s.Position.Y, s.Position.Z);
                 if (s.Vitals.IsDown || math.distancesq(ExpeditionWorld.Near(s.PickAt, pos), pos) > BoxPickRange * BoxPickRange) ClosePick(s);
@@ -217,8 +230,10 @@ namespace FriendlyPersonShooter.Arena
                 if (stats == null) continue;
                 int ranks = shooter.Progress.PackedRanks;
                 bool trigger = input.ValueRO.Fire != 0 && !shooter.Vitals.IsDown;
+                // Frenzy speeds fire and reload; Overdrive (Haste + Frenzy) stops ammo running down.
                 int shots = FireControl.Step(ref shooter.Guns[slot], stats, _time, trigger, input.ValueRO.Reload.IsSet,
-                    PlayerProgress.FireRateFor(ranks));
+                    PlayerProgress.FireRateFor(ranks) * shooter.Vitals.FireRateMultiplier, shooter.Vitals.ReloadSpeedMultiplier,
+                    shooter.Vitals.NoReload);
                 if (shots <= 0) continue;
                 _shots += shots;
                 if (!shooter.BotKit) _usage.Shots(stats.Frame.Kind, shots);
@@ -418,13 +433,20 @@ namespace FriendlyPersonShooter.Arena
             if (enemy.Family == EnemyFamily.Bulwark && enemy.WorldBoss)
             {
                 // The Colossus: armored everywhere until a slam stuns it; then its core is a weak point.
-                baseDamage *= enemy.Colossus.DamageMultiplier(_colossus);
+                baseDamage *= enemy.Vitals.Armor(enemy.Colossus.DamageMultiplier(_colossus));
                 weakPoint = weakPoint && enemy.Colossus.Exposed;
+            }
+            else if (enemy.Family == EnemyFamily.Sentinel)
+            {
+                // Armored all over but for its eye, and the eye only counts while it is open.
+                enemy.Sentinel.HitOutcome(weakPoint, SentinelOf(enemy), out float armor, out weakPoint);
+                baseDamage *= enemy.Vitals.Armor(armor);
             }
             else if (enemy.Family == EnemyFamily.Bulwark)
             {
-                enemy.Boss.HitOutcome(weakPoint, _bulwark, out float armor, out weakPoint);
-                baseDamage *= armor;
+                enemy.Boss.HitOutcome(weakPoint, BulwarkOf(enemy), out float armor, out weakPoint);
+                // Brittle weakens the shell; Shatter breaks it.
+                baseDamage *= enemy.Vitals.Armor(armor);
                 // The Weaver's threads shield it.
                 if (enemy.Raid && _run?.Weaver != null) baseDamage *= _run.Weaver.DamageMultiplier;
             }
@@ -529,7 +551,11 @@ namespace FriendlyPersonShooter.Arena
             }
             StepPicks();
 
-            if (ExpeditionWorld.Active && _boxes == null) _boxes = LootBoxSites.For(ExpeditionWorld.Map);
+            if (ExpeditionWorld.Active && (_boxes == null || _boxesLayer != ExpeditionWorld.Layer))
+            {
+                _boxesLayer = ExpeditionWorld.Layer;
+                _boxes = LootBoxSites.For(ExpeditionWorld.Map, _boxesLayer);
+            }
 
             _itemScratch.Clear();
             foreach (var kv in _items) if (_time >= kv.Value.Expires) _itemScratch.Add(kv.Key);
@@ -635,11 +661,14 @@ namespace FriendlyPersonShooter.Arena
             _items[e] = new GroundItem { Item = item, Owner = owner, Expires = _time + life, Position = position };
         }
 
-        /// <summary>Raid clear: a rare-or-better item for this raider, at their feet.</summary>
-        private void GiveBossLoot(int playerId, float3 at, EntityCommandBuffer ecb)
+        /// <summary>
+        /// Raid clear or world boss: three rare-or-better items for this player to pick one from, on the same pick
+        /// screen as boxes (it opens once no other pick is open). Bots keep their role's kit.
+        /// </summary>
+        private void GiveBossLoot(int playerId)
         {
-            var item = LootRolls.Roll(LootSource.Boss, SeedHash.Of(_lootSeed, 0xB055, playerId, (int)NextSeed()));
-            SpawnItem(item, playerId, at + new float3(1.2f, 0.6f, 0f), PersonalItemLife);
+            if (!_playerById.TryGetValue(playerId, out var e) || !_players.TryGetValue(e, out var s) || s.BotKit) return;
+            s.Rewards.Enqueue(LootRolls.BossChoices(SeedHash.Of(_lootSeed, 0xB055, playerId, (int)NextSeed())));
         }
     }
 }

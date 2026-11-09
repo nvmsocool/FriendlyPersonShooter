@@ -251,6 +251,9 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Might: return "allies: +damage\nenemies: expose";
                 case PayloadKind.Haste: return "allies: +speed, +jump\nenemies: slow";
                 case PayloadKind.Relay: return "allies: their hits carry Might\nenemies: hits splash";
+                case PayloadKind.Frenzy: return "allies: fire + reload faster\nenemies: attack less";
+                case PayloadKind.Ward: return "allies: damage shield\nenemies: armor weakens";
+                case PayloadKind.Focus: return "allies: bigger weak points\nenemies: weak points grow";
                 default: return "";
             }
         }
@@ -303,6 +306,7 @@ namespace FriendlyPersonShooter.Arena
 
             PickFrame = Time.frameCount;
             bool box = loadout.Pick == PickKind.Box;
+            bool reward = loadout.Pick == PickKind.Reward;
             _pickSerial = loadout.PickSerial;
             _pickLeave.SetActive(box);
             var keyboard = Keyboard.current;
@@ -311,13 +315,16 @@ namespace FriendlyPersonShooter.Arena
                 Pick(PickRequest.Leave);
                 return false;
             }
-            _pickTitle.text = box ? "LOOT BOX: PICK ONE" : "PICK YOUR STARTING GUN";
+            _pickTitle.text = box ? "LOOT BOX: PICK ONE" : reward ? "BOSS REWARD: PICK ONE" : "PICK YOUR STARTING GUN";
             _pickSub.text = box
                 ? "Take one of the three. Walk away or leave it and the box stays shut, with the same three inside."
+                : reward
+                ? "You earned it: take one of the three, rare or better."
                 : "Each comes with a payload: shoot allies to buff them, enemies to weaken them. You'll find more guns and mods in loot boxes.";
             var choices = new[] { loadout.Choice0, loadout.Choice1, loadout.Choice2 };
             // A box card shows what it would swap out, which changes with the loadout.
-            ulong kit = loadout.GunA ^ (loadout.GunB * 31) ^ loadout.Active ^ (box ? 1UL << 40 : 0);
+            bool items = box || reward;
+            ulong kit = loadout.GunA ^ (loadout.GunB * 31) ^ loadout.Active ^ (items ? 1UL << 40 : 0);
             for (int i = 0; i < _pickLabels.Length; i++)
             {
                 var card = _pickLabels[i].transform.parent.gameObject;
@@ -325,7 +332,7 @@ namespace FriendlyPersonShooter.Arena
                 if (choices[i] == 0 || (choices[i] == _pickShown[i] && kit == _pickKit)) continue;
                 _pickShown[i] = choices[i];
                 var item = LootItem.Unpack(choices[i]);
-                if (box)
+                if (items)
                 {
                     _pickStripes[i].color = ArenaView.ItemTierColor(item);
                     _pickLabels[i].text = ArenaView.BoxCard(loadout, item);

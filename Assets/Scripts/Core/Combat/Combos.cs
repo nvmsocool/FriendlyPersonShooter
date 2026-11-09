@@ -17,6 +17,11 @@ namespace FriendlyPersonShooter.Core.Combat
     /// The combos and which effects make them:
     /// - Plague: Wither + Tag on an enemy. Its Wither spreads to nearby enemies (see <see cref="Plague"/>).
     /// - Blitz: Haste + Might on a player. Their Empower bonus counts double (see <see cref="PlayerVitals.DamageBonus"/>).
+    /// - Overdrive: Haste + Frenzy on a player. Their shots use no ammo (see <see cref="PlayerVitals.NoReload"/>).
+    /// - Deadeye: Might + Focus on a player. Their weak-point hits deal 3x (see <see cref="HitResolver.EnemyDamage(PlayerVitals, EnemyVitals, float, bool)"/>).
+    /// - Bastion: Vigor (its shield) + Ward on a player. The Ward shield regenerates (see <see cref="PlayerVitals.Tick"/>).
+    /// - Pinned: Slow + Mark on an enemy. It freezes for a moment when the combo forms (see <see cref="EnemyVitals.IsFrozen"/>).
+    /// - Shatter: Expose + Brittle on an enemy. Armor stops working (see <see cref="EnemyVitals.Armor"/>).
     /// </summary>
     public static class Combos
     {
@@ -25,6 +30,9 @@ namespace FriendlyPersonShooter.Core.Combat
         {
             var c = ComboKind.None;
             if (buffs.Has(EffectKind.Hasted) && buffs.Has(EffectKind.Empower)) c |= ComboKind.Blitz;
+            if (buffs.Has(EffectKind.Hasted) && buffs.Has(EffectKind.Frenzied)) c |= ComboKind.Overdrive;
+            if (buffs.Has(EffectKind.Empower) && buffs.Has(EffectKind.Focused)) c |= ComboKind.Deadeye;
+            if (buffs.Has(EffectKind.Shield) && buffs.Has(EffectKind.Warded)) c |= ComboKind.Bastion;
             return c;
         }
 
@@ -33,6 +41,8 @@ namespace FriendlyPersonShooter.Core.Combat
         {
             var c = ComboKind.None;
             if (debuffs.Has(EffectKind.Wither) && debuffs.Has(EffectKind.Tag)) c |= ComboKind.Plague;
+            if (debuffs.Has(EffectKind.Slow) && debuffs.Has(EffectKind.Mark)) c |= ComboKind.Pinned;
+            if (debuffs.Has(EffectKind.Expose) && debuffs.Has(EffectKind.Brittle)) c |= ComboKind.Shatter;
             return c;
         }
     }
@@ -46,7 +56,10 @@ namespace FriendlyPersonShooter.Core.Combat
     /// </summary>
     public sealed class ComboTracker
     {
-        private static readonly ComboKind[] AllKinds = { ComboKind.Plague, ComboKind.Blitz };
+        public static readonly ComboKind[] AllKinds =
+        {
+            ComboKind.Plague, ComboKind.Blitz, ComboKind.Overdrive, ComboKind.Deadeye, ComboKind.Bastion, ComboKind.Pinned, ComboKind.Shatter,
+        };
 
         private readonly Dictionary<long, ComboKind> _active = new Dictionary<long, ComboKind>();
 

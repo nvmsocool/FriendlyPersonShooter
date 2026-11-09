@@ -159,7 +159,8 @@ namespace FriendlyPersonShooter.Core.Tests
 
             settings.OffBiasWeight = 0.1f;
             w = LayerGenerator.FamilyWeights(settings, new ZoneColorBias(EssenceColor.Yellow));
-            Assert.That(w[(int)EnemyFamily.Wisp], Is.EqualTo(1f / 1.2f).Within(1e-5));
+            // Yellow at 1, the palette's five other colors at 0.1 each.
+            Assert.That(w[(int)EnemyFamily.Wisp], Is.EqualTo(1f / 1.5f).Within(1e-5));
             Assert.That(w.Sum(), Is.EqualTo(1f).Within(1e-5));
         }
 
@@ -174,7 +175,8 @@ namespace FriendlyPersonShooter.Core.Tests
                 matching += z.SpawnPoints.Count(p => p.Family == family);
                 total += z.SpawnPoints.Count;
             }
-            Assert.That(matching / (double)total, Is.GreaterThan(0.85));
+            // The main color has weight 1 and the five others 0.05 each: 80% on average.
+            Assert.That(matching / (double)total, Is.GreaterThan(0.75));
         }
 
         [Test]

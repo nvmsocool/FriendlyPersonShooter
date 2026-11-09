@@ -10,16 +10,20 @@ namespace FriendlyPersonShooter.Arena
     [GhostComponent(OwnerSendType = SendToOwnerType.SendToOwner)]
     public struct ExpeditionStatus : IComponentData
     {
-        /// <summary>The gate's color (Yellow): carried, and in the party bank.</summary>
+        /// <summary>The gate's color (<see cref="GoalColor"/>): carried, and in the party bank.</summary>
         [GhostField] public int Carried;
         [GhostField] public int Banked;
-        /// <summary>The raid key's colors, carried and banked.</summary>
-        [GhostField] public int CarriedRed;
-        [GhostField] public int BankedRed;
-        [GhostField] public int CarriedGreen;
-        [GhostField] public int BankedGreen;
-        /// <summary>Essence the gate costs.</summary>
+        /// <summary>Every color, carried and banked, packed (see <see cref="EssencePack"/>).</summary>
+        [GhostField] public ulong CarriedAll;
+        [GhostField] public ulong BankedAll;
+        /// <summary>Essence the gate costs, and its color.</summary>
         [GhostField] public int Goal;
+        [GhostField] public EssenceColor GoalColor;
+        /// <summary>The layer everyone is on (1 = the top). Clients build that layer's map from it.</summary>
+        [GhostField] public byte Layer;
+        /// <summary>Changing layer: seconds until everyone moves (0 = not changing), and to which layer.</summary>
+        [GhostField(Quantization = 10)] public float LayerCountdown;
+        [GhostField] public byte LayerNext;
         [GhostField] public ExpeditionPhase Phase;
         [GhostField] public bool HasTarget;
         /// <summary>Where the current objective is (world x, z).</summary>
@@ -36,9 +40,12 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Raid door (MVP step 6): its phase, the key so far, and the countdown or time left.</summary>
         [GhostField] public Core.Expedition.RaidPhase RaidPhase;
         [GhostField] public bool InRaid;
-        [GhostField] public int KeyRed;
-        [GhostField] public int KeyGreen;
+        /// <summary>Essence pledged to the raid key so far, packed per color (see <see cref="EssencePack"/>).</summary>
+        [GhostField] public ulong Key;
         [GhostField(Quantization = 10)] public float RaidTimer;
+        /// <summary>The open raid door (index into ExpeditionWorld.RaidDoors), and the spent ones as bits.</summary>
+        [GhostField] public byte RaidDoorIndex;
+        [GhostField] public byte RaidDoorsSpent;
 
         /// <summary>
         /// Inside a raid run: the stage (0-based; StageCount - 1 is the boss), the room, the run's modifier,
@@ -70,6 +77,95 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public bool WorldBoss;
         [GhostField(Quantization = 10)] public float2 WorldBossAt;
         [GhostField(Quantization = 100)] public float WorldBossHealth;
+    }
+
+    /// <summary>Six essence amounts in one ulong, 10 bits each (0 to 1023), so a ghost can carry them.</summary>
+    public static class EssencePack
+    {
+        private const int Bits = 10;
+        private const ulong Mask = (1UL << Bits) - 1;
+
+        public static ulong Pack(EssenceAmounts amounts)
+        {
+            ulong packed = 0;
+            foreach (var c in EssenceColors.All) packed = With(packed, c, amounts[c]);
+            return packed;
+        }
+
+        public static ulong With(ulong packed, EssenceColor color, int amount)
+        {
+            int shift = (int)color * Bits;
+            ulong value = (ulong)math.clamp(amount, 0, (int)Mask);
+            return (packed & ~(Mask << shift)) | (value << shift);
+        }
+
+        public static int Get(ulong packed, EssenceColor color) => (int)((packed >> ((int)color * Bits)) & Mask);
+
+        /// <summary>Rich-text color for an essence color's name on the HUD.</summary>
+        public static string Hex(EssenceColor color)
+        {
+            switch (color)
+            {
+                case EssenceColor.Yellow: return "#FFE14D";
+                case EssenceColor.Red: return "#FF6B5B";
+                case EssenceColor.Green: return "#7BE07B";
+                case EssenceColor.Blue: return "#5BB8FF";
+                case EssenceColor.Purple: return "#C77BFF";
+                default: return "#FFA040";
+            }
+        }
+
+        /// <summary>The color tinted for the HUD: "&lt;color=#..&gt;Blue&lt;/color&gt;".</summary>
+        public static string Named(EssenceColor color) => $"<color={Hex(color)}>{color}</color>";
+    }
+
+    /// <summary>The raid key (see <see cref="RaidDoor.KeyColors"/>) as the client sees it in its status.</summary>
+    public static class RaidKey
+    {
+        private static readonly RaidSettings Rules = new RaidSettings();
+
+        public static ulong Pack(RaidDoor door)
+        {
+            ulong packed = 0;
+            foreach (var c in RaidDoor.KeyColors) packed = EssencePack.With(packed, c, door.Pledged(c));
+            return packed;
+        }
+
+        public static bool Full(ulong key)
+        {
+            foreach (var c in RaidDoor.KeyColors) if (EssencePack.Get(key, c) < Rules.Cost(c)) return false;
+            return true;
+        }
+
+        /// <summary>How full one color of the key is, 0 to 1.</summary>
+        public static float Fill(ulong key, EssenceColor color) => math.saturate(EssencePack.Get(key, color) / (float)math.max(1, Rules.Cost(color)));
+
+        /// <summary>How full the whole key is, 0 to 1.</summary>
+        public static float Fill(ulong key)
+        {
+            int have = 0;
+            foreach (var c in RaidDoor.KeyColors) have += math.min(EssencePack.Get(key, c), Rules.Cost(c));
+            return have / (float)math.max(1, Rules.TotalCost);
+        }
+
+        /// <summary>"Blue 4/12 Purple 0/8 Green 12/12", tinted.</summary>
+        public static string Text(ulong key)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (var c in RaidDoor.KeyColors)
+            {
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append($"<color={EssencePack.Hex(c)}>{c} {EssencePack.Get(key, c)}/{Rules.Cost(c)}</color>");
+            }
+            return sb.ToString();
+        }
+
+        /// <summary>"Blue, Purple and Green".</summary>
+        public static string ColorList()
+        {
+            var c = RaidDoor.KeyColors;
+            return $"{c[0]}, {c[1]} and {c[2]}";
+        }
     }
 
     /// <summary>Essence dropped by a player who bled out. Walk over it to send it back to them.</summary>

@@ -18,19 +18,24 @@ namespace FriendlyPersonShooter.Core.Tests
             var bank = new EssenceAmounts();
             var a = new EssenceWallet(1, bank);
             var b = new EssenceWallet(2);
-            a.PickUp(EssenceColor.Red, 8);
+            // Key: 12 Blue, 8 Purple, 12 Green.
+            a.PickUp(EssenceColor.Blue, 5);
             a.PickUp(EssenceColor.Yellow, 30);
+            a.PickUp(EssenceColor.Red, 9);
             a.BankAll();
-            a.PickUp(EssenceColor.Red, 5);
-            Assert.That(door.Pledge(a), Is.EqualTo(13));
-            Assert.That(a.Carried(EssenceColor.Red), Is.EqualTo(0));
-            Assert.That(a.Banked(EssenceColor.Red), Is.EqualTo(0));
+            a.PickUp(EssenceColor.Blue, 3);
+            a.PickUp(EssenceColor.Purple, 2);
+            Assert.That(door.Pledge(a), Is.EqualTo(10));
+            Assert.That(a.Carried(EssenceColor.Blue), Is.EqualTo(0));
+            Assert.That(a.Banked(EssenceColor.Blue), Is.EqualTo(0));
             Assert.That(a.Banked(EssenceColor.Yellow), Is.EqualTo(30), "the key never takes other colors");
+            Assert.That(a.Banked(EssenceColor.Red), Is.EqualTo(9), "not even Red, which an older key used");
 
-            b.PickUp(EssenceColor.Red, 30);
+            b.PickUp(EssenceColor.Blue, 30);
+            b.PickUp(EssenceColor.Purple, 6);
             b.PickUp(EssenceColor.Green, 12);
-            Assert.That(door.Pledge(b), Is.EqualTo(7 + 12), "only what the key still needs");
-            Assert.That(b.Carried(EssenceColor.Red), Is.EqualTo(23));
+            Assert.That(door.Pledge(b), Is.EqualTo(4 + 6 + 12), "only what the key still needs");
+            Assert.That(b.Carried(EssenceColor.Blue), Is.EqualTo(26));
             Assert.That(door.KeyFull, Is.True);
         }
 
@@ -206,11 +211,12 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void BulwarkIsPurpleAndPaysOnlyThroughTheRaid()
+        public void BulwarkIsPurpleAndRoamingOnesPayWell()
         {
+            // Roaming Bulwarks drop Purple; the raid boss pays only through the raid's clear (the server skips raid kills).
             Assert.That(EssenceColors.Of(EnemyFamily.Bulwark), Is.EqualTo(EssenceColor.Purple));
-            Assert.That(new EssenceDropSettings().DropFor(EnemyFamily.Bulwark), Is.EqualTo(0f));
-            Assert.That(Progression.XpRewards.Kill(EnemyFamily.Bulwark), Is.EqualTo(0));
+            Assert.That(new EssenceDropSettings().DropFor(EnemyFamily.Bulwark), Is.GreaterThan(new EssenceDropSettings().DropFor(EnemyFamily.Skitter)));
+            Assert.That(Progression.XpRewards.Kill(EnemyFamily.Bulwark), Is.GreaterThan(Progression.XpRewards.Kill(EnemyFamily.Skitter)));
             Assert.That(EnemyAttackSettings.For(EnemyFamily.Bulwark).Damage, Is.GreaterThan(EnemyAttackSettings.ForSkitter().Damage));
         }
     }

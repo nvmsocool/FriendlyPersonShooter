@@ -23,6 +23,9 @@ namespace FriendlyPersonShooter.Core.Combat
         /// a plate on one side of a shell can't be shot through the shell from behind.
         /// </summary>
         public bool WeakPointOnSurface;
+        /// <summary>A second weak point the same size as the first (a Diver's other wing).</summary>
+        public bool HasSecondWeakPoint;
+        public Vector3 SecondWeakPointCenter;
 
         public static HitTarget Body(int id, Vector3 center, float radius, bool isPlayer = false)
         {
@@ -91,6 +94,13 @@ namespace FriendlyPersonShooter.Core.Combat
                                HitGeometry.RaySphere(origin, dir, t.WeakPointCenter, t.WeakPointRadius, out weakDist) &&
                                weakDist <= maxRange;
                 if (weakHit && t.WeakPointOnSurface && bodyHit && weakDist > bodyDist + SurfaceSlack) weakHit = false;
+                if (t.HasSecondWeakPoint &&
+                    HitGeometry.RaySphere(origin, dir, t.SecondWeakPointCenter, t.WeakPointRadius, out float weak2) && weak2 <= maxRange &&
+                    (!weakHit || weak2 < weakDist))
+                {
+                    weakHit = true;
+                    weakDist = weak2;
+                }
                 if (!bodyHit && !weakHit) continue;
 
                 // The hit point is where the ray first touches the target. A pass through the weak

@@ -49,11 +49,11 @@ namespace FriendlyPersonShooter.Arena
         private static Box[] _boxes;
         private static uint _boxesSeed;
 
-        /// <summary>Where the raid door stands on the ground (world x, z).</summary>
+        /// <summary>Where the open raid door stands on the ground (world x, z).</summary>
         public static System.Numerics.Vector2 Door => ExpeditionWorld.RaidDoor;
 
-        /// <summary>The middle of the arena floor.</summary>
-        public static float3 Center => new float3(Door.X, FloorY, Door.Y);
+        /// <summary>The middle of the arena floor: high above the first door, whichever door is open.</summary>
+        public static float3 Center => new float3(ExpeditionWorld.RaidAnchor.X, FloorY, ExpeditionWorld.RaidAnchor.Y);
 
         /// <summary>Floor, walls and four pillars.</summary>
         public static Box[] Boxes

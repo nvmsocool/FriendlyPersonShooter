@@ -492,7 +492,7 @@ namespace FriendlyPersonShooter.Arena
                     return text + "\n";
                 }
                 case AnnounceKind.RaidRoomSolved:
-                    return $"<color=#FFD84D>{RaidRoomLayout.NameOf(room)} solved! +{m.PlayerNetworkId} XP, +{m.OtherNetworkId} Yellow. Step into the portal</color>\n";
+                    return $"<color=#FFD84D>{RaidRoomLayout.NameOf(room)} solved! +{m.PlayerNetworkId} XP. Step into the portal</color>\n";
                 default:
                     switch (m.OtherNetworkId)
                     {

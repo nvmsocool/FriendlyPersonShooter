@@ -261,6 +261,8 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 - Zones are stitched from hand-built tiles (ruins, rivers, towers, canyons) using the seed. Hand-built pieces keep the shooting spaces good; the seed changes their layout and color bias.
 - Every zone has a few named **landmarks** ("the Broken Tower", "Twin Falls") so players can give directions: "purple's past the Broken Tower." The compass and quick-chat use these names.
 - Every zone has a few **shrines** for respawning. Banking happens at the raid door and gates (every raid door banks, open or dark).
+- **Trails.** Worn paths about 3 m wide link every zone's landmarks, shrines, gate and raid door to a hub (the landmark nearest the middle), and run out to the middle of each zone edge, where the neighbour's trail picks up. They follow gentle ground and avoid water and hex columns. No trees grow within 5 m and no rocks sit on them, so following a trail always leads somewhere named.
+- **Open ground.** How thick plants grow depends on the zone: forests stay dense, while meadows have about a quarter of the trees and other zones under half. About a third of the ground is open glade with no trees. Most shrubs stay under 1.5 m, so you can see over them, and landmarks, shrines and gates stand in wide clearings.
 - **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown). You keep your carried essence but can't bank it for 60 seconds.
 - **No visible edge.** Fog and draw distance end inside the loaded neighbor zones, so players never see past what's loaded.
 - Crossing into a new zone blends the sky's colors only, never its cloud pattern.
@@ -504,6 +506,8 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - Not built: Attunement and the weekly reseed.
 
 **No more spawn waves (Nov 9, 2026; not yet playtested).** Open-world enemies used to belong to 60-second waves: when a wave ended, every survivor vanished and new enemies rolled in, even mid-fight. Now they stay until killed, and a cleared spawn point refills after 2 minutes with a new random enemy, once no player is within 100 m (see the world rules above). The wave code also had a bug: a spawn point skipped a wave when another zone's point with the same number had already spawned in it, so the world now holds more enemies than before (103 near the start instead of 46 in the same test). Checked in the Editor: no enemy vanished over 2 minutes, a cleared point stayed empty 2 minutes later with the player 30 m away, and refilled (as a Sentinel) as soon as the player moved 150 m away. 382 Core tests pass.
+
+**Trails and open ground (Nov 9, 2026; not yet playtested).** Playtesters got lost in what felt like endless forest: from a typical spot, half the view at eye height was blocked within 11 m. Zones now have trails and thinner, tile-dependent plant cover (see the world rules above). Measured over 150 random spots near the start: half the view is now blocked only past 38 m, and 40% of directions are clear past 60 m (was 13%). Every trail end routed in all 28 zones checked.
 
 **Open questions from the prototype**
 

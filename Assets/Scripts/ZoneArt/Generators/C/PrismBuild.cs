@@ -213,7 +213,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
             _result.HeroViews.Add(_hero);
             Mark("look");
-            _result.Notes = $"{_pal.Mood}; ground repairs {_groundRepairs} (ground walk {_groundWalk}); props removed {_propsRemoved}; links {_linksBuilt}; final walk {_finalWalk}; tree retries {_treeRetries}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, pits {_t.PitsFilled}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
+            _result.Notes = $"{_pal.Mood}; ground repairs {_groundRepairs} (ground walk {_groundWalk}); props removed {_propsRemoved}; links {_linksBuilt}; final walk {_finalWalk}; tree retries {_treeRetries}; stranded {_t.StrandedShare * 100f:0.0}%; walk {_walk}; ms[{_times}]; main {_mainMs:0} ms, longest step {_longestStep:0.0} ms ({_longestLabel}); {_trails}; towers {_st.Towers}, bridges {_st.Bridges}, ramps {_t.RampsCarved}, pits {_t.PitsFilled}, landmarks {string.Join("/", _landmarks.ConvertAll(l => l.Kind.ToString()))}; flora {_flora.Summary}";
         }
 
         private Dictionary<string, Material> CreateMaterials()
@@ -412,7 +412,11 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (carved == 0) break;
             }
             _colliders.AddRange(GroundColliders());
+            // Trails over the finished ground: props and plants keep off them.
+            _trails = PrismTrails.Build(_t, _zone, _landmarks, _towers);
         }
+
+        private PrismTrails.Stats _trails;
 
         private const int GroundRepairPasses = 3;
         private const int RepairMinCells = 25;
@@ -499,6 +503,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 if (t.CellHex[k] >= 0 || t.Comp[k] != t.MainComp) return false;
                 if (t.RampAt(p.x, p.y) > 0.05f || t.PadAt(p.x, p.y) > 0.05f) return false;
                 if (t.HasWater && t.HeightAt(p.x, p.y) < t.WaterLevel + 0.3f) return false;
+                if (t.TrailDistAt(p.x, p.y) < clear * 0.55f + 1f) return false;
                 foreach (var a in zone.Anchors) if ((L(a.World) - p).magnitude < clear) return false;
                 foreach (var tw in _towers) if ((tw.Local - p).magnitude < tw.R + clear) return false;
                 foreach (var lp in _landmarks) if ((lp.Feature - p).magnitude < lp.PadR + clear) return false;
@@ -531,6 +536,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     : new Vector2(srng.Range(0f, t.C), srng.Range(0f, t.C));
                 if (!t.Inside(p.x, p.y, 8f)) continue;
                 if (t.RampAt(p.x, p.y) > 0.05f || t.PadAt(p.x, p.y) > 0.05f) continue;
+                if (t.TrailDistAt(p.x, p.y) < 5f) continue;
                 bool near = false;
                 foreach (var a in zone.Anchors) if ((L(a.World) - p).magnitude < 10f) near = true;
                 foreach (var tw in _towers) if ((tw.Local - p).magnitude < tw.R + 6f) near = true;
@@ -1016,6 +1022,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     if (ring == Mathf.FloorToInt(pr / 1.6f)) tile = Color.Lerp(pal.Glow, Color.white, 0.3f);
                     return PrismGeo.Shade(tile, 0.95f + 0.08f * h);
                 }
+                // Trails: worn ground about 3 m wide with soft edges.
+                float trail = PrismTerrain.Smooth(2.1f, 0.9f, t.TrailDistAt(lx, lz));
+                if (trail > 0f) c = Color.Lerp(c, Color.Lerp(pal.Path, g, 0.15f), trail * 0.85f * PrismTerrain.Smooth(0.6f, 0.85f, n.y));
                 float ramp = t.RampAt(lx, lz);
                 if (ramp > 0.01f) c = Color.Lerp(c, Color.Lerp(pal.Path, rock, 0.15f * (1f - n.y)), PrismTerrain.Smooth(0.3f, 0.8f, ramp) * PrismTerrain.Smooth(0.5f, 0.75f, n.y));
                 float pad = t.PadAt(lx, lz);

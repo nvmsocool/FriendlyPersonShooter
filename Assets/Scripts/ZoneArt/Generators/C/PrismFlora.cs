@@ -25,6 +25,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
         public float PatchFreq = 1f / 45f, PatchThr = 0f, Density = 1f;
         public Vector2 PatchOff;
         public bool GroundTint;
+        /// <summary>Height of each variant at scale 1 (metres).</summary>
+        public float[] VariantHeight;
         public int Placed, Tris;
         public override string ToString() => $"{Type}x{Placed}";
     }
@@ -70,6 +72,16 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int i = 0; i < flowerKinds; i++) list.Add(Make(Archetype.Flowers, pal.Flowers[(i * 2 + rng.Range(0, 2)) % pal.Flowers.Length], pal, ref rng));
             list.Add(Make(Archetype.Grass, Color.white, pal, ref rng));
             if (water) list.Add(Make(Archetype.Reeds, NextColor(), pal, ref rng));
+            foreach (var s in list)
+            {
+                s.VariantHeight = new float[s.Variants.Count];
+                for (int v = 0; v < s.Variants.Count; v++)
+                {
+                    float top = 0f;
+                    foreach (var vert in s.Variants[v].Vertices) top = Mathf.Max(top, vert.y);
+                    s.VariantHeight[v] = top;
+                }
+            }
 
             // Niches: each species gets its own patch field and preferred height and moisture.
             foreach (var s in list)
@@ -670,6 +682,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             public bool[] NoTrees;  // 1 m grid where no trunk may stand (optional)
             public Vector2 HeroEye, HeroTarget; // keep the hero sight line clear of trees
             public float[] Budget = { 480000f, 330000f, 300000f, 600000f, 60000f };
+            /// <summary>Noise offset for the clearings (open glades with no trees and few shrubs).</summary>
+            public Vector2 ClearOff;
             /// <summary>False on a headless build: placements and trunk colliders only, no plant meshes.</summary>
             public bool Render = true;
         }
@@ -686,6 +700,26 @@ namespace FriendlyPersonShooter.ZoneArt.C
             /// </summary>
             public readonly List<Bounds> Foliage = new List<Bounds>();
             public string Summary;
+        }
+
+        /// <summary>Most shrubs (this share) are scaled down to at most <see cref="ShrubCap"/> tall, below eye height.</summary>
+        private const float ShortShrubShare = 0.8f;
+        private const float ShrubCap = 1.5f;
+
+        /// <summary>
+        /// How much of the full tree and shrub cover a tile kind gets. Forests stay thick; meadows are mostly open,
+        /// so zones feel different and most of them let you see a fair way.
+        /// </summary>
+        private static void Cover(TileKind tile, out float trees, out float shrubs)
+        {
+            switch (tile)
+            {
+                case TileKind.Forest: trees = 0.85f; shrubs = 0.8f; break;
+                case TileKind.Meadow: trees = 0.25f; shrubs = 0.5f; break;
+                case TileKind.Lake:
+                case TileKind.River: trees = 0.45f; shrubs = 0.6f; break;
+                default: trees = 0.4f; shrubs = 0.55f; break;
+            }
         }
 
         /// <summary>Plants shorter than this don't block sight.</summary>
@@ -739,6 +773,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             int size = ctx.Terrain.C;
             float chunkSize = size / (float)chunks;
             var oMoist = ZoneNoise.Offset(zone.Seed, 31);
+            ctx.ClearOff = ZoneNoise.Offset(zone.Seed, 61);
 
             // Trees first (stable order by layer, then as picked).
             var order = new List<int>();
@@ -887,6 +922,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 else tint = rng.Jitter(Color.white, 0f, 0f, 0.1f);
                 tint.a = 1f;
                 int variant = rng.Range(0, sp.Variants.Count);
+                float capRoll = rng.Value();
+                if (sp.Layer == Layer.Shrub && capRoll < ShortShrubShare && sp.VariantHeight[variant] > 0.1f)
+                    scale = Mathf.Min(scale, ShrubCap / sp.VariantHeight[variant]);
                 int ci = Mathf.Clamp((int)(lz / chunkSize), 0, chunks - 1) * chunks + Mathf.Clamp((int)(lx / chunkSize), 0, chunks - 1);
                 output.Add(new Candidate { Species = si, Variant = variant, Chunk = ci, M = Matrix4x4.TRS(pos, rot, Vector3.one * scale), Tint = tint, Pos = pos, Scale = scale });
             }
@@ -918,13 +956,16 @@ namespace FriendlyPersonShooter.ZoneArt.C
             float pm = PrismTerrain.Smooth(sp.PatchThr - 0.05f, sp.PatchThr + 0.18f, patch);
             float hNiche = Mathf.Exp(-PrismTerrain.Sq((hn - sp.HeightPref) / sp.HeightWidth));
             float mNiche = Mathf.Exp(-PrismTerrain.Sq((moist - sp.MoistPref) / sp.MoistWidth));
+            // Clearings: open glades (about a third of the ground) with no trees and few shrubs.
+            float clearing = PrismTerrain.Smooth(0.0f, 0.12f, ZoneNoise.Fbm(wx + ctx.ClearOff.x, wz + ctx.ClearOff.y, 1f / 80f, 2));
+            Cover(ctx.Zone.Tile, out float treeCover, out float shrubCover);
             switch (sp.Layer)
             {
                 case Layer.Grass: return Mathf.Clamp01(0.55f + 0.5f * moist) * (0.7f + 0.3f * pm);
                 case Layer.Reed: return 0.85f;
                 case Layer.Flower: return pm * (0.5f + 0.5f * mNiche) * 0.9f;
-                case Layer.Shrub: return pm * hNiche * (0.4f + 0.6f * mNiche) * 0.85f;
-                default: return pm * hNiche * (0.45f + 0.55f * mNiche) * 1.25f;
+                case Layer.Shrub: return pm * hNiche * (0.4f + 0.6f * mNiche) * 0.85f * shrubCover * (1f - 0.8f * clearing);
+                default: return pm * hNiche * (0.45f + 0.55f * mNiche) * 1.25f * treeCover * (1f - clearing);
             }
         }
 
@@ -933,12 +974,21 @@ namespace FriendlyPersonShooter.ZoneArt.C
             var t = ctx.Terrain;
             var zone = ctx.Zone;
             var p = new Vector2(zone.Origin.x + lx, zone.Origin.z + lz);
+            bool tall = sp.Layer == Layer.Tree || sp.Layer == Layer.Shrub;
             foreach (var a in zone.Anchors)
             {
                 float r = a.Kind == ZoneAnchorKind.Shrine ? ZoneRequest.ShrineClearRadius + 0.5f : a.Kind == ZoneAnchorKind.Gate ? ZoneRequest.GateClearRadius + 0.5f : 2.5f;
+                // Named places sit in a wide open space so they can be seen (and recognised) from a way off.
+                if (tall && a.Kind == ZoneAnchorKind.Landmark) r = 14f;
+                else if (tall && a.Kind == ZoneAnchorKind.Shrine) r = 10f;
+                else if (tall && a.Kind == ZoneAnchorKind.Gate) r = 12f;
                 if (sp.Layer == Layer.Tree) r += 3f;
                 if ((new Vector2(a.World.x, a.World.z) - p).sqrMagnitude < r * r) return false;
             }
+            // Trails stay open: no trees within 5 m, no shrubs within 3 m, and only a little grass on the trail's edge.
+            float trail = t.TrailDistAt(lx, lz);
+            float keep = sp.Layer == Layer.Tree ? 5f : sp.Layer == Layer.Shrub ? 3f : sp.Layer == Layer.Flower ? 1.8f : 1.3f;
+            if (trail < keep) return false;
             if (sp.Layer != Layer.Grass && sp.Layer != Layer.Flower)
             {
                 var ab = ctx.HeroTarget - ctx.HeroEye;

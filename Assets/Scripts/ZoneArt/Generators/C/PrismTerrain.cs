@@ -67,6 +67,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
             Comp = new int[C * C];
             Steep = new bool[C * C];
             CellEdge = new float[C * C];
+            TrailDist = new float[C * C];
+            for (int i = 0; i < TrailDist.Length; i++) TrailDist[i] = PrismTrails.Reach;
             _parity = (Mathf.RoundToInt(zone.Origin.x) + Mathf.RoundToInt(zone.Origin.z)) & 1;
             _outline = new Vector2[zone.Outline.Count];
             _normals = new Vector2[_outline.Length];
@@ -111,6 +113,20 @@ namespace FriendlyPersonShooter.ZoneArt.C
             }
         }
         public float PadAt(float lx, float lz) => Bilinear(Pad, lx, lz);
+
+        /// <summary>Per 1 m cell: metres to the nearest trail (see <see cref="PrismTrails"/>), up to <see cref="PrismTrails.Reach"/>.</summary>
+        public readonly float[] TrailDist;
+
+        /// <summary>Metres from a local position to the nearest trail (smoothly between cell centres).</summary>
+        public float TrailDistAt(float lx, float lz)
+        {
+            float fx = lx - 0.5f, fz = lz - 0.5f;
+            int x = Mathf.Clamp(Mathf.FloorToInt(fx), 0, C - 2), z = Mathf.Clamp(Mathf.FloorToInt(fz), 0, C - 2);
+            float tx = Mathf.Clamp01(fx - x), tz = Mathf.Clamp01(fz - z);
+            float a = Mathf.Lerp(TrailDist[z * C + x], TrailDist[z * C + x + 1], tx);
+            float b = Mathf.Lerp(TrailDist[(z + 1) * C + x], TrailDist[(z + 1) * C + x + 1], tx);
+            return Mathf.Lerp(a, b, tz);
+        }
 
         private float Bilinear(float[] a, float lx, float lz)
         {

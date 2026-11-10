@@ -35,6 +35,8 @@ namespace FriendlyPersonShooter.Core.Combat
         public bool RelayLink;
         /// <summary>Bonus a body hit would cash right now (a weak-point hit gets more).</summary>
         public float Bonus;
+        /// <summary>The payload behind each link, in order, packed (see <see cref="ChainTracker.PayloadAt"/>).</summary>
+        public uint Payloads;
     }
 
     /// <summary>What an ally hit did to chains.</summary>
@@ -91,7 +93,34 @@ namespace FriendlyPersonShooter.Core.Combat
             public bool RelayLink;
             /// <summary>Extra links from the starter's Conductor mod.</summary>
             public int ExtraLinks;
+            /// <summary>The payload that made each link, in order (Relay for a Relay-carried link).</summary>
+            public readonly List<PayloadKind> LinkPayloads = new List<PayloadKind>(5);
             public int Holder => Members[Members.Count - 1];
+
+            public void MarkRelay()
+            {
+                if (RelayLink) return;
+                RelayLink = true;
+                LinkPayloads.Add(PayloadKind.Relay);
+            }
+        }
+
+        /// <summary>Most links whose payloads fit in <see cref="ChainInfo.Payloads"/>.</summary>
+        public const int PackedLinks = 8;
+
+        /// <summary>The payload of link <paramref name="index"/> in a packed list (4 bits each).</summary>
+        public static PayloadKind PayloadAt(uint packed, int index) =>
+            index < 0 || index >= PackedLinks ? PayloadKind.None : (PayloadKind)((packed >> (index * 4)) & 0xF);
+
+        public static uint Pack(IReadOnlyList<PayloadKind> payloads, int count)
+        {
+            uint packed = 0;
+            for (int i = 0; i < PackedLinks; i++)
+            {
+                var p = i < count && i < payloads.Count ? payloads[i] : PayloadKind.None;
+                packed |= ((uint)p & 0xF) << (i * 4);
+            }
+            return packed;
         }
 
         private readonly CombatSettings _settings;
@@ -106,7 +135,9 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>An accepted buff (any payload) from <paramref name="shooterId"/> on <paramref name="targetId"/>.</summary>
         /// <param name="relayed">True when the shooter was Relayed when they fired (read before the hit).</param>
         /// <param name="conductor">True when the shooter's gun has Conductor: a chain this buff starts gets one extra link.</param>
-        public ChainBuff OnBuff(int shooterId, int targetId, double time, bool relayed = false, bool conductor = false)
+        /// <param name="payload">The payload that passed the buff: the colour of the link it makes.</param>
+        public ChainBuff OnBuff(int shooterId, int targetId, double time, bool relayed = false, bool conductor = false,
+            PayloadKind payload = PayloadKind.None)
         {
             Prune(time);
             if (shooterId == targetId) return default;
@@ -115,17 +146,22 @@ namespace FriendlyPersonShooter.Core.Combat
             if (held != null && !held.Members.Contains(targetId))
             {
                 held.Members.Add(targetId);
+                held.LinkPayloads.Add(payload);
                 held.ExpiresAt = time + _settings.ChainWindow;
-                if (relayed) held.RelayLink = true;
+                if (relayed) held.MarkRelay();
                 var keptOld = Settle(targetId, held);
                 // If the target already held a longer chain, they keep that one and this one ends.
                 var ev = keptOld == held ? ChainEvent.Grew : ChainEvent.None;
                 return new ChainBuff { Event = ev, ChainId = keptOld.Id, Links = Links(keptOld) };
             }
 
-            var started = new Chain { Id = _nextId++, ExpiresAt = time + _settings.ChainWindow, RelayLink = relayed, ExtraLinks = conductor ? 1 : 0 };
+            var started = new Chain { Id = _nextId++, ExpiresAt = time + _settings.ChainWindow, ExtraLinks = conductor ? 1 : 0 };
             started.Members.Add(shooterId);
             started.Members.Add(targetId);
+            started.LinkPayloads.Add(payload);
+            // Conductor's extra link is the starter's payload again.
+            if (conductor) started.LinkPayloads.Add(payload);
+            if (relayed) started.MarkRelay();
             _chains.Add(started);
             var kept = Settle(targetId, started);
 
@@ -231,6 +267,7 @@ namespace FriendlyPersonShooter.Core.Combat
                 TimeLeft = (float)Math.Max(0.0, c.ExpiresAt - time),
                 RelayLink = c.RelayLink,
                 Bonus = _settings.ChainBonus(links),
+                Payloads = Pack(c.LinkPayloads, links),
             };
         }
 

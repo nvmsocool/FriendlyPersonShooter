@@ -75,6 +75,7 @@ namespace FriendlyPersonShooter.Arena
                 return;
             }
 
+            KeepRoomEnemies();
             int upCount = 0;
             foreach (var p in _roomPlayers) if (p.Up) upCount++;
             switch (_run.Room)
@@ -292,6 +293,37 @@ namespace FriendlyPersonShooter.Arena
                 {
                     var at = RaidArena.FromRoom(_run.Room, spots[random.NextInt(spots.Count)]);
                     SpawnSwarm(new Vector3(at.x, at.y + 1.5f, at.z));
+                }
+            }
+            foreach (var s in _spawned) s.Raid = true;
+            _spawned.Clear();
+        }
+
+        /// <summary>
+        /// Every room has at least a couple of enemies until it's solved: Skitters climb on at the add spots, and
+        /// over the Gauntlet's stones (no floor to stand on) Wisps hover instead.
+        /// </summary>
+        private void KeepRoomEnemies()
+        {
+            int missing = _run.Settings.MinRoomEnemies - RaidEnemyCount();
+            if (missing <= 0) return;
+            var random = new Unity.Mathematics.Random(NextSeed() | 1u);
+            var spots = _run.Layout.AddSpots;
+            var path = _run.Layout.Path;
+            _spawned.Clear();
+            for (int i = 0; i < missing; i++)
+            {
+                if (spots.Count > 0)
+                {
+                    var at = RaidArena.FromRoom(_run.Room, spots[random.NextInt(spots.Count)]);
+                    SpawnSkitter(new Vector3(at.x, at.y + _skitter.BodyRadius, at.z));
+                }
+                else if (path.Count > 0)
+                {
+                    // Over a stone between the pads, high enough to clear the sweepers.
+                    var stone = path[path.Count > 2 ? 1 + random.NextInt(path.Count - 2) : 0].Center;
+                    var at = RaidArena.FromRoom(_run.Room, stone + new Vector3(0f, 3.5f, 0f));
+                    SpawnWisp(new Vector3(at.x, at.y, at.z));
                 }
             }
             foreach (var s in _spawned) s.Raid = true;

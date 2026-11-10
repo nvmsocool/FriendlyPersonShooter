@@ -55,8 +55,8 @@ namespace FriendlyPersonShooter.Core.Arsenal
     }
 
     /// <summary>
-    /// A player's two guns. No inventory: a picked-up gun goes into an empty gun slot, else replaces
-    /// the gun in hand; a picked-up mod goes on the gun in hand (an empty slot, else in place of the
+    /// A player's gun. One gun only (the second slot stays empty; it's kept so saved and synced loadouts still
+    /// unpack). No inventory: a picked-up gun replaces the gun in hand; a picked-up mod goes on the gun in hand (an empty slot, else in place of the
     /// same kind of mod, else the weakest). Whatever is replaced is handed back to drop on the ground.
     /// </summary>
     public sealed class Loadout
@@ -86,15 +86,6 @@ namespace FriendlyPersonShooter.Core.Arsenal
         }
 
         public Gun InHand => Get(Active);
-        public Gun Other => Get(1 - Active);
-
-        /// <summary>Swaps to the other gun; false if that slot is empty.</summary>
-        public bool Swap()
-        {
-            if (Other.IsEmpty) return false;
-            Active = 1 - Active;
-            return true;
-        }
 
         public EquipResult Equip(LootItem item) => item.IsGun ? EquipGun(item.Gun) : EquipMod(item.Mod);
 
@@ -106,7 +97,8 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 r.Refusal = "nothing to equip";
                 return r;
             }
-            int slot = Get(Active).IsEmpty ? Active : Other.IsEmpty ? 1 - Active : Active;
+            // One gun: a new one always replaces the gun in hand.
+            int slot = Active;
             var old = Get(slot);
             if (!old.IsEmpty) r.Dropped = LootItem.Of(old);
             Set(slot, gun);

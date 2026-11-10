@@ -42,24 +42,36 @@ namespace FriendlyPersonShooter.Arena
         {
             public PlayerVitals Vitals;
             public PositionHistory History = new PositionHistory(64);
-            /// <summary>Two guns (Core.Arsenal), their firing state and final stats; null until the starting kit is handed out.</summary>
+            /// <summary>The gun (Core.Arsenal; slot 1 stays empty), its firing state and final stats; null until the starting kit is handed out.</summary>
             public Loadout Loadout;
             public GunState[] Guns = new GunState[2];
             public GunStats[] Stats = new GunStats[2];
             public ulong[] Packed = new ulong[2];
             /// <summary>A bot already got its role's kit.</summary>
             public bool BotKit;
-            /// <summary>What this player is picking from: starting guns or a loot box's offer (see <see cref="Pick"/>).</summary>
-            public LootItem[] Choices;
-            /// <summary>The open pick, if any. A starting pick holds the first gun meanwhile.</summary>
-            public PickKind Pick;
-            /// <summary>Changes with every new pick, so a late click on an old one is ignored.</summary>
-            public byte PickSerial;
-            /// <summary>The box being picked from, and where the player stood when they opened it.</summary>
-            public int PickBox = -1;
-            public float3 PickAt;
-            /// <summary>Boss rewards not yet picked from; each opens as a pick once no other pick is open.</summary>
+            /// <summary>The shooting gallery: the open one, or the last one (for its result).</summary>
+            public GalleryState Gallery = new GalleryState();
+            public byte GallerySerial;
+            /// <summary>Fire was held last tick (gallery shots are one per click).</summary>
+            public bool FireHeld;
+            public double NextGalleryShot;
+            /// <summary>Just after a gallery closes, a held trigger can't open the next thing.</summary>
+            public double NextObjectShot;
+            /// <summary>Ticks this player sees the world behind (their interpolation delay).</summary>
+            public int AimDelay;
+            /// <summary>Where they last looked (degrees).</summary>
+            public float LastYaw, LastPitch;
+            /// <summary>Boss rewards not yet claimed; each lands as a chest beside its player, one at a time.</summary>
             public System.Collections.Generic.Queue<LootItem[]> Rewards = new System.Collections.Generic.Queue<LootItem[]>();
+            /// <summary>The reward chest waiting to be shot: where, its three items, and its card colours' seed.</summary>
+            public bool ChestOut;
+            public float3 ChestPos;
+            public LootItem[] ChestItems;
+            public uint ChestSeed;
+            /// <summary>The payload capsule's flight while it's in the air.</summary>
+            public CapsuleFlight Capsule;
+            /// <summary>Bots: when the server catches their capsule for them (0 = it won't be).</summary>
+            public double BotCatchAt;
             public double NextUnstuck;
             public ReviveState Revive;
             public Vector3 Position;
@@ -201,8 +213,10 @@ namespace FriendlyPersonShooter.Arena
             StepBolts(dt, ecb);
             SyncFragments(tickIndex, ecb);
             Shoot(tickIndex, ecb);
-            StepLoot(ecb);
+            StepGalleries(ecb);
+            StepOrbs(ecb);
             StepPings(ecb);
+            StepLoot(ecb);
             if (ExpeditionWorld.Active) StepExpedition(ecb);
             else RespawnEnemies();
             StepSkillRequests();
@@ -220,7 +234,7 @@ namespace FriendlyPersonShooter.Arena
                           $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
                           $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
                           $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} boxes={_boxesOpened} itemsTaken={_itemsTaken} " +
-                          $"blasts={_blastCount} ricochets={_ricochets} hp=[{hp}]");
+                          $"blasts={_blastCount} ricochets={_ricochets} {GalleryLog()} {CapsuleLog()} {OrbLog()} hp=[{hp}]");
                 if (ExpeditionWorld.Active) LogExpedition();
                 LogGuns();
             }
@@ -247,7 +261,6 @@ namespace FriendlyPersonShooter.Arena
 
                 EnsureKit(state);
                 if (!state.BotKit) _usage.Held(state.Loadout.InHand, dt);
-                if (input.ValueRO.SwapGun.IsSet && state.Revive == null) SwapGun(state);
                 if (input.ValueRO.Unstuck.IsSet && state.Revive == null && _time >= state.NextUnstuck)
                 {
                     // Stuck somewhere: back to the nearest shrine (the arena's spawn ring). You keep your essence,
@@ -317,6 +330,7 @@ namespace FriendlyPersonShooter.Arena
                     RelayPayload = v.RelayPayload,
                     ChainLinks = holding ? chain.Links : 0,
                     ChainTimeLeft = holding ? chain.TimeLeft : 0f,
+                    ChainPayloads = holding ? chain.Payloads : 0u,
                     Blitz = v.IsBlitzed,
                     FireRate = v.FireRateMultiplier,
                     FrenzyRemaining = v.Buffs.RemainingOf(EffectKind.Frenzied),
@@ -618,6 +632,7 @@ namespace FriendlyPersonShooter.Arena
         private void KillEnemy(Entity e, EntityCommandBuffer ecb)
         {
             if (!_enemies.TryGetValue(e, out var s)) return;
+            var deathSpot = EntityManager.GetComponentData<LocalTransform>(e).Position;
             _enemies.Remove(e);
             _lobby.Combos.Forget(s.Vitals.Id, false);
             _enemyById.Remove(s.Vitals.Id);
@@ -633,7 +648,7 @@ namespace FriendlyPersonShooter.Arena
                 }
                 if (s.Raid && s.Family == EnemyFamily.Wisp && _run != null && _run.Room == RaidRoomKind.WispStorm) _run.Storm.Kill();
                 if (s.Raid && InLanterns && !_run.Solved) _run.Lanterns.Killed();
-                ExpeditionKill(s);
+                ExpeditionKill(s, deathSpot);
                 return;
             }
             switch (s.Family)

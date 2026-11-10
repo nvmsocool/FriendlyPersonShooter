@@ -702,7 +702,7 @@ namespace FriendlyPersonShooter.Arena
             switch (s.RaidPhase)
             {
                 case RaidPhase.Collecting when RaidKey.Full(s.Key):
-                    e.Append($"<color=#D9B3FF><b>Raid key full</b></color> {where}: anyone at the door can press <color=#FFD84D>E</color> to start the countdown\n");
+                    e.Append($"<color=#D9B3FF><b>Raid key full</b></color> {where}: anyone can <color=#FFD84D>shoot the door</color> to start the countdown\n");
                     break;
                 case RaidPhase.Collecting:
                     e.Append($"<color=#D9B3FF>Raid door</color> {where}: key {RaidKey.Text(s.Key)}\n");
@@ -757,7 +757,7 @@ namespace FriendlyPersonShooter.Arena
                 case AnnounceKind.LayerArrived:
                     return m.Value > m.OtherNetworkId
                         ? $"<color=#9AD8FF><b>LAYER {m.Value}</b>: tougher enemies, {LayerSettings.ForLayer(m.Value).Gate().Color} opens this gate{(m.Value >= LayerSettings.LayerCount ? " and ends the expedition" : "")}. The portal by the start leads back up</color>\n"
-                        : $"<color=#9AD8FF><b>Back on layer {m.Value}</b>. The gate is still open to you: walk through to go back down</color>\n";
+                        : $"<color=#9AD8FF><b>Back on layer {m.Value}</b>. The gate is still open to you: shoot it to go back down</color>\n";
                 case AnnounceKind.WorldBossLanded:
                 {
                     var landmarks = ExpeditionWorld.Map.Landmarks;

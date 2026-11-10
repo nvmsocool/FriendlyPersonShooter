@@ -8,6 +8,36 @@ namespace FriendlyPersonShooter.Core.Tests
     public class EssenceTests
     {
         [Test]
+        public void Carry_CappedAtSevenPerColor_ExtraIsLost()
+        {
+            var w = new EssenceWallet(1, new EssenceAmounts(), EssenceWallet.CarryCap);
+            Assert.That(w.PickUp(EssenceColor.Yellow, 5), Is.EqualTo(5));
+            Assert.That(w.PickUp(EssenceColor.Yellow, 5), Is.EqualTo(2), "only 2 more fit");
+            Assert.That(w.Carried(EssenceColor.Yellow), Is.EqualTo(7));
+            Assert.That(w.PickUp(EssenceColor.Red, 3), Is.EqualTo(3), "each color has its own 7");
+            var cache = new EssenceAmounts();
+            cache.Add(EssenceColor.Red, 9);
+            w.Receive(cache, banked: false);
+            Assert.That(w.Carried(EssenceColor.Red), Is.EqualTo(7));
+            w.BankAll();
+            Assert.That(w.PickUp(EssenceColor.Yellow, 7), Is.EqualTo(7), "banking frees the room");
+            w.Receive(cache, banked: true);
+            Assert.That(w.Banked(EssenceColor.Red), Is.EqualTo(16), "banked essence has no cap");
+        }
+
+        [Test]
+        public void Carry_GiftMustFitUnderTheirCap()
+        {
+            var a = new EssenceWallet(1, new EssenceAmounts(), EssenceWallet.CarryCap);
+            var b = new EssenceWallet(2, new EssenceAmounts(), EssenceWallet.CarryCap);
+            a.PickUp(EssenceColor.Blue, 6);
+            b.PickUp(EssenceColor.Blue, 4);
+            Assert.That(a.TryGift(b, EssenceColor.Blue, 4, GiftSource.CarriedOnly), Is.False);
+            Assert.That(a.TryGift(b, EssenceColor.Blue, 3, GiftSource.CarriedOnly), Is.True);
+            Assert.That(b.Carried(EssenceColor.Blue), Is.EqualTo(7));
+        }
+
+        [Test]
         public void Colors_MapToFamiliesBothWays()
         {
             Assert.That(EssenceColors.Of(EnemyFamily.Wisp), Is.EqualTo(EssenceColor.Yellow));

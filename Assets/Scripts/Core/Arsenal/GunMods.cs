@@ -153,7 +153,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 case ModKind.Stability: return $"-{StabilityBonus * s * 100f:0}% spread";
                 case ModKind.Scope: return $"+{ScopeZoom * s:0.0}x zoom";
                 case ModKind.Magazine: return $"+{MagazineBonus * s * 100f:0}% magazine";
-                case ModKind.Reload: return $"-{ReloadBonus * s * 100f:0}% reload time";
+                case ModKind.Reload: return $"-{ReloadBonus * s * 100f:0}% capsule regrowth time";
                 case ModKind.Split: return "holds two payloads at 60%";
                 case ModKind.Ricochet: return "ally hits bounce to another ally";
                 case ModKind.Conductor: return "chains you start get +1 link";
@@ -161,8 +161,8 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 case ModKind.Vigor: return "heals allies; withers enemies";
                 case ModKind.Might: return "allies deal more damage; enemies take more";
                 case ModKind.Haste: return "allies move faster; slows enemies";
-                case ModKind.Relay: return "allies' shots carry your other gun's payload; tags enemies";
-                case ModKind.Frenzy: return "allies fire and reload faster; jams enemies";
+                case ModKind.Relay: return "allies' shots also carry Might (or your Split's other payload); tags enemies";
+                case ModKind.Frenzy: return "allies fire faster and regrow their capsule faster; jams enemies";
                 case ModKind.Ward: return "shields allies; makes enemy armor brittle";
                 case ModKind.Focus: return "allies get bigger weak points; marks enemy weak points";
                 default: return "";

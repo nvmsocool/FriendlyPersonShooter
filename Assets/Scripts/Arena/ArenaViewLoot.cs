@@ -60,14 +60,12 @@ namespace FriendlyPersonShooter.Arena
         // ---------- The gun in hand ----------
 
         private static Gun InHand(ArenaLoadout lo) => Gun.Unpack(lo.Active == 0 ? lo.GunA : lo.GunB);
-        private static Gun Other(ArenaLoadout lo) => Gun.Unpack(lo.Active == 0 ? lo.GunB : lo.GunA);
 
-        /// <summary>Stats of the gun in hand, rebuilt when it changes; swapping guns delays our predicted shots like the server's.</summary>
+        /// <summary>Stats of the gun in hand, rebuilt when it changes.</summary>
         private GunStats LocalGunStats(ArenaLoadout lo, float now)
         {
             ulong key = lo.Active == 0 ? lo.GunA : lo.GunB;
             if (key == _localKey && lo.Active == _localActive) return _localStats;
-            if (_localActive >= 0 && lo.Active != _localActive) FireControl.SwappedIn(ref _localGun, now);
             _localKey = key;
             _localActive = lo.Active;
             _localStats = GunStats.For(Gun.Unpack(key));
@@ -81,23 +79,21 @@ namespace FriendlyPersonShooter.Arena
             string pay = PayloadTag(gun.Payload);
             if (gun.SecondPayload != PayloadKind.None) pay += " + " + PayloadTag(gun.SecondPayload);
             int mag = _localStats != null ? _localStats.Magazine : 0;
-            string ammo = lo.Reload < 0.999f
-                ? $"<color=#FFD84D>reloading {lo.Reload * 100f:0}%</color>"
-                : lo.Ammo == 0 ? $"<color=#FF6B6B>0 / {mag}</color>" : $"{lo.Ammo} / {mag}";
+            string ammo = lo.Capsule == (byte)CapsuleState.Flying
+                ? "<color=#FFD84D>CAPSULE OUT: SHOOT IT!</color>"
+                : lo.Capsule == (byte)CapsuleState.Regrowing
+                ? $"<color=#9A9A9A>regrowing {lo.Grown * 100f:0}%</color>"
+                : lo.Charge == 0 ? $"<color=#FF6B6B>0 / {mag}: next shot flings it</color>" : $"{lo.Charge} / {mag}";
             return $"{GunFrames.Name(gun.Frame).ToUpperInvariant()}  {pay}     <size=22>{ammo}</size>";
         }
 
         private static string GunInfo(ArenaLoadout lo)
         {
             var gun = InHand(lo);
-            var other = Other(lo);
             var sb = new StringBuilder();
             sb.Append(ModList(gun)).Append('\n');
             sb.Append(ArenaHud.PayloadShort(gun.Payload)).Append('\n');
-            sb.Append(other.IsEmpty
-                ? "<color=#9A9A9A>Q  no second gun yet</color>"
-                : $"Q  {GunFrames.Name(other.Frame)} {PayloadTag(other.Payload)}");
-            sb.Append("     R reload     Right mouse zoom");
+            sb.Append("Right mouse zoom     Out of payload? Shoot your capsule out of the air");
             return sb.ToString();
         }
 
@@ -276,17 +272,6 @@ namespace FriendlyPersonShooter.Arena
 
             if (!alive) return;
             if (hasItem) _prompt = ItemPrompt(lo, nearItem, nearOwner);
-            else if (_wrap && CanStartRaid(feet)) _prompt = "<color=#FFD84D>E</color>  start the raid countdown";
-            else if (nearBox >= 0) _prompt = "<color=#FFD84D>E</color>  open the loot box";
-        }
-
-        /// <summary>At the raid door with a full key, outside the raid: E starts the countdown (the server checks the same).</summary>
-        private bool CanStartRaid(Vector3 feet)
-        {
-            if (!TryGetStatus(out var s) || s.InRaid || s.RaidPhase != RaidPhase.Collecting) return false;
-            if (!RaidKey.Full(s.Key) || RaidArena.InRaidSpace(feet)) return false;
-            var door = ExpeditionWorld.Near(ExpeditionWorld.ToFloat3(RaidArena.Door), feet);
-            return math.distance(door.xz, ((float3)feet).xz) <= RaidRules.UseRadius;
         }
 
         /// <summary>A loot box pick card: the item, what it does, and what taking it would swap out.</summary>
@@ -317,7 +302,7 @@ namespace FriendlyPersonShooter.Arena
             var preview = Loadout.Unpack(lo.GunA, lo.GunB, lo.Active);
             var r = preview.Equip(item);
             var sb = new StringBuilder();
-            sb.Append("<color=#FFD84D>E</color>  take ").Append(ItemLabel(item));
+            sb.Append("<color=#FFD84D>Shoot it</color> to take ").Append(ItemLabel(item));
             if (owner != 0) sb.Append("  <size=18><color=#B8B0D8>(yours)</color></size>");
             sb.Append("\n<size=18>");
             sb.Append(item.IsGun ? GunDetail(item.Gun) : GunMods.Describe(item.Mod));

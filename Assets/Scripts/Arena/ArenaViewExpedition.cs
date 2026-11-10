@@ -73,6 +73,9 @@ namespace FriendlyPersonShooter.Arena
             return true;
         }
 
+        /// <summary>Within this many metres of the objective, its beacon isn't drawn.</summary>
+        private const float BeaconHideRange = 40f;
+
         private void DrawExpeditionWorld()
         {
             FollowLayer();
@@ -168,8 +171,10 @@ namespace FriendlyPersonShooter.Arena
             }
             DrawList(_x, _cacheMat);
 
-            // A tall thin beacon over the current objective.
-            if (status.HasTarget && !status.Complete)
+            // A tall thin beacon over the current objective, gone once you're there (it would stand in the fight).
+            var beacon = status.HasTarget ? Near(new float3(status.Target.x, 0f, status.Target.y)) : Vector3.zero;
+            if (status.HasTarget && !status.Complete &&
+                Vector2.Distance(new Vector2(beacon.x, beacon.z), new Vector2(_camRef.x, _camRef.z)) > BeaconHideRange)
             {
                 var p = Near(new float3(status.Target.x, GroundAt(new System.Numerics.Vector2(status.Target.x, status.Target.y)), status.Target.y));
                 _x.Clear();
@@ -202,9 +207,30 @@ namespace FriendlyPersonShooter.Arena
             return y;
         }
 
+        private static readonly double RunSeconds = new ExpeditionSettings().TargetDuration;
+        private readonly int[] _carriedSlots = new int[EssenceColors.Count];
+        private Color[] _essenceColors;
+
+        /// <summary>The top-left hourglass and essence slots (the only expedition info on the HUD).</summary>
+        private void ShowExpeditionClock(bool show, ExpeditionStatus s)
+        {
+            if (_essenceColors == null)
+            {
+                _essenceColors = new Color[EssenceColors.Count];
+                foreach (var c in EssenceColors.All) ColorUtility.TryParseHtmlString(EssencePack.Hex(c), out _essenceColors[(int)c]);
+            }
+            if (show)
+            {
+                foreach (var c in EssenceColors.All) _carriedSlots[(int)c] = EssencePack.Get(s.CarriedAll, c);
+            }
+            _hud.SetExpedition(show, show ? 1f - (float)(s.Elapsed / RunSeconds) : 0f, _carriedSlots, _essenceColors);
+        }
+
         private void WriteExpeditionHud()
         {
-            if (!TryGetStatus(out var s)) return;
+            bool has = TryGetStatus(out var s);
+            ShowExpeditionClock(has && _wrap, s);
+            if (!has || !_wrap) return;
             int minutes = (int)(s.Elapsed / 60f), seconds = (int)(s.Elapsed % 60f);
             var e = _hud.Expedition;
             e.Append($"<b>EXPEDITION</b>   {minutes:00}:{seconds:00} / 20:00\n");

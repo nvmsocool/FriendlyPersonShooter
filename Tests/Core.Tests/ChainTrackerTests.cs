@@ -18,6 +18,19 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
+        public void EachLinkRemembersItsPayload()
+        {
+            _chains.OnBuff(A, B, 0, payload: PayloadKind.Haste);
+            _chains.OnBuff(B, C, 1, relayed: true, payload: PayloadKind.Might);
+            Assert.That(_chains.TryGetHeld(C, 1, out var info), Is.True);
+            Assert.That(info.Links, Is.EqualTo(3), "Haste, Might, and the Relay link");
+            Assert.That(ChainTracker.PayloadAt(info.Payloads, 0), Is.EqualTo(PayloadKind.Haste));
+            Assert.That(ChainTracker.PayloadAt(info.Payloads, 1), Is.EqualTo(PayloadKind.Might));
+            Assert.That(ChainTracker.PayloadAt(info.Payloads, 2), Is.EqualTo(PayloadKind.Relay));
+            Assert.That(ChainTracker.PayloadAt(info.Payloads, 3), Is.EqualTo(PayloadKind.None), "no fourth link");
+        }
+
+        [Test]
         public void OneBuffStartsAOneLinkChainWorthNothing()
         {
             var buff = _chains.OnBuff(A, B, 0);

@@ -53,12 +53,13 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Frenzy_ShortensReloads()
+        public void Frenzy_ShortensCapsuleRegrowth()
         {
             var s = GunStats.For(new Gun(FrameKind.Launcher));
             var st = GunState.Full(s);
-            FireControl.StartReload(ref st, s, 0, 2f);
-            Assert.That(st.ReloadTime, Is.EqualTo(s.Reload / 2f).Within(1e-5));
+            st.Capsule = CapsuleState.Flying;
+            FireControl.StepCapsule(ref st, s, CapsuleFlight.Life, 2f);
+            Assert.That(st.RegrowTime, Is.EqualTo(s.Reload / 2f).Within(1e-5));
         }
 
         [Test]
@@ -107,7 +108,7 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Overdrive_HasteAndFrenzy_StopsReloads()
+        public void Overdrive_HasteAndFrenzy_PayloadNeverRunsOut()
         {
             var a = new PlayerVitals(1, _s);
             var c = new PlayerVitals(3, _s);
@@ -122,10 +123,17 @@ namespace FriendlyPersonShooter.Core.Tests
             var s = GunStats.For(new Gun(FrameKind.Launcher));
             var st = GunState.Full(s);
             int shots = 0;
-            for (double t = 0; t < 20; t += 0.05) shots += FireControl.Step(ref st, s, t, true, false, 1f, 1f, noReload: true);
+            int payloaded = 0;
+            for (double t = 0; t < 20; t += 0.05)
+            {
+                var r = FireControl.Step(ref st, s, t, true, 1f, 1f, overdrive: true);
+                shots += r.Shots;
+                payloaded += r.Payloaded;
+            }
             Assert.That(shots, Is.GreaterThan(s.Magazine * 2));
-            Assert.That(st.Ammo, Is.EqualTo(s.Magazine));
-            Assert.That(st.Reloading, Is.False);
+            Assert.That(payloaded, Is.EqualTo(shots), "every shot carries the payload");
+            Assert.That(st.Charge, Is.EqualTo(s.Magazine));
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Seated));
         }
 
         [Test]

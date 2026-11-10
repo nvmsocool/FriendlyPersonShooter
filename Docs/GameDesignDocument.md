@@ -14,6 +14,7 @@ Friendly Person Shooter is a co-op PvE FPS for a group of friends, where every b
 2. **Friends are good news.** Information, buffs and shared kills make every friend in the game worth having nearby. Nothing a friend can do makes your run worse.
 3. **Hard, honest aim.** Difficulty comes from hitting targets, not from unfair damage or hidden stats. Gear and levels help a little, but skill decides.
 4. **Nothing to win against others.** No PvP, no market, no ranked ladder. With no one to beat, cheating has little to gain (see Anti-cheat by design).
+5. **Almost everything is a shooting drill.** Apart from moving and aiming, every action is a shot: you loot, collect, bank, unlock and reload by hitting something. Big actions open a **shooting gallery** (see Shooting galleries). The only other inputs are zoom, ping, quick-chat, kudos and the Esc menu.
 
 **Scope decisions**
 
@@ -85,14 +86,16 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 **Where it comes from**
 
 - Normal enemies drop small amounts of their color. Elites drop more, plus a little of both colors they combine.
+- A kill's essence bursts out as **orbs** near where the enemy died, one per player who earned some. Only you see your orbs, glowing balls in the essence's color that float slowly upward, and you collect one by shooting it. Orbs fade after 8 s, and the essence in them is lost. (Bots are paid straight away.)
 - **Blooms** are temporary events where one color spawns heavily in one spot for a few minutes. More players at a bloom means more chains and faster clears, so players want to share where blooms are.
 - Each zone shows a rough color bias on your map once you or someone you shared sightings with has visited it this seed. Exact spawn spots are found by playing or by asking.
 
 **Carried vs. banked**
 
-- Essence you pick up is *carried* until you bank it at a **raid door** or a **gate** (stand by one). Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. At the open raid door, Red and Green go to the raid key first if it needs them.
+- You can carry at most **7 of each color**. Essence over that is lost (an orb you shoot when that color is full is wasted), so you go back and bank often. Banked essence, the party's pool, has no cap.
+- Essence you pick up is *carried* until you bank it at a **bank crystal**, which stands beside every **raid door** and **gate**. One orb per color you carry circles the crystal; shoot one to bank that color in a shooting gallery: targets appear one at a time, each holding up to 5 of that color. Hit one and its essence is banked; let it run out and its essence is lost. Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. Standing at a raid door pledges banked essence to its key (bots pledge carried essence too).
 - Banked essence goes into your **party's shared bank** (a party is a group you've teamed up with): everyone in the party banks into it and spends from it. Carried essence and caches stay personal. A solo player's bank is their own.
-- When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Any player who picks up your cache sends it back to you and gets a small kudos reward. Returning a friend's lost essence becomes a common good deed.
+- When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Shoot a cache to claim it in a gallery (hit every target in time). Any player who claims your cache sends it back to you and gets a small kudos reward. Returning a friend's lost essence becomes a common good deed.
 
 **What it's for**
 
@@ -111,7 +114,7 @@ Every gun has a **payload slot**. A payload mod in that slot gives the gun one p
 | Vigor | Heals; overflow becomes a small temporary shield; counts double on revive fragments | Wither: damage over time |
 | Might | Their shots deal more damage | Expose: takes more damage from everyone |
 | Haste | Faster movement and jumps | Slow: moves and turns slower |
-| Frenzy | Faster fire rate and reload | Jam: attacks less often |
+| Frenzy | Faster fire rate and capsule regrowth | Jam: attacks less often |
 | Ward | Damage shield | Brittle: armor and shells weaken |
 | Focus | Their hits count as weak-point hits more easily (slightly larger weak points, for them only) | Mark: weak points glow and grow for everyone |
 | Relay | Their next shots also carry your payload, and count as a chain link | Tag: hits on this enemy splash a little to nearby enemies |
@@ -127,6 +130,25 @@ Every gun has a **payload slot**. A payload mod in that slot gives the gun one p
 - **Player colors.** Each player has a color for their body and their name in the team list, chat and minimap. Player colors avoid the six essence hues where possible.
 - **Damage numbers.** Every hit on an enemy shows its damage; weak-point hits look different.
 
+## Shooting galleries
+
+Every action is a shot (pillar 5). Small ones happen at once: shoot an essence orb to collect it, or an item on the ground to take it. Big ones open a **shooting gallery** for you alone: your world turns grey and dim, colored targets drift around where you were looking, and you shoot them before time runs out. Your gun fires one shot per click at the targets, with no spread. You can't be hurt while a gallery is open, but a layer change cancels it. When it ends, the color comes back.
+
+| Action | You shoot | Gallery | Time (layer 1) | Result |
+| --- | --- | --- | --- | --- |
+| Starting gun | (opens when you arrive) | 3 gun cards drift slowly | none | The gun you shot is yours |
+| Loot box, boss reward | the box or reward chest | 3 item targets, each in its preview color | 10 s, one shot | The item you shot is equipped; a miss or time-out spends it |
+| Dropped cache | the cache | 3 targets, hit them all | 10 s | The cache is claimed |
+| Banking | a color's orb at a bank crystal | one target at a time, up to 5 essence each | 3 s per target | Hits are banked, misses lost |
+| Gate | the gate, when the party bank can pay | 3 numbered targets, in order | 10 s | The gate opens for the party |
+| Changing layer | the open gate, or the up-portal | 1 fast target | 8 s | The 10 s group countdown starts |
+| Raid start | the raid door, key full | 1 target | 10 s | The 20 s gather countdown starts |
+| Reload | your flung payload capsule | none: it's in the world | 2.2 s flight | A full capsule (see Guns, mods and builds) |
+
+**Deeper is harder.** Targets shrink (4°, 3°, then 2.2° across), move faster (×1, ×1.5, ×2) and give less time (×1, ×0.85, ×0.7) on layers 1, 2 and 3. Caches need 3, 5, then 7 hits, and gates 3, 4, then 5 in order.
+
+**Bots** can't see galleries, so they still bank, open gates, claim caches and travel by walking up, as before. They catch their capsule 95%, 85% or 75% of the time by layer.
+
 ## Chains and combos
 
 Buffs passed from player to player build a **chain**, and the last player's hit on an enemy cashes it in for bonus damage. This turns a group of friends into a firing line where everyone contributes, even players who never deal damage themselves.
@@ -139,6 +161,8 @@ flowchart LR
 ```
 
 A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cashes a 2-link chain. Chain bonus on the cashing hit: 2 links +15%, 3 links +35%, 4 links +60% (cap).
+
+The chain you hold hangs from the top right of your screen as a literal chain, growing down the side: one link per link, each in the colour of the payload that made it (Relay's extra link is Relay's colour, Conductor's is the starter's payload again). A new link pops in, and the chain blinks in its last 1.5 s.
 
 **Chain rules**
 
@@ -155,7 +179,7 @@ A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cash
 
 | Combo | Ingredients | Effect |
 | --- | --- | --- |
-| Overdrive | Haste + Frenzy (ally) | No reloads for the buff's duration |
+| Overdrive | Haste + Frenzy (ally) | The payload capsule never drains for the buff's duration |
 | Deadeye | Might + Focus (ally) | Weak-point hits deal 3x instead of the normal bonus |
 | Bastion | Vigor + Ward (ally) | Shield regenerates while both last |
 | Pinned | Slow + Mark (enemy) | Enemy freezes for 1 second, a free shot for everyone |
@@ -163,9 +187,9 @@ A hastes B; B, now hasted, shoots C with Might; C's next hit on the Bulwark cash
 | Plague | Wither + Tag (enemy) | Damage over time spreads to nearby enemies |
 | Blitz | Haste + Might (ally) | Might's damage bonus doubles while both last |
 
-All seven combos are built. Plague spreads a Wither at 75% strength to enemies within 4 m every second. Overdrive keeps the magazine full and ends a reload at once. Deadeye makes weak-point hits deal 3×. Bastion regenerates the Ward at 8 a second, up to one Ward (20). Pinned freezes the enemy for 1 s when the combo forms (moving and attacking), not on every hit. Shatter makes armor take full damage.
+All seven combos are built. Plague spreads a Wither at 75% strength to enemies within 4 m every second. Overdrive keeps the payload capsule full and regrows a missing one at once. Deadeye makes weak-point hits deal 3×. Bastion regenerates the Ward at 8 a second, up to one Ward (20). Pinned freezes the enemy for 1 s when the combo forms (moving and attacking), not on every hit. Shatter makes armor take full damage.
 
-Built numbers for the new payloads: Frenzy is +30% fire rate and reload speed for 6 s; Jam slows an enemy's attacks to 1/1.6 of normal. Ward is a 20-point shield for 6 s that soaks damage after Vigor's shield; the same giver tops a drained Ward back up. Brittle closes half the gap between an armor's damage and full damage. Focus grows the ally's weak points by 35%; Mark grows the enemy's by 40% for everyone. Every new payload has a mod, a shot sound and a HUD line.
+Built numbers for the new payloads: Frenzy is +30% fire rate and capsule regrowth speed for 6 s; Jam slows an enemy's attacks to 1/1.6 of normal. Ward is a 20-point shield for 6 s that soaks damage after Vigor's shield; the same giver tops a drained Ward back up. Brittle closes half the gap between an armor's damage and full damage. Focus grows the ally's weak points by 35%; Mark grows the enemy's by 40% for everyone. Every new payload has a mod, a shot sound and a HUD line.
 
 ## Downed and revive
 
@@ -181,7 +205,7 @@ Exact counts, timers and speeds get tuned in playtests.
 
 ## Guns, mods and builds
 
-Guns are found, not chosen: each gun is a **frame** (how it fires) with three **mod slots** (how well it does it) and one **payload slot** (what its hits do to allies and enemies). Every gun damages enemies. Players carry two guns and swap with Q.
+Guns are found, not chosen: each gun is a **frame** (how it fires) with three **mod slots** (how well it does it) and one **payload slot** (what its hits do to allies and enemies). Every gun damages enemies. Players carry one gun: a new one replaces the gun in your hand.
 
 **Frames**
 
@@ -194,11 +218,11 @@ Guns are found, not chosen: each gun is a **frame** (how it fires) with three **
 | Beam | Continuous; effect builds while on target | Skitters, Divers | Steady healing or shielding; pure tracking |
 | Launcher | Slow projectile with a wide splash (5.5 m) | Mite swarms | Buffs a cluster of allies at once |
 
-Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mouse zooms, by an amount set by the frame and its scope mod.
+**Payload capsule (the reload).** Every gun always fires: plain shots (damage, and the plain heal on allies) never run out. Payload shots spend charge from a capsule on top of the gun, which visibly drains. Its size is the frame's magazine (Magazine mods make it bigger). When it's empty, your next shot also flings the capsule up and out, in a random direction within 35° of your aim, on a 2.2 s arc. Shoot it for a full capsule. A friend can shoot it too: that fills both your capsule and theirs, whatever state theirs is in. Miss it, and a new empty one regrows over the frame's reload time (Reload mods and Frenzy make that shorter); then the next shot flings it again. The capsule gets smaller and faster on deeper layers. Right mouse zooms, by an amount set by the frame and its scope mod.
 
 **Mods**
 
-- **Stat mods** go in the three mod slots and improve one thing: damage, spread, range, scope, magazine size, reload speed or fire rate.
+- **Stat mods** go in the three mod slots and improve one thing: damage, spread, range, scope, capsule size (magazine), capsule regrowth (reload speed) or fire rate.
 - **Payload mods** (Vigor, Might, Haste, Relay, and later Frenzy, Ward and Focus) go only in the payload slot and give the gun that payload.
 - **Special mods** are rare stat mods with an unusual effect:
     - **Split**: the payload slot holds two payload mods, each at 60% strength.
@@ -209,11 +233,10 @@ Every frame has a magazine and a reload (R); reserve ammo is unlimited. Right mo
 
 **Finding gear**
 
-- **Starting gun.** A new player picks one of three starting guns, each with a common payload mod. The three never share a frame or a payload, so the choice is real. Bots get their role's kit instead.
-- **Loot boxes** stand around every zone. Each player who opens a box gets their own offer of three items (guns or mods, no two of the same kind) and picks one, so nobody competes for loot. Each card shows what taking it would swap out. A player can leave the offer and come back: the box stays shut, with the same three inside, until they pick.
-- **Bosses** drop gear for everyone who fought them; a raid clear lets each player pick one of three rare-or-better items.
-- **Equip on the spot.** There is no inventory: picking up a gun replaces the gun in your hand, and picking up a mod puts it on your current gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it.
-- **Starting kit:** one random gun with one random payload mod. The second gun slot starts empty.
+- **Starting gun.** A new player picks one of three starting guns, each with a common payload mod, in a shooting gallery with no time limit: shoot the gun you want. The three never share a frame or a payload, so the choice is real. Bots get their role's kit instead.
+- **Loot boxes** stand around every zone. Each player gets their own offer of three items from each box (guns or mods, no two of the same kind), so nobody competes for loot. Aim at a box for a moment and its three items show beside the crosshair, each with the color its target will have. Shoot the box to open its gallery, then hit the item you want. You get one shot: a miss or a time-out spends the box, and its items are gone.
+- **Bosses** drop gear for everyone who fought them: a reward chest lands beside each player (outside the raid) with three rare-or-better items, and it works like a loot box, preview and one shot included.
+- **Equip on the spot.** There is no inventory: taking a gun replaces the gun in your hand, and taking a mod puts it on your gun (in an empty slot, else in place of the same kind of mod, else the weakest). Whatever you replace drops on the ground, where anyone can take it by shooting it.
 - Gear lasts one session for now, like levels; it becomes account-bound once accounts are saved.
 
 **Example builds**
@@ -238,8 +261,8 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 
 **Moving between layers (built).** The group moves together, so friends are never on different layers.
 
-- Walking through the open gate on layer 1 or 2 starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then the whole group goes to the next layer's start.
-- On layers 2 and 3, an **up-portal** (a stone ring with a blue beam) stands 12 m from the start. Stepping into it starts the same countdown back up, and the group lands just in front of the upper gate. That gate stays open to them for free, so they can go back down.
+- Shooting the open gate on layer 1 or 2 (and hitting its gallery's target) starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then the whole group goes to the next layer's start.
+- On layers 2 and 3, an **up-portal** (a stone ring with a blue beam) stands 12 m from the start. Shooting it (and its gallery's target) starts the same countdown back up, and the group lands just in front of the upper gate. That gate stays open to them for free, so they can go back down.
 - Layer 3's gate ends the expedition.
 - Moving can't start while a raid gathers, runs or celebrates. A countdown already going is called off if a raid starts.
 - Each layer has its own map from the world seed, with its own enemies, gate, raid doors, loot boxes and Colossus. Carried essence, the party bank, the raid key, kudos and the run clock carry over. Dropped caches go back to their owners.
@@ -247,9 +270,9 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 - Layer 2 has more spawns and more zones mixing two colors. Layer 3 has only Skitters, Sentinels, Bulwarks and Divers, and half as many blooms.
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
-- **Raids** are doors in the world. Once its key is fully pooled, anyone at the door presses E to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot (XP and an item; raids never pay essence, and enemies inside drop none), and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
+- **Raids** are doors in the world. Once its key is fully pooled, anyone can shoot the door (and its gallery's target) to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot (XP and an item; raids never pay essence, and enemies inside drop none), and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
 - **Several raid doors, one open at a time.** A layer has 4 raid doors by shrines, spread at least 150 m apart; the first stands near the start. Only one is open. Clearing its raid spends it: it goes dark, and the next door opens somewhere else, so the group travels to raid again. Once all four are spent they all come back except the one just cleared. A wipe or a timeout leaves the door open. Every door banks essence, open or dark.
-- **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. The build order lives in `Docs/RaidDevPlan.md`.
+- **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. Every room has at least two enemies in it until it's solved, from the moment the group arrives: Skitters climb on at the room's edge, and Wisps hover over the Gauntlet's stones. The build order lives in `Docs/RaidDevPlan.md`.
 - **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it. A world boss fights differently from raid bosses: raid bosses test aim under pressure in a closed room, world bosses test movement in the open (dodging, jumping, using cover).
 
 **Zones and generation**
@@ -508,6 +531,26 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 **No more spawn waves (Nov 9, 2026; not yet playtested).** Open-world enemies used to belong to 60-second waves: when a wave ended, every survivor vanished and new enemies rolled in, even mid-fight. Now they stay until killed, and a cleared spawn point refills after 2 minutes with a new random enemy, once no player is within 100 m (see the world rules above). The wave code also had a bug: a spawn point skipped a wave when another zone's point with the same number had already spawned in it, so the world now holds more enemies than before (103 near the start instead of 46 in the same test). Checked in the Editor: no enemy vanished over 2 minutes, a cleared point stayed empty 2 minutes later with the player 30 m away, and refilled (as a Sentinel) as soon as the player moved 150 m away. 382 Core tests pass.
 
 **Trails and open ground (Nov 9, 2026; not yet playtested).** Playtesters got lost in what felt like endless forest: from a typical spot, half the view at eye height was blocked within 11 m. Zones now have trails and thinner, tile-dependent plant cover (see the world rules above). Measured over 150 random spots near the start: half the view is now blocked only past 38 m, and 40% of directions are clear past 60 m (was 13%). Every trail end routed in all 28 zones checked.
+
+**Shooting galleries (Nov 9, 2026; not yet playtested).** The new pillar: every action is a shot (see Shooting galleries). R, Q and E are gone; middle mouse still pings.
+- **Reload** is the payload capsule: guns never stop firing, payload shots drain the capsule, and an empty one is flung into the air to be shot back. Players carry one gun. Shooting a friend's flung capsule fills both capsules.
+- **Loot boxes and boss rewards** show their items when you aim at them and give one shot in a gallery. Boss rewards land as a chest beside you.
+- **Essence** drops as orbs you shoot. **Banking** happens at bank crystals by the gates and raid doors, one color at a time, and missed targets lose their essence. Standing at a raid door pledges only banked essence to its key, so it never banks for you.
+- **Caches, gates, layer travel and the raid start** each open a gallery when shot.
+- Checked in the Editor with bots: the starting-gun, loot box, reward chest, cache, bank, gate, travel (down and up) and raid-start galleries all work. So do a time-out, lost bank targets, protection from damage, orbs and the capsule. 402 Core tests pass.
+- **Balance to watch:** with no reload pauses, sustained damage over a long fight is 30% (Beam) to 59% (Launcher) higher than before, though the plain shots after the capsule empties carry no payload. Damage is unchanged until the playtest shows whether enemies die too fast.
+
+**Easier Wisps (Nov 9, 2026; not yet playtested).** Wisps were much harder than the other families. Their hit sphere grows from 0.35 m to 0.5 m radius (drawn to match) and they stay hittable for 0.9 s after each blink (was 0.6 s); deeper tiers still shrink both. The objective's light beam is hidden within 40 m of the objective, so it no longer stands in the middle of the fight.
+
+**Carry cap and a text-free HUD (Nov 9, 2026; not yet playtested).**
+- Players carry at most 7 of each color; anything over is lost. Bots too. Banked essence has no cap.
+- The HUD is almost free of text. Top left: an hourglass that empties over the run's 20 minutes (red in the last 2), and for each color a cluster of 7 slots that fill as you carry it. Health, shield and XP are bars without numbers; the XP bar turns gold when you have skill points to spend. The minimap loses its range label. The chain you hold hangs in the top right as coloured links (see Chains and combos) instead of a text line.
+- Buffs are small icons above the bars, each in its payload's colour and its own shape (Might a triangle, Haste a diamond, Frenzy a hexagon, Ward a shield, Focus a target, Relay a circle with a dot per hit left). Each fills clockwise with its time left, and a gold backing marks buffs in a combo. The shield timer is gone; the shield bar shows the shield.
+- The objective, layer, banked amounts, directions, raid key, raid rooms and boss bars are no longer on screen. The light beams, the bank crystals and the galleries still guide you.
+- The gun, your totals, the team list and the join code show only with the Esc menu.
+- Still text: quick-chat and kudos lines, ping labels, damage numbers, shoot prompts, gallery titles and the big center messages.
+
+**Enemies in every raid room (Nov 9, 2026; not yet playtested).** Each room keeps at least 2 enemies until it's solved, topped up at once (Skitters, or Wisps over the Gauntlet). The Gauntlet had none before, and the puzzle rooms had none for their first 10 s.
 
 **Open questions from the prototype**
 

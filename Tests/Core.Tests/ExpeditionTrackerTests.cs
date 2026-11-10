@@ -45,7 +45,7 @@ namespace FriendlyPersonShooter.Core.Tests
             o = _tracker.Update(800, start);
             Assert.That(o.Phase, Is.EqualTo(ExpeditionPhase.Bank));
             Assert.That(o.Target, Is.EqualTo(_gate.Site.Point.World), "the gate banks, so head straight there");
-            Assert.That(o.Text, Does.StartWith("Take your Yellow to the gate"));
+            Assert.That(o.Text, Does.StartWith("Shoot the bank crystal by the gate"));
             Assert.That(o.Text, Does.Contain("40 carried"));
 
             _wallet.BankAll();
@@ -135,7 +135,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(o.Target, Is.EqualTo(_gate.Site.Point.World));
 
             o = tracker.Update(160, _map.StartPoint.World);
-            Assert.That(o.Text, Does.StartWith("Take your Yellow to the gate"));
+            Assert.That(o.Text, Does.StartWith("Shoot the bank crystal by the gate"));
         }
 
         [Test]

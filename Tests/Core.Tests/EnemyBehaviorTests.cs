@@ -49,7 +49,7 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Wisp_HittableWindowLastsAboutPointSixSeconds()
+        public void Wisp_HittableWindowLastsItsSetting()
         {
             var s = new WispSettings();
             var w = WispBehavior.Create(Vector3.Zero, 3, s);

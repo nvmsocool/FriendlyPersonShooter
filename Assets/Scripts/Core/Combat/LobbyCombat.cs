@@ -74,7 +74,9 @@ namespace FriendlyPersonShooter.Core.Combat
             if (result.Refused != RefuseReason.None) return result;
             if (!fx.HasPayload && !relayed) return result;
 
-            var chain = Chains.OnBuff(shooter.Id, target.Id, time, relayed, conductor);
+            // The link's colour: the shot's payload, or Relay for a plain shot that a Relay carried.
+            var linkPayload = fx.Payload != PayloadKind.None ? fx.Payload : fx.Second != PayloadKind.None ? fx.Second : PayloadKind.Relay;
+            var chain = Chains.OnBuff(shooter.Id, target.Id, time, relayed, conductor, linkPayload);
             result.ChainEvent = chain.Event;
             result.ChainLinks = chain.Links;
             Combos.Check(target, combos);

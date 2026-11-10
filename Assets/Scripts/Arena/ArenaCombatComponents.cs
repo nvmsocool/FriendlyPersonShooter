@@ -42,6 +42,8 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Links on the chain this player holds (0 = none); their next enemy hit cashes it.</summary>
         [GhostField] public int ChainLinks;
         [GhostField(Quantization = 10)] public float ChainTimeLeft;
+        /// <summary>Each link's payload, packed (Core.Combat.ChainTracker.PayloadAt): the HUD's chain colours.</summary>
+        [GhostField] public uint ChainPayloads;
         /// <summary>Haste + Might combo: Empower doubled.</summary>
         [GhostField] public bool Blitz;
         /// <summary>Frenzy: fire-rate (and reload-speed) multiplier, 0 read as 1. Read by the client to draw its own shots.</summary>
@@ -62,7 +64,7 @@ namespace FriendlyPersonShooter.Arena
     }
 
     /// <summary>
-    /// A player's two guns (packed Core.Arsenal.Gun values), which one is in hand, and its magazine.
+    /// A player's gun (packed Core.Arsenal.Gun; GunB stays empty, one gun only) and its payload capsule.
     /// <see cref="Payload"/> is the payload of the gun in hand (None when its payload slot is empty).
     /// </summary>
     public struct ArenaLoadout : IComponentData
@@ -71,16 +73,75 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public ulong GunA;
         [GhostField] public ulong GunB;
         [GhostField] public byte Active;
-        [GhostField] public int Ammo;
-        /// <summary>Reload progress 0..1; 1 when not reloading.</summary>
-        [GhostField(Quantization = 100)] public float Reload;
-        /// <summary>An open pick (a starting gun or a loot box) from <see cref="Choice0"/>..<see cref="Choice2"/> (packed loot items, 0 = none).</summary>
-        [GhostField] public PickKind Pick;
-        /// <summary>Changes with every new pick; a pick request names it.</summary>
-        [GhostField] public byte PickSerial;
+        /// <summary>Payload charge left in the capsule.</summary>
+        [GhostField] public int Charge;
+        /// <summary>A Core.Arsenal.CapsuleState: on the gun, flying, or regrowing.</summary>
+        [GhostField] public byte Capsule;
+        /// <summary>How grown the capsule on the gun is, 0..1 (1 when seated).</summary>
+        [GhostField(Quantization = 100)] public float Grown;
+    }
+
+    /// <summary>
+    /// Server-to-everyone: a player's empty payload capsule was flung into the air (draw it flying), or it was shot
+    /// (<see cref="Caught"/>: stop drawing it).
+    /// </summary>
+    public struct CapsuleFx : IRpcCommand
+    {
+        public int ShooterNetworkId;
+        public float3 From;
+        public float3 Velocity;
+        public float Radius;
+        public PayloadKind Payload;
+        public byte Caught;
+    }
+
+    /// <summary>
+    /// A player's shooting gallery (Core.Gallery), sent only to them. The targets' paths follow from the kind, layer,
+    /// seed and start tick, so only progress is sent; the screen works out where the targets are. The last gallery
+    /// stays here after it ends (with its outcome) so the screen can show the result. Also: the player's reward
+    /// chest, and the loot seed their screen needs to preview what a box holds.
+    /// </summary>
+    [GhostComponent(OwnerSendType = SendToOwnerType.SendToOwner)]
+    public struct ArenaGallery : IComponentData
+    {
+        /// <summary>A Core.Gallery.GalleryKind; 0 = none yet.</summary>
+        [GhostField] public byte Kind;
+        /// <summary>Changes with every new gallery.</summary>
+        [GhostField] public byte Serial;
+        [GhostField] public byte Layer;
+        /// <summary>A Core.Gallery.GalleryOutcome.</summary>
+        [GhostField] public byte Outcome;
+        [GhostField] public short Targets;
+        [GhostField] public short Chosen;
+        [GhostField] public uint Seed;
+        /// <summary>Item cards: the seed for their target colours (<see cref="Core.Gallery.GalleryRound.ColorOrder"/>).</summary>
+        [GhostField] public uint ColorSeed;
+        [GhostField] public int StartTick;
+        [GhostField] public int EndTick;
+        /// <summary>Sequence: the tick the current target came up.</summary>
+        [GhostField] public int NextTick;
+        /// <summary>The aim when it opened (degrees); targets sit at offsets from it.</summary>
+        [GhostField(Quantization = 100)] public float Yaw0;
+        [GhostField(Quantization = 100)] public float Pitch0;
+        [GhostField] public int Hits;
+        [GhostField] public short HitCount;
+        [GhostField] public short Next;
+        /// <summary>Item cards (packed loot items, 0 = none).</summary>
         [GhostField] public ulong Choice0;
         [GhostField] public ulong Choice1;
         [GhostField] public ulong Choice2;
+        /// <summary>Box galleries: the box; essence galleries: the essence colour.</summary>
+        [GhostField] public int Subject;
+
+        /// <summary>The player's boss reward chest, waiting to be shot (one at a time).</summary>
+        [GhostField] public byte ChestOut;
+        [GhostField(Quantization = 100)] public float3 ChestPos;
+        [GhostField] public uint ChestSeed;
+        [GhostField] public ulong Chest0;
+        [GhostField] public ulong Chest1;
+        [GhostField] public ulong Chest2;
+        /// <summary>The host's loot seed, so the screen can preview a box's three items (the same roll the host makes).</summary>
+        [GhostField] public uint LootSeed;
     }
 
     /// <summary>A gun or mod lying on the ground. Owner 0 = anyone can take it; otherwise only that player sees and takes it.</summary>
@@ -96,31 +157,24 @@ namespace FriendlyPersonShooter.Arena
         public Entity Value;
     }
 
+    /// <summary>Essence from a kill, waiting for its owner to shoot it (only they see it).</summary>
+    public struct ArenaEssenceOrb : IComponentData
+    {
+        [GhostField] public int Owner;
+        [GhostField] public byte Color;
+        [GhostField] public int Amount;
+    }
+
+    /// <summary>Singleton holding the essence orb ghost prefab built in code.</summary>
+    public struct ArenaEssenceOrbPrefab : IComponentData
+    {
+        public Entity Value;
+    }
+
     /// <summary>Server-to-opener: you opened this loot box (it stays open for you this session).</summary>
     public struct LootBoxOpened : IRpcCommand
     {
         public int BoxId;
-    }
-
-    /// <summary>What a player is picking from.</summary>
-    public enum PickKind : byte
-    {
-        None = 0,
-        /// <summary>A new player's starting gun (can't be skipped).</summary>
-        Start = 1,
-        /// <summary>A loot box's offer (can be left for later).</summary>
-        Box = 2,
-        /// <summary>A boss reward (raid clear or world boss): three rare-or-better items, one must be taken.</summary>
-        Reward = 3,
-    }
-
-    /// <summary>Client-to-server: I pick this choice (index into my open pick), or <see cref="Leave"/> it for now.</summary>
-    public struct PickRequest : IRpcCommand
-    {
-        public const byte Leave = 255;
-        public byte Index;
-        /// <summary>The pick this answers (<see cref="ArenaLoadout.PickSerial"/>).</summary>
-        public byte Serial;
     }
 
     /// <summary>Bot-to-server: give me my role's kit (a gun with this payload).</summary>

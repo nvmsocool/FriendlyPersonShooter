@@ -40,6 +40,21 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
+        public void PlayersPledgeBankedEssenceOnly()
+        {
+            var door = new RaidDoor();
+            var a = new EssenceWallet(1);
+            a.PickUp(EssenceColor.Blue, 4);
+            a.BankAll();
+            a.PickUp(EssenceColor.Blue, 7);
+            a.PickUp(EssenceColor.Green, 5);
+            Assert.That(door.Pledge(a, bankedOnly: true), Is.EqualTo(4));
+            Assert.That(a.Carried(EssenceColor.Blue), Is.EqualTo(7), "carried essence is banked by shooting first");
+            Assert.That(a.Carried(EssenceColor.Green), Is.EqualTo(5));
+            Assert.That(door.Pledged(EssenceColor.Blue), Is.EqualTo(4));
+        }
+
+        [Test]
         public void FullKeyWaitsForSomeoneToStartTheCountdown()
         {
             var door = new RaidDoor();

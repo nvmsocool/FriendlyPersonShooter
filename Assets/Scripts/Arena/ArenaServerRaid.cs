@@ -13,7 +13,7 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>
     /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Blue, Purple and Green
     /// toward its key (carried first, then the party bank), strangers into the same key. With a full key,
-    /// anyone at the door presses E to start a countdown; whoever stands at the door when it ends goes up together for a run (see
+    /// anyone shoots the door to start a countdown; whoever stands at the door when it ends goes up together for a run (see
     /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
     /// group on the raid arena (<see cref="RaidArena"/>). Beating it blows the boss apart and pays everyone
     /// inside a level's worth of XP and an item (raids never pay essence); they can stay up there, and each goes home
@@ -94,7 +94,8 @@ namespace FriendlyPersonShooter.Arena
                 if (!atDoor && !_raidTakeEveryone) continue;
                 _atDoor.Add(id);
                 if (!atDoor) continue;
-                int pledged = _raid.Pledge(WalletOf(id));
+                // Players pledge from the bank only; their carried essence goes through the bank crystal first.
+                int pledged = _raid.Pledge(WalletOf(id), bankedOnly: !st.BotKit);
                 if (pledged > 0)
                 {
                     _raidPledged += pledged;
@@ -477,7 +478,7 @@ namespace FriendlyPersonShooter.Arena
             if (_raid.Ready && toDoor <= RaidNoticeRadius)
             {
                 objective = new ExpeditionObjective(phase,
-                    $"Raid key full: press E at the door to start the {_raid.Settings.GatherSeconds:0}s countdown", true, door, "raid door");
+                    $"Raid key full: shoot the door to start the {_raid.Settings.GatherSeconds:0}s countdown", true, door, "raid door");
                 return true;
             }
             if (_raid.Phase == RaidPhase.Collecting && toDoor <= RaidNoticeRadius)

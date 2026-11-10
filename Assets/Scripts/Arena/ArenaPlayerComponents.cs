@@ -46,11 +46,7 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Jump;
         /// <summary>1 while the fire button is held.</summary>
         public int Fire;
-        /// <summary>Q: switch to the other gun.</summary>
-        public InputEvent SwapGun;
-        /// <summary>R: reload.</summary>
-        public InputEvent Reload;
-        /// <summary>E: open a loot box or take the item at your feet.</summary>
+        /// <summary>Bots only (players shoot instead): take the item at their feet, or start the raid at its door.</summary>
         public InputEvent Interact;
         /// <summary>1 while aiming down the sights (right mouse).</summary>
         public int Zoom;

@@ -80,7 +80,7 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!_wallets.TryGetValue(id, out var w))
             {
-                w = new EssenceWallet(id, _partyBank);
+                w = new EssenceWallet(id, _partyBank, EssenceWallet.CarryCap);
                 _wallets[id] = w;
                 // While the gate is open it is open for the whole party, including players who join later.
                 if (_gate.IsOpen) _gate.GrantAccess(id);
@@ -121,12 +121,12 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        private void ExpeditionKill(EnemyState s)
+        private void ExpeditionKill(EnemyState s, float3 at)
         {
             // Everyone who hit it gets the kill's XP.
             _intScratch.Clear();
             _intScratch.AddRange(_ledger.HittersOf(s.Vitals.Id));
-            // Bosses pay through their own rewards (the pick screen), not kill XP or drops.
+            // Bosses pay through their own rewards (a reward chest), not kill XP or drops.
             bool boss = s.WorldBoss || IsRaidBoss(s);
             int xp = boss ? 0 : XpRewards.Kill(s.Family) * (s.Elite != EliteKind.None ? 2 : 1);
             foreach (int hitter in _intScratch) AddXp(hitter, xp);
@@ -138,7 +138,8 @@ namespace FriendlyPersonShooter.Arena
             }
             var awards = _ledger.Killed(s.Vitals.Id, s.Family, s.Elite);
             foreach (var a in awards) _essenceAwarded += a.Amount;
-            DropLedger.Pay(awards, WalletOf);
+            // Players shoot their orbs to collect them; bots are paid at once.
+            DropEssence(awards, at);
         }
 
         /// <summary>Drops half the carried essence where the player fell; returns where they respawn.</summary>
@@ -304,54 +305,32 @@ namespace FriendlyPersonShooter.Arena
 
                 bool inRaid = InsideRaid(id);
                 bool lockedAtBank = false;
-                if (!state.Vitals.IsDown && !inRaid)
+                if (!state.Vitals.IsDown && !inRaid && !RaidArena.InRaidSpace(transform.ValueRO.Position))
+                {
+                    lockedAtBank = !_banking.CanBank(id, _time) && _banking.IsAtBank(pos) && !wallet.CarriedAll().IsEmpty;
+                }
+                // Players do all of this by shooting (ArenaServerGallery); bots, who can't, by walking up.
+                if (state.BotKit && !state.Vitals.IsDown && !inRaid)
                 {
                     // At the raid door this runs after the key took its Red and Green (StepRaid goes first);
                     // at a gate it runs before paying, so freshly banked Yellow can open it straight away.
                     if (!RaidArena.InRaidSpace(transform.ValueRO.Position))
                     {
                         int banked = _banking.TryBank(wallet, pos, _time).Total;
-                        if (banked > 0)
-                        {
-                            _banked += banked;
-                            AddXp(id, banked * XpRewards.PerEssenceBanked);
-                        }
-                        lockedAtBank = !_banking.CanBank(id, _time) && _banking.IsAtBank(pos) && !wallet.CarriedAll().IsEmpty;
+                        if (banked > 0) Banked(id, banked);
                     }
 
                     float toGate = _map.Distance(_gate.Site.Point.World, pos);
-                    if (toGate <= ExpeditionWorld.GateUseRadius && !_gate.HasAccess(id) && _gate.Shortfall(wallet) == 0 &&
-                        _gate.Unlock(wallet, _time) == GateUnlockOutcome.Unlocked)
-                    {
-                        _gateUnlocks++;
-                        foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
-                        _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, (int)_gate.Color));
-                    }
+                    if (toGate <= ExpeditionWorld.GateUseRadius) UnlockGate(id);
                     // Layers 1 and 2: the gate leads down (the whole group, after a countdown). The deepest ends the run.
-                    if (toGate <= ExpeditionWorld.GatePassRadius && !TryGoDown(id) && tracker.PassedGate(_time))
-                    {
-                        _completions++;
-                        _announce.Add((AnnounceKind.ExpeditionComplete, (int)tracker.Elapsed(_time), id, 0));
-                        Debug.Log($"[Expedition] player {id} completed in {tracker.TimerText(_time)}");
-                    }
+                    if (toGate <= ExpeditionWorld.GatePassRadius) PassGate(id);
 
                     _intScratch.Clear();
                     foreach (var c in _caches.All)
                     {
                         if (_map.Distance(c.Position, pos) <= ExpeditionWorld.CachePickupRadius) _intScratch.Add(c.Id);
                     }
-                    foreach (int cacheId in _intScratch)
-                    {
-                        var pickup = _caches.PickUp(cacheId, id, _time);
-                        if (!pickup.Delivers) continue;
-                        if (_wallets.TryGetValue(pickup.OwnerId, out var ownerWallet)) pickup.DeliverTo(ownerWallet);
-                        if (pickup.Outcome == CachePickupOutcome.Returned)
-                        {
-                            _cachesReturned++;
-                            SocialCacheReturn(id, pickup.OwnerId);
-                            _announce.Add((AnnounceKind.CacheReturned, pickup.Contents.Total, pickup.OwnerId, id));
-                        }
-                    }
+                    foreach (int cacheId in _intScratch) PickUpCache(cacheId, id);
                 }
 
                 var objective = tracker.Update(_time, pos);
@@ -396,6 +375,49 @@ namespace FriendlyPersonShooter.Arena
                 WriteRaidStatus(id, ref next);
                 WriteWorldBossStatus(ref next);
                 status.ValueRW = next;
+            }
+        }
+
+        /// <summary>Essence went into the bank: XP for it.</summary>
+        private void Banked(int id, int amount)
+        {
+            _banked += amount;
+            AddXp(id, amount * XpRewards.PerEssenceBanked);
+        }
+
+        /// <summary>Unlocks the gate with this player's party bank, if it isn't open to them and the bank can pay.</summary>
+        private bool UnlockGate(int id)
+        {
+            var wallet = WalletOf(id);
+            if (wallet == null || _gate.HasAccess(id) || _gate.Shortfall(wallet) != 0) return false;
+            if (_gate.Unlock(wallet, _time) != GateUnlockOutcome.Unlocked) return false;
+            _gateUnlocks++;
+            foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
+            _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, (int)_gate.Color));
+            return true;
+        }
+
+        /// <summary>Through the open gate: the group heads down, or (on the deepest layer) the run is complete.</summary>
+        private void PassGate(int id)
+        {
+            var tracker = TrackerOf(id);
+            if (TryGoDown(id) || tracker == null || !tracker.PassedGate(_time)) return;
+            _completions++;
+            _announce.Add((AnnounceKind.ExpeditionComplete, (int)tracker.Elapsed(_time), id, 0));
+            Debug.Log($"[Expedition] player {id} completed in {tracker.TimerText(_time)}");
+        }
+
+        /// <summary>Claims a dropped cache: your own back into your pocket, someone else's into their bank (kudos to you).</summary>
+        private void PickUpCache(int cacheId, int id)
+        {
+            var pickup = _caches.PickUp(cacheId, id, _time);
+            if (!pickup.Delivers) return;
+            if (_wallets.TryGetValue(pickup.OwnerId, out var ownerWallet)) pickup.DeliverTo(ownerWallet);
+            if (pickup.Outcome == CachePickupOutcome.Returned)
+            {
+                _cachesReturned++;
+                SocialCacheReturn(id, pickup.OwnerId);
+                _announce.Add((AnnounceKind.CacheReturned, pickup.Contents.Total, pickup.OwnerId, id));
             }
         }
 

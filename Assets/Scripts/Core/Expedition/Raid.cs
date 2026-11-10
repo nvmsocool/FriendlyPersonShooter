@@ -40,7 +40,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     public enum RaidPhase : byte
     {
-        /// <summary>Taking pledges toward the key; with a full key, waiting for someone at the door to press E.</summary>
+        /// <summary>Taking pledges toward the key; with a full key, waiting for someone to shoot the door.</summary>
         Collecting = 0,
         /// <summary>Someone started the countdown; when it ends, whoever stands at the door goes in.</summary>
         Gathering = 1,
@@ -129,9 +129,10 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         /// <summary>
         /// Moves what the key still needs from the wallet (carried first, then banked) into the key.
+        /// Players pledge <paramref name="bankedOnly"/>: carried essence is banked by shooting first.
         /// Only while collecting. Returns how much essence moved.
         /// </summary>
-        public int Pledge(EssenceWallet wallet)
+        public int Pledge(EssenceWallet wallet, bool bankedOnly = false)
         {
             if (wallet == null) throw new ArgumentNullException(nameof(wallet));
             if (Phase != RaidPhase.Collecting) return 0;
@@ -140,7 +141,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             {
                 int need = Settings.Cost(c) - _pledged[c];
                 if (need <= 0) continue;
-                int took = wallet.Take(c, need);
+                int took = wallet.Take(c, need, bankedOnly);
                 _pledged.Add(c, took);
                 moved += took;
             }

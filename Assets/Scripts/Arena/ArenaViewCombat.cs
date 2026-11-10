@@ -157,7 +157,8 @@ namespace FriendlyPersonShooter.Arena
                 switch (en.Family)
                 {
                     case EnemyFamily.Wisp:
-                        size = 0.7f * scale;
+                        // As wide as its hit sphere (radius 0.5), so what you see is what you can hit.
+                        size = 1f * scale;
                         var wm = Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 90f, 45f), Vector3.one * (en.Hittable ? size : size * 0.6f));
                         (en.Telegraph ? _f : en.Hittable ? _a : _b).Add(wm);
                         break;
@@ -330,20 +331,21 @@ namespace FriendlyPersonShooter.Arena
             _localZoom = stats != null ? stats.Zoom : 1f;
 
             // Draw our own shots straight away, at the gun's rate, rather than waiting for the server.
-            // The server has the final say on ammo, spread and hits; launcher shells are drawn from its reply.
+            // The server has the final say on payload, spread and hits; launcher shells are drawn from its reply.
+            // Guns never stop firing; shots without payload charge are drawn plain.
+            // In a shooting gallery, shots go at its targets (drawn by the gallery), not the world.
             bool firing = Cursor.lockState == CursorLockMode.Locked && UnityEngine.InputSystem.Mouse.current != null &&
-                          UnityEngine.InputSystem.Mouse.current.leftButton.isPressed;
+                          UnityEngine.InputSystem.Mouse.current.leftButton.isPressed && !GalleryOpen;
             if (stats != null && alive && local != Entity.Null)
             {
-                bool loaded = lo.Reload >= 0.999f && lo.Ammo > 0;
-                _localGun.Ammo = 999;
-                _localGun.ReloadEnds = 0;
-                if (!loaded) _localGun.BurstLeft = 0;
+                // The local copy only times shots; its capsule never runs dry (the server's does).
+                _localGun.Charge = 999;
+                _localGun.Capsule = CapsuleState.Seated;
                 var myBuffs = em.GetComponentData<ArenaBuffs>(local);
                 float frenzy = myBuffs.FireRate > 0f ? myBuffs.FireRate : 1f;
                 bool overdrive = (myBuffs.Combos & ComboKind.Overdrive) != 0;
-                loaded |= overdrive;
-                int shots = loaded ? FireControl.Step(ref _localGun, stats, now, firing, false, PlayerProgress.FireRateFor(ranks) * frenzy) : 0;
+                var payload = overdrive || (lo.Capsule == (byte)CapsuleState.Seated && lo.Charge > 0) ? lo.Payload : PayloadKind.None;
+                int shots = FireControl.Step(ref _localGun, stats, now, firing, PlayerProgress.FireRateFor(ranks) * frenzy).Shots;
                 for (int n = 0; n < shots; n++)
                 {
                     var look = ArenaLocalInputSystem.LocalLook;
@@ -353,8 +355,8 @@ namespace FriendlyPersonShooter.Arena
                     float reach = stats.Range * PlayerProgress.RangeFor(ranks);
                     float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
                     var gun = HeldMuzzle(eye);
-                    if (stats.Mode != FireMode.Projectile) _localTracers.Add((gun, eye + (Vector3)dir * range, lo.Payload, now, (byte)stats.Frame.Kind));
-                    if (n == 0) ArenaAudio.Shot(lo.Payload, gun, own: true, stats.Frame.Kind);
+                    if (stats.Mode != FireMode.Projectile) _localTracers.Add((gun, eye + (Vector3)dir * range, payload, now, (byte)stats.Frame.Kind));
+                    if (n == 0) ArenaAudio.Shot(payload, gun, own: true, stats.Frame.Kind);
                     OnLocalShot(stats.Frame.Kind);
                 }
             }
@@ -455,22 +457,17 @@ namespace FriendlyPersonShooter.Arena
                 localId = em.GetComponentData<GhostOwner>(local).NetworkId;
                 hud.SetVitals(true, v.Health, v.MaxHealth, v.Shield);
 
-                if (b.EmpowerRemaining > 0f) hud.Buffs.Append($"<color=#FF9A4D>MIGHT</color> +{b.Empower * 100f:0}% damage  {b.EmpowerRemaining:0.0}s{(b.Blitz ? "   <color=#FFD84D>BLITZ</color> (Haste + Might: double damage bonus)" : "")}\n");
-                if (b.ShieldRemaining > 0f) hud.Buffs.Append($"<color=#7FDBFF>SHIELD</color>  {b.ShieldRemaining:0.0}s\n");
-                if (b.HasteRemaining > 0f) hud.Buffs.Append($"<color=#66D9FF>HASTE</color> x{b.MoveMultiplier:0.00} speed  {b.HasteRemaining:0.0}s\n");
-                if (b.FrenzyRemaining > 0f) hud.Buffs.Append($"<color=#FF5A99>FRENZY</color> x{b.FireRate:0.00} fire rate and reload  {b.FrenzyRemaining:0.0}s{((b.Combos & ComboKind.Overdrive) != 0 ? "   <color=#FFD84D>OVERDRIVE</color> (Haste + Frenzy: no reloads)" : "")}\n");
-                if (b.WardRemaining > 0f) hud.Buffs.Append($"<color=#D1E6FF>WARD</color> {b.Ward:0} shield  {b.WardRemaining:0.0}s{((b.Combos & ComboKind.Bastion) != 0 ? "   <color=#FFD84D>BASTION</color> (Vigor + Ward: shield regenerates)" : "")}\n");
-                if (b.FocusRemaining > 0f) hud.Buffs.Append($"<color=#FFE64D>FOCUS</color> +{b.Focus * 100f:0}% weak points  {b.FocusRemaining:0.0}s{((b.Combos & ComboKind.Deadeye) != 0 ? "   <color=#FFD84D>DEADEYE</color> (Might + Focus: weak points x3)" : "")}\n");
-                if (b.RelayHits > 0) hud.Buffs.Append($"<color=#D98CFF>RELAY</color>  next {b.RelayHits} hits also carry {b.RelayPayload}\n");
+                // Buff icons; a gold backing marks the ones in a combo.
+                bool overdrive = (b.Combos & ComboKind.Overdrive) != 0, deadeye = (b.Combos & ComboKind.Deadeye) != 0;
+                hud.SetBuff(ArenaHud.BuffIcon.Might, b.EmpowerRemaining, b.Blitz || deadeye);
+                hud.SetBuff(ArenaHud.BuffIcon.Haste, b.HasteRemaining, b.Blitz || overdrive);
+                hud.SetBuff(ArenaHud.BuffIcon.Frenzy, b.FrenzyRemaining, overdrive);
+                hud.SetBuff(ArenaHud.BuffIcon.Ward, b.WardRemaining, (b.Combos & ComboKind.Bastion) != 0);
+                hud.SetBuff(ArenaHud.BuffIcon.Focus, b.FocusRemaining, deadeye);
+                hud.SetBuff(ArenaHud.BuffIcon.Relay, b.RelayHits > 0 ? 1f : 0f, false, b.RelayHits);
 
-                string chain = null;
-                if (b.ChainLinks > 0)
-                {
-                    chain = b.ChainLinks >= 2
-                        ? $"<color=#FFD84D>CHAIN x{b.ChainLinks}</color>  {b.ChainTimeLeft:0.0}s   hit an enemy to cash it, or buff someone new to grow it"
-                        : $"<color=#FFD84D>Chain started</color>  {b.ChainTimeLeft:0.0}s   buff someone new to grow it";
-                }
-                hud.SetGun(payload, GunTitle(loadout), GunInfo(loadout), chain);
+                hud.SetChain(b.ChainLinks, b.ChainPayloads, b.ChainTimeLeft);
+                hud.SetGun(payload, GunTitle(loadout), GunInfo(loadout));
                 hud.SetPrompt(_prompt);
                 if (v.Health <= 0f)
                 {
@@ -480,6 +477,8 @@ namespace FriendlyPersonShooter.Arena
             else
             {
                 hud.SetVitals(false, 0f, 0f, 0f);
+                hud.SetChain(0, 0u, 0f);
+                for (int i = 0; i < ArenaHud.BuffIconCount; i++) hud.SetBuff((ArenaHud.BuffIcon)i, 0f, false);
             }
             _announceLocalId = localId;
             WriteAnnouncements(now);
@@ -549,7 +548,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 case ComboKind.Plague: return "PLAGUE  (Wither + Tag: damage over time spreads between enemies)";
                 case ComboKind.Blitz: return "BLITZ  (Haste + Might on one ally: damage bonus doubled)";
-                case ComboKind.Overdrive: return "OVERDRIVE  (Haste + Frenzy on one ally: no reloads)";
+                case ComboKind.Overdrive: return "OVERDRIVE  (Haste + Frenzy on one ally: the capsule never drains)";
                 case ComboKind.Deadeye: return "DEADEYE  (Might + Focus on one ally: weak-point hits x3)";
                 case ComboKind.Bastion: return "BASTION  (Vigor shield + Ward on one ally: the shield regenerates)";
                 case ComboKind.Pinned: return "PINNED  (Slow + Mark: the enemy freezes for a second)";

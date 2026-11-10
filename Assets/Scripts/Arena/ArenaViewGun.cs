@@ -176,14 +176,6 @@ namespace FriendlyPersonShooter.Arena
             float pitchUp = _kick * 7f;
             pos.z -= _kick * 0.05f;
             float roll = 0f;
-            if (lo.Reload < 0.999f)
-            {
-                // Dip and tilt while reloading.
-                float dip = Mathf.Sin(Mathf.Clamp01(lo.Reload) * Mathf.PI);
-                pos.y -= dip * 0.09f;
-                pitchUp -= dip * 30f;
-                roll = dip * 25f;
-            }
             float raise = Mathf.Clamp01((now - _swapAt) / SwapRaiseSeconds);
             pos.y -= (1f - raise) * 0.25f;
 
@@ -191,6 +183,7 @@ namespace FriendlyPersonShooter.Arena
             var local = Matrix4x4.TRS(pos, Quaternion.Euler(-pitchUp, -9f * (1f - _zoomBlend), roll), Vector3.one * 0.6f);
             _heldPose = Matrix4x4.TRS(cam.position, cam.rotation, Vector3.one) * local;
             AddGun(_heldPose, gun.Frame, gun.Payload);
+            AddCapsule(_heldPose, gun.Frame, gun.Payload, lo);
             AddHeldHands(robotSeed, colorIndex, gun.Frame);
             ShapeOf(gun.Frame, out var muzzle);
             _heldMuzzle = _heldPose.MultiplyPoint3x4(muzzle);
@@ -200,8 +193,61 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
+        /// <summary>
+        /// The payload capsule on top of the gun: a dark shell with the payload's colour filling it as far as the
+        /// charge goes. Gone while it's flying; growing back after a miss.
+        /// </summary>
+        private void AddCapsule(Matrix4x4 basis, FrameKind frame, PayloadKind payload, ArenaLoadout lo)
+        {
+            if (lo.Capsule == (byte)CapsuleState.Flying) return;
+            var shape = ShapeOf(frame, out _);
+            float top = 0f, front = 0f, back = 0f;
+            foreach (var part in shape)
+            {
+                if (part.Kind != 0) continue;
+                top = Mathf.Max(top, part.Center.y + part.Size.y * 0.5f);
+                front = Mathf.Max(front, part.Center.z + part.Size.z * 0.5f);
+                back = Mathf.Min(back, part.Center.z - part.Size.z * 0.5f);
+            }
+            float grown = lo.Capsule == (byte)CapsuleState.Regrowing ? Mathf.Clamp01(lo.Grown) : 1f;
+            float length = 0.16f;
+            float thick = 0.055f * Mathf.Lerp(0.3f, 1f, grown);
+            var center = new Vector3(0f, top + thick * 0.5f + 0.004f, (front + back) * 0.5f);
+            _gunDark.Add(basis * Matrix4x4.TRS(center, Quaternion.identity, new Vector3(thick, thick, length * Mathf.Lerp(0.3f, 1f, grown))));
+            int mag = _localStats != null ? Mathf.Max(1, _localStats.Magazine) : 1;
+            float fill = lo.Capsule == (byte)CapsuleState.Seated ? Mathf.Clamp01(lo.Charge / (float)mag) : 0f;
+            if (fill <= 0f) return;
+            float inner = length * 0.94f * fill;
+            var fillCenter = center + new Vector3(0f, 0f, -length * 0.47f + inner * 0.5f);
+            if (!_gunAccent.TryGetValue(payload, out var list)) return;
+            list.Add(basis * Matrix4x4.TRS(fillCenter, Quaternion.identity, new Vector3(thick * 1.08f, thick * 1.08f, inner)));
+        }
+
+        /// <summary>Capsules in the air (everyone's): a tumbling block in the payload's colour, and a flash when one is shot.</summary>
+        private void AddFlyingCapsules()
+        {
+            float now = Time.unscaledTime;
+            ArenaFx.Capsules.RemoveAll(c => now - c.Time > CapsuleFlight.Life);
+            foreach (var (c, at) in ArenaFx.Capsules)
+            {
+                float t = now - at;
+                Vector3 p = Near(ArenaFx.CapsulePosition(c, t));
+                var rot = Quaternion.Euler(t * 400f, t * 260f, 0f);
+                if (!_gunAccent.TryGetValue(c.Payload, out var list)) list = _gunAccent[PayloadKind.None];
+                list.Add(Matrix4x4.TRS(p, rot, new Vector3(c.Radius * 1.1f, c.Radius * 1.1f, c.Radius * 2f)));
+                _gunDark.Add(Matrix4x4.TRS(p, rot, new Vector3(c.Radius * 1.25f, c.Radius * 0.5f, c.Radius * 1.6f)));
+            }
+            ArenaFx.CapsuleCatches.RemoveAll(c => now - c.Time > 0.3f);
+            foreach (var (c, at) in ArenaFx.CapsuleCatches)
+            {
+                float k = (now - at) / 0.3f;
+                _muzzleFlash.Add(Matrix4x4.TRS(Near(c.From), Quaternion.Euler(45f, 45f * k, 0f), Vector3.one * c.Radius * (2f + 4f * k) * (1f - k)));
+            }
+        }
+
         private void DrawGuns()
         {
+            AddFlyingCapsules();
             DrawList(_gunBody, _gunMat);
             DrawList(_gunDark, _gunDarkMat);
             foreach (var kv in _gunAccent) DrawList(kv.Value, _gunAccentMats[kv.Key]);

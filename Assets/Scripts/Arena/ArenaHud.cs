@@ -6,23 +6,45 @@ using UnityEngine.UI;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The in-game HUD, built from code: the expedition panel (top left) with chat under it, health and shield bars
-    /// with active buffs (bottom left), the payload (bottom centre), the team (right) and running totals (bottom
-    /// right). The view fills the text builders each frame and calls <see cref="Apply"/>. How-to-play text lives in
-    /// the Esc menu, not here.
+    /// The in-game HUD, built from code and nearly free of text: an hourglass for the run's time left and a cluster of
+    /// <see cref="Core.Expedition.EssenceWallet.CarryCap"/> slots per essence color (top left) with chat under it,
+    /// health, shield and XP bars with a row of buff icons above them (bottom left), the chain you hold hanging from the top right (one
+    /// link per payload that built it, in that payload's colour) and the minimap. The gun, the team and running
+    /// totals show only beside the Esc menu. The view fills the text builders each frame and calls <see cref="Apply"/>.
     /// </summary>
     public sealed class ArenaHud
     {
+        /// <summary>Expedition and raid lines the view still writes; no longer shown (the HUD is text-free).</summary>
         public readonly StringBuilder Expedition = new StringBuilder();
         public readonly StringBuilder Chat = new StringBuilder();
-        public readonly StringBuilder Buffs = new StringBuilder();
         public readonly StringBuilder Team = new StringBuilder();
         public readonly StringBuilder Stats = new StringBuilder();
 
         public Text Crosshair, Center;
 
-        private readonly Text _expedition, _chat, _buffs, _team, _stats, _health, _payloadName, _payloadInfo, _chain, _prompt;
-        private readonly GameObject _expeditionBox, _teamBox, _vitalsBox;
+        private readonly Text _chat, _team, _stats, _payloadName, _payloadInfo, _prompt;
+        private readonly GameObject _teamBox, _vitalsBox, _gunBox, _statsBox, _clockBox;
+        private readonly Image _sandTop, _sandBottom, _sandStream;
+        private readonly Image[,] _slots = new Image[Core.Expedition.EssenceColors.Count, Core.Expedition.EssenceWallet.CarryCap];
+        private readonly Image _xpImage;
+        private readonly RectTransform _chainRoot;
+        private readonly Image[] _links = new Image[Core.Combat.ChainTracker.PackedLinks];
+        private readonly Image[] _linkShadows = new Image[Core.Combat.ChainTracker.PackedLinks];
+        private int _shownLinks;
+
+        /// <summary>The buffs shown as icons, each its payload's colour and its own shape.</summary>
+        public enum BuffIcon { Might, Haste, Frenzy, Ward, Focus, Relay }
+        public const int BuffIconCount = 6;
+        private const int RelayPips = 5;
+        private const float IconSize = 34f;
+        private readonly RectTransform[] _buffIcons = new RectTransform[BuffIconCount];
+        private readonly Image[] _buffGold = new Image[BuffIconCount];
+        private readonly Image[] _buffFill = new Image[BuffIconCount];
+        private readonly Image[,] _relayPips = new Image[BuffIconCount, RelayPips];
+        /// <summary>Each buff's full length, learnt from the time left when it's (re)applied.</summary>
+        private readonly float[] _buffFull = new float[BuffIconCount];
+        private readonly float[] _buffLeft = new float[BuffIconCount];
+        private float _linkAddedAt = -10f;
         private readonly RectTransform _healthFill, _shieldFill;
         private readonly Image _healthImage, _payloadStripe;
 
@@ -33,7 +55,7 @@ namespace FriendlyPersonShooter.Arena
 
         private readonly RectTransform _canvasRect;
         private readonly RectTransform _xpFill;
-        private readonly Text _xp, _hurtText;
+        private readonly Text _hurtText;
         private readonly Image _hurtFlash;
         private readonly RectTransform _hurtArrow;
         private readonly Image[] _hurtArrowParts;
@@ -70,11 +92,33 @@ namespace FriendlyPersonShooter.Arena
             flashRect.sizeDelta = Vector2.zero;
             _hurtFlash.sprite = HurtVignette();
 
-            // Expedition, top left.
-            var exp = SessionUi.Box(canvas, "Expedition", tl, new Vector2(20, -20), new Vector2(620, 190), panel);
-            _expeditionBox = exp.gameObject;
-            _expedition = Text(exp.transform, 22, tl, new Vector2(16, -12), new Vector2(590, 170), TextAnchor.UpperLeft);
-            _chat = Text(canvas, 21, tl, new Vector2(24, -224), new Vector2(700, 260), TextAnchor.UpperLeft);
+            // Top left: an hourglass (time left on the run), then a cluster of slots per essence color (carried).
+            var clock = SessionUi.Box(canvas, "Expedition", tl, new Vector2(20, -20), new Vector2(ClockWidth, 88), panel);
+            _clockBox = clock.gameObject;
+            var glass = new Color(1f, 1f, 1f, 0.16f);
+            var sand = new Color(1f, 0.85f, 0.4f);
+            SessionUi.Box(clock.transform, "Glass", tl, new Vector2(16, -12), new Vector2(40, 64), glass).sprite = Hourglass(40, 64);
+            _sandTop = SandBulb(clock.transform, new Vector2(16, -12), true, sand);
+            _sandBottom = SandBulb(clock.transform, new Vector2(16, -44), false, sand);
+            _sandStream = SessionUi.Box(clock.transform, "Stream", tl, new Vector2(35, -42), new Vector2(2, 28), sand);
+            SessionUi.Box(clock.transform, "Cap", tl, new Vector2(12, -8), new Vector2(48, 5), new Color(0.85f, 0.75f, 0.6f));
+            SessionUi.Box(clock.transform, "Cap", tl, new Vector2(12, -75), new Vector2(48, 5), new Color(0.85f, 0.75f, 0.6f));
+            var dot = Circle();
+            for (int ci = 0; ci < Core.Expedition.EssenceColors.Count; ci++)
+            {
+                var centre = new Vector2(ClockFirstCluster + ci * ClusterStep, -44);
+                for (int k = 0; k < Core.Expedition.EssenceWallet.CarryCap; k++)
+                {
+                    // The centre slot fills first, then the ring clockwise from the top.
+                    var offset = k == 0 ? Vector2.zero
+                        : new Vector2(Mathf.Sin((k - 1) * Mathf.PI / 3f), Mathf.Cos((k - 1) * Mathf.PI / 3f)) * SlotRing;
+                    var slot = SessionUi.Box(clock.transform, "Slot", tl, centre + offset, new Vector2(SlotSize, SlotSize), Color.white);
+                    slot.sprite = dot;
+                    slot.rectTransform.pivot = new Vector2(0.5f, 0.5f);
+                    _slots[ci, k] = slot;
+                }
+            }
+            _chat = Text(canvas, 21, tl, new Vector2(24, -120), new Vector2(700, 260), TextAnchor.UpperLeft);
 
             // Health and shield, bottom left, with buffs above.
             var vitals = SessionUi.Box(canvas, "Vitals", bl, new Vector2(20, 20), new Vector2(BarWidth + 32, 124), panel);
@@ -82,35 +126,85 @@ namespace FriendlyPersonShooter.Arena
             SessionUi.Box(vitals.transform, "Health back", tl, new Vector2(16, -16), new Vector2(BarWidth, 34), new Color(0f, 0f, 0f, 0.5f));
             _healthImage = SessionUi.Box(vitals.transform, "Health", tl, new Vector2(16, -16), new Vector2(BarWidth, 34), new Color(0.35f, 0.9f, 0.45f));
             _healthFill = _healthImage.rectTransform;
-            _health = Text(vitals.transform, 22, tl, new Vector2(16, -16), new Vector2(BarWidth, 34), TextAnchor.MiddleCenter, FontStyle.Bold);
             SessionUi.Box(vitals.transform, "Shield back", tl, new Vector2(16, -58), new Vector2(BarWidth, 16), new Color(0f, 0f, 0f, 0.5f));
             _shieldFill = SessionUi.Box(vitals.transform, "Shield", tl, new Vector2(16, -58), new Vector2(0, 16), new Color(0.35f, 0.85f, 1f)).rectTransform;
             // Level and XP under the health and shield bars.
             SessionUi.Box(vitals.transform, "XP back", tl, new Vector2(16, -84), new Vector2(BarWidth, 26), new Color(0f, 0f, 0f, 0.5f));
-            _xpFill = SessionUi.Box(vitals.transform, "XP", tl, new Vector2(16, -84), new Vector2(0, 26), new Color(0.75f, 0.55f, 1f, 0.85f)).rectTransform;
-            _xp = Text(vitals.transform, 18, tl, new Vector2(16, -84), new Vector2(BarWidth, 26), TextAnchor.MiddleCenter, FontStyle.Bold);
-            _buffs = Text(canvas, 21, bl, new Vector2(24, 154), new Vector2(760, 150), TextAnchor.LowerLeft);
+            _xpImage = SessionUi.Box(vitals.transform, "XP", tl, new Vector2(16, -84), new Vector2(0, 26), XpColor);
+            _xpFill = _xpImage.rectTransform;
+            // Buff icons in a row above the bars: a dim shape, the same shape filling clockwise with the time left,
+            // and a gold backing when the buff is part of a combo. Relay shows dots for its hits left instead.
+            var dotSprite = Circle();
+            for (int i = 0; i < BuffIconCount; i++)
+            {
+                var kind = (BuffIcon)i;
+                var color = PayloadColor(IconPayload(kind));
+                var shape = IconShape(kind);
+                var icon = SessionUi.Rect(canvas, "Buff " + kind, bl, Vector2.zero, new Vector2(IconSize, IconSize));
+                _buffIcons[i] = icon;
+                _buffGold[i] = SessionUi.Box(icon, "Combo", c, Vector2.zero, new Vector2(IconSize + 12, IconSize + 12), new Color(1f, 0.82f, 0.25f, 0.85f));
+                _buffGold[i].sprite = dotSprite;
+                SessionUi.Box(icon, "Back", c, Vector2.zero, new Vector2(IconSize, IconSize), new Color(color.r * 0.3f, color.g * 0.3f, color.b * 0.3f, 0.8f)).sprite = shape;
+                var fill = SessionUi.Box(icon, "Fill", c, Vector2.zero, new Vector2(IconSize, IconSize), color);
+                fill.sprite = shape;
+                fill.type = Image.Type.Filled;
+                fill.fillMethod = Image.FillMethod.Radial360;
+                fill.fillOrigin = (int)Image.Origin360.Top;
+                fill.fillClockwise = false;
+                _buffFill[i] = fill;
+                for (int k = 0; k < RelayPips; k++)
+                {
+                    var pip = SessionUi.Box(icon, "Pip", c, new Vector2((k - (RelayPips - 1) * 0.5f) * 8f, -IconSize * 0.5f - 7f), new Vector2(6, 6), color);
+                    pip.sprite = dotSprite;
+                    pip.gameObject.SetActive(false);
+                    _relayPips[i, k] = pip;
+                }
+                icon.gameObject.SetActive(false);
+            }
 
-            // The gun in hand, bottom centre (stripe in its payload's colour), with the chain status and the pickup prompt above it.
-            var pay = SessionUi.Box(canvas, "Payload", new Vector2(0.5f, 0f), new Vector2(0, 20), new Vector2(620, 112), panel);
-            _payloadStripe = SessionUi.Box(pay.transform, "Stripe", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(10, 112), Color.white);
-            _payloadName = Text(pay.transform, 28, new Vector2(0.5f, 1f), new Vector2(0, -4), new Vector2(590, 38), TextAnchor.MiddleCenter, FontStyle.Bold);
-            _payloadInfo = Text(pay.transform, 18, new Vector2(0.5f, 0f), new Vector2(0, 6), new Vector2(590, 66), TextAnchor.MiddleCenter);
-            _chain = Text(canvas, 24, new Vector2(0.5f, 0f), new Vector2(0, 138), new Vector2(900, 34), TextAnchor.MiddleCenter, FontStyle.Bold);
-            _prompt = Text(canvas, 22, new Vector2(0.5f, 0f), new Vector2(0, 176), new Vector2(1100, 100), TextAnchor.LowerCenter, FontStyle.Bold);
+            // The chain you hold: links hanging from a hook in the top right, growing down the side of the screen.
+            // Links alternate face-on and side-on, like a real chain.
+            _chainRoot = SessionUi.Rect(canvas, "Chain", tr, new Vector2(-40, -16), new Vector2(LinkWidth, 40));
+            SessionUi.Box(_chainRoot, "Hook", new Vector2(0.5f, 1f), new Vector2(0, 0), new Vector2(46, 8), new Color(0.75f, 0.72f, 0.8f, 0.9f));
+            SessionUi.Box(_chainRoot, "Hook", new Vector2(0.5f, 1f), new Vector2(0, -6), new Vector2(8, 14), new Color(0.75f, 0.72f, 0.8f, 0.9f));
+            var ring = Ring((int)LinkWidth, (int)LinkHeight, 9f);
+            var edge = Ring(24, (int)LinkHeight, 8f);
+            for (int i = 0; i < _links.Length; i++)
+            {
+                bool side = i % 2 == 1;
+                var size = side ? new Vector2(24, LinkHeight) : new Vector2(LinkWidth, LinkHeight);
+                var pos = new Vector2(0, -16 - i * LinkStep);
+                _linkShadows[i] = SessionUi.Box(_chainRoot, "Link shadow", new Vector2(0.5f, 1f), pos + new Vector2(2, -2), size, new Color(0f, 0f, 0f, 0.5f));
+                _linkShadows[i].sprite = side ? edge : ring;
+                _links[i] = SessionUi.Box(_chainRoot, "Link", new Vector2(0.5f, 1f), pos, size, Color.white);
+                _links[i].sprite = side ? edge : ring;
+                _links[i].rectTransform.pivot = new Vector2(0.5f, 1f);
+            }
+            _chainRoot.gameObject.SetActive(false);
 
-            // Team, right side (under the join code), and totals, bottom right.
-            var team = SessionUi.Box(canvas, "Team", tr, new Vector2(-20, -130), new Vector2(380, 250), panel);
+            // The shoot prompt, bottom centre.
+            _prompt = Text(canvas, 22, new Vector2(0.5f, 0f), new Vector2(0, 80), new Vector2(1100, 100), TextAnchor.LowerCenter, FontStyle.Bold);
+
+            // Beside the Esc menu only: the gun in hand (stripe in its payload's colour) and your totals on the left,
+            // the team on the right (under the join code).
+            var left = new Vector2(0f, 0.5f);
+            var pay = SessionUi.Box(canvas, "Payload", left, new Vector2(20, 90), new Vector2(EscColumn, 210), panel);
+            _gunBox = pay.gameObject;
+            _payloadStripe = SessionUi.Box(pay.transform, "Stripe", new Vector2(0f, 0.5f), Vector2.zero, new Vector2(10, 210), Color.white);
+            _payloadName = Text(pay.transform, 28, new Vector2(0.5f, 1f), new Vector2(6, -8), new Vector2(EscColumn - 30, 38), TextAnchor.MiddleCenter, FontStyle.Bold);
+            _payloadInfo = Text(pay.transform, 18, new Vector2(0.5f, 1f), new Vector2(6, -50), new Vector2(EscColumn - 30, 150), TextAnchor.UpperCenter);
+            var stats = SessionUi.Box(canvas, "Totals", left, new Vector2(20, -100), new Vector2(EscColumn, 150), panel);
+            _statsBox = stats.gameObject;
+            _stats = Text(stats.transform, 19, tl, new Vector2(14, -10), new Vector2(EscColumn - 28, 130), TextAnchor.UpperLeft);
+            var team = SessionUi.Box(canvas, "Team", tr, new Vector2(-20, -130), new Vector2(EscColumn, 250), panel);
             _teamBox = team.gameObject;
-            _team = Text(team.transform, 21, tl, new Vector2(14, -10), new Vector2(356, 236), TextAnchor.UpperLeft);
-            _stats = Text(canvas, 19, br, new Vector2(-24, 20), new Vector2(560, 90), TextAnchor.LowerRight);
+            _team = Text(team.transform, 21, tl, new Vector2(14, -10), new Vector2(EscColumn - 24, 236), TextAnchor.UpperLeft);
 
             // Minimap above the totals: players and enemies, turning with you (up is where you face).
-            var map = SessionUi.Box(canvas, "Minimap", br, new Vector2(-24, 118), new Vector2(MapSize, MapSize), panel);
+            var map = SessionUi.Box(canvas, "Minimap", br, new Vector2(-24, 24), new Vector2(MapSize, MapSize), panel);
             _mapBox = map.gameObject;
             SessionUi.Box(map.transform, "Cross", c, Vector2.zero, new Vector2(2, MapSize - 16), new Color(1f, 1f, 1f, 0.12f));
             SessionUi.Box(map.transform, "Cross", c, Vector2.zero, new Vector2(MapSize - 16, 2), new Color(1f, 1f, 1f, 0.12f));
-            Text(map.transform, 14, new Vector2(1f, 0f), new Vector2(-6, 4), new Vector2(120, 20), TextAnchor.LowerRight).text = $"<color=#B8B0D8>{MapRange:0} m</color>";
             // Enemies first, so player dots draw on top.
             for (int i = 0; i < EnemyDots; i++)
             {
@@ -186,7 +280,6 @@ namespace FriendlyPersonShooter.Arena
         {
             Expedition.Clear();
             Chat.Clear();
-            Buffs.Clear();
             Team.Clear();
             Stats.Clear();
         }
@@ -199,7 +292,6 @@ namespace FriendlyPersonShooter.Arena
             _healthFill.sizeDelta = new Vector2(BarWidth * f, _healthFill.sizeDelta.y);
             _healthImage.color = Color.Lerp(new Color(1f, 0.3f, 0.3f), new Color(0.35f, 0.9f, 0.45f), Mathf.InverseLerp(0.2f, 0.6f, f));
             _shieldFill.sizeDelta = new Vector2(max > 0f ? BarWidth * Mathf.Clamp01(shield / max) : 0f, _shieldFill.sizeDelta.y);
-            _health.text = shield > 0f ? $"{health:0} / {max:0}   <color=#7FDBFF>+{shield:0}</color>" : $"{health:0} / {max:0}";
         }
 
         public const float MapRange = 120f;
@@ -208,13 +300,37 @@ namespace FriendlyPersonShooter.Arena
         {
             if (!show)
             {
-                _xp.text = "";
                 _xpFill.sizeDelta = new Vector2(0f, _xpFill.sizeDelta.y);
                 return;
             }
             float f = next > 0 ? Mathf.Clamp01(xp / (float)next) : 1f;
             _xpFill.sizeDelta = new Vector2(BarWidth * f, _xpFill.sizeDelta.y);
-            _xp.text = $"Level {level}   {xp} / {next} XP" + (points > 0 ? $"   <color=#FFD84D>{points} skill point{(points > 1 ? "s" : "")}: Esc</color>" : "");
+            // Gold while there are skill points to spend (Esc).
+            _xpImage.color = points > 0 ? new Color(1f, 0.82f, 0.3f, 0.95f) : XpColor;
+        }
+
+        /// <summary>
+        /// The top-left clock and essence: <paramref name="timeLeft"/> 0..1 of the run left in the hourglass, and how much
+        /// of each color is carried (by color index). Hidden when <paramref name="show"/> is false.
+        /// </summary>
+        public void SetExpedition(bool show, float timeLeft, int[] carried, Color[] colors)
+        {
+            _clockBox.SetActive(show);
+            if (!show) return;
+            timeLeft = Mathf.Clamp01(timeLeft);
+            // The last tenth runs red.
+            var sand = timeLeft < 0.1f ? new Color(1f, 0.4f, 0.3f) : new Color(1f, 0.85f, 0.4f);
+            _sandTop.fillAmount = timeLeft;
+            _sandBottom.fillAmount = 1f - timeLeft;
+            _sandTop.color = _sandBottom.color = _sandStream.color = sand;
+            _sandStream.enabled = timeLeft > 0f;
+            for (int ci = 0; ci < colors.Length && ci < _slots.GetLength(0); ci++)
+            {
+                int n = carried[ci];
+                var full = colors[ci];
+                var empty = new Color(full.r, full.g, full.b, 0.18f);
+                for (int k = 0; k < _slots.GetLength(1); k++) _slots[ci, k].color = k < n ? full : empty;
+            }
         }
 
         /// <summary>
@@ -351,13 +467,111 @@ namespace FriendlyPersonShooter.Arena
             return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f));
         }
 
-        /// <summary>The gun panel: a title line (gun, payload, ammo), a detail block (mods, other gun) and the chain line.</summary>
-        public void SetGun(PayloadKind payload, string title, string info, string chain)
+        /// <summary>
+        /// One buff icon: <paramref name="left"/> seconds left (0 hides it; for Relay, 1 while it has hits), whether
+        /// it's part of a combo, and Relay's hits left as dots.
+        /// </summary>
+        public void SetBuff(BuffIcon kind, float left, bool combo, int pips = 0)
+        {
+            int i = (int)kind;
+            // A refresh (more time than last frame) sets the full length the fill drains from.
+            if (left > _buffLeft[i] + 0.05f || _buffFull[i] <= 0f) _buffFull[i] = Mathf.Max(left, 0.01f);
+            _buffLeft[i] = left;
+            _buffGold[i].enabled = combo;
+            _buffFill[i].fillAmount = kind == BuffIcon.Relay ? 1f : Mathf.Clamp01(left / _buffFull[i]);
+            for (int k = 0; k < RelayPips; k++) _relayPips[i, k].gameObject.SetActive(k < pips);
+        }
+
+        /// <summary>The active buff icons, left to right above the bars.</summary>
+        private void LayOutBuffs()
+        {
+            int shown = 0;
+            for (int i = 0; i < BuffIconCount; i++)
+            {
+                bool on = _buffLeft[i] > 0f;
+                _buffIcons[i].gameObject.SetActive(on);
+                if (!on) continue;
+                _buffIcons[i].anchoredPosition = new Vector2(24 + shown * (IconSize + 16f), 162);
+                shown++;
+            }
+        }
+
+        private static PayloadKind IconPayload(BuffIcon kind)
+        {
+            switch (kind)
+            {
+                case BuffIcon.Might: return PayloadKind.Might;
+                case BuffIcon.Haste: return PayloadKind.Haste;
+                case BuffIcon.Frenzy: return PayloadKind.Frenzy;
+                case BuffIcon.Ward: return PayloadKind.Ward;
+                case BuffIcon.Focus: return PayloadKind.Focus;
+                default: return PayloadKind.Relay;
+            }
+        }
+
+        /// <summary>A shape per buff, so they differ by more than colour.</summary>
+        private static Sprite IconShape(BuffIcon kind)
+        {
+            const int s = 32;
+            const float h = s * 0.5f;
+            switch (kind)
+            {
+                // Might: an upward triangle.
+                case BuffIcon.Might: return Triangle(s, s, false);
+                // Haste: a diamond.
+                case BuffIcon.Haste: return Shape(s, s, (x, y) => Mathf.Abs(x - h) + Mathf.Abs(y - h) <= h - 1f);
+                // Frenzy: a hexagon.
+                case BuffIcon.Frenzy: return Shape(s, s, (x, y) =>
+                {
+                    float dx = Mathf.Abs(x - h), dy = Mathf.Abs(y - h);
+                    return dy <= h * 0.866f - 1f && dx * 0.866f + dy * 0.5f <= h * 0.866f - 1f;
+                });
+                // Ward: a shield (square top, pointed bottom).
+                case BuffIcon.Ward: return Shape(s, s, (x, y) => y >= h ? Mathf.Abs(x - h) <= h - 2f : Mathf.Abs(x - h) <= (y / h) * (h - 2f));
+                // Focus: a ring with a dot (a target).
+                case BuffIcon.Focus: return Shape(s, s, (x, y) =>
+                {
+                    float d = Mathf.Sqrt((x - h) * (x - h) + (y - h) * (y - h));
+                    return d <= 4.5f || (d >= h - 6f && d <= h - 1f);
+                });
+                // Relay: a circle.
+                default: return Circle();
+            }
+        }
+
+        /// <summary>The gun panel (Esc menu): a title line (gun, payload, ammo) and a detail block (mods).</summary>
+        public void SetGun(PayloadKind payload, string title, string info)
         {
             _payloadStripe.color = PayloadColor(payload);
             _payloadName.text = title;
             _payloadInfo.text = info;
-            _chain.text = chain ?? "";
+        }
+
+        /// <summary>
+        /// The chain you hold: <paramref name="links"/> links (0 hides it), coloured by the packed payloads. A new link
+        /// pops in; the whole chain blinks in its last 1.5 s.
+        /// </summary>
+        public void SetChain(int links, uint payloads, float timeLeft)
+        {
+            float now = Time.unscaledTime;
+            links = Mathf.Clamp(links, 0, _links.Length);
+            if (links > _shownLinks) _linkAddedAt = now;
+            _shownLinks = links;
+            _chainRoot.gameObject.SetActive(links > 0);
+            if (links == 0) return;
+            float alpha = timeLeft < 1.5f ? 0.35f + 0.65f * Mathf.Abs(Mathf.Sin(now * 9f)) : 1f;
+            float pop = 1f + 0.5f * Mathf.Clamp01(1f - (now - _linkAddedAt) / 0.25f);
+            for (int i = 0; i < _links.Length; i++)
+            {
+                bool on = i < links;
+                _links[i].gameObject.SetActive(on);
+                _linkShadows[i].gameObject.SetActive(on);
+                if (!on) continue;
+                var c = PayloadColor(Core.Combat.ChainTracker.PayloadAt(payloads, i));
+                _links[i].color = new Color(c.r, c.g, c.b, alpha);
+                _linkShadows[i].color = new Color(0f, 0f, 0f, 0.5f * alpha);
+                _links[i].rectTransform.localScale = Vector3.one * (i == links - 1 ? pop : 1f);
+            }
         }
 
         /// <summary>What E would do here (open a box, take an item); empty for nothing.</summary>
@@ -365,18 +579,79 @@ namespace FriendlyPersonShooter.Arena
 
         public void Apply()
         {
-            _expedition.text = Expedition.ToString();
-            _expeditionBox.SetActive(Expedition.Length > 0);
-            Fit(_expeditionBox, _expedition);
             _chat.text = Chat.ToString();
-            _buffs.text = Buffs.ToString();
+            LayOutBuffs();
+            // The gun, totals and team only show beside the Esc menu (while the mouse is free).
+            bool menu = Cursor.lockState != CursorLockMode.Locked;
+            _gunBox.SetActive(menu);
+            _statsBox.SetActive(menu);
             _team.text = Team.ToString();
-            _teamBox.SetActive(Team.Length > 0);
+            _teamBox.SetActive(menu && Team.Length > 0);
+            // The chain hangs where the join code and team show in the menu.
+            if (menu) _chainRoot.gameObject.SetActive(false);
             Fit(_teamBox, _team);
             // Under the host's join code when there is one, otherwise in the corner.
             var teamRect = (RectTransform)_teamBox.transform;
             teamRect.anchoredPosition = new Vector2(-20, PlaySession.JoinCode != null ? -130 : -20);
             _stats.text = Stats.ToString();
+        }
+
+        private const float EscColumn = 380f;
+        private const float LinkWidth = 54f;
+        private const float LinkHeight = 86f;
+        /// <summary>Links overlap: each starts this far below the last.</summary>
+        private const float LinkStep = 62f;
+        private const float SlotSize = 11f;
+        private const float SlotRing = 12.5f;
+        private const float ClusterStep = 44f;
+        private const float ClockFirstCluster = 96f;
+        private const float ClockWidth = ClockFirstCluster + ClusterStep * (Core.Expedition.EssenceColors.Count - 1) + 34f;
+        private static readonly Color XpColor = new Color(0.75f, 0.55f, 1f, 0.85f);
+
+        /// <summary>One bulb of sand, a triangle that fills from the bottom (the top bulb points down to the neck).</summary>
+        private static Image SandBulb(Transform parent, Vector2 pos, bool down, Color color)
+        {
+            var image = SessionUi.Box(parent, down ? "Sand top" : "Sand bottom", new Vector2(0f, 1f), pos, new Vector2(40, 32), color);
+            image.sprite = Triangle(40, 32, down);
+            image.type = Image.Type.Filled;
+            image.fillMethod = Image.FillMethod.Vertical;
+            image.fillOrigin = (int)Image.OriginVertical.Bottom;
+            return image;
+        }
+
+        private static Sprite Triangle(int w, int h, bool down) =>
+            Shape(w, h, (x, y) => Mathf.Abs(x - w * 0.5f) <= (down ? y / h : 1f - y / h) * w * 0.5f - 1f);
+
+        /// <summary>Two triangles meeting at a neck: the glass behind the sand.</summary>
+        private static Sprite Hourglass(int w, int h) =>
+            Shape(w, h, (x, y) => Mathf.Abs(x - w * 0.5f) <= Mathf.Max(2.5f, Mathf.Abs(y - h * 0.5f) / (h * 0.5f) * w * 0.5f));
+
+        /// <summary>An oval ring: a chain link seen face-on, or (drawn narrow and thick) seen side-on.</summary>
+        private static Sprite Ring(int w, int h, float thickness)
+        {
+            float rx = w * 0.5f, ry = h * 0.5f;
+            return Shape(w, h, (x, y) =>
+            {
+                float dx = (x - rx) / rx, dy = (y - ry) / ry;
+                float outer = dx * dx + dy * dy;
+                float ix = (x - rx) / (rx - thickness), iy = (y - ry) / (ry - thickness);
+                return outer <= 1f && ix * ix + iy * iy >= 1f;
+            });
+        }
+
+        private static Sprite Circle() => Shape(32, 32, (x, y) => (x - 16f) * (x - 16f) + (y - 16f) * (y - 16f) <= 15f * 15f);
+
+        /// <summary>A white sprite whose pixel centres inside the shape are opaque.</summary>
+        private static Sprite Shape(int w, int h, System.Func<float, float, bool> inside)
+        {
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                    pixels[y * w + x] = new Color32(255, 255, 255, (byte)(inside(x + 0.5f, y + 0.5f) ? 255 : 0));
+            tex.SetPixels32(pixels);
+            tex.Apply();
+            return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f));
         }
 
         /// <summary>Sizes a panel to its text (plus padding).</summary>
@@ -411,7 +686,7 @@ namespace FriendlyPersonShooter.Arena
                 case PayloadKind.Vigor: return "Allies: heal + shield     Enemies: wither";
                 case PayloadKind.Haste: return "Allies: +30% speed, +20% jump     Enemies: slow";
                 case PayloadKind.Relay: return "Allies: next 5 hits carry your other payload     Enemies: tag (splash)";
-                case PayloadKind.Frenzy: return "Allies: +30% fire rate and reload speed     Enemies: jam (attack less)";
+                case PayloadKind.Frenzy: return "Allies: +30% fire rate and capsule regrowth     Enemies: jam (attack less)";
                 case PayloadKind.Ward: return "Allies: 20-point shield     Enemies: brittle (armor weakens)";
                 case PayloadKind.Focus: return "Allies: bigger weak points for them     Enemies: mark (weak points grow for all)";
                 case PayloadKind.None: return "No payload: damages enemies, heals allies a tiny bit. Find a payload mod to add one.";

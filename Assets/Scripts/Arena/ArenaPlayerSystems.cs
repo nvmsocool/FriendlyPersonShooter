@@ -142,7 +142,7 @@ namespace FriendlyPersonShooter.Arena
         }
     }
 
-    /// <summary>The human's input: mouse look, WASD, Shift to sprint, space to jump, left mouse to fire, right mouse to zoom, Q to swap guns, R to reload, E to open or take loot.</summary>
+    /// <summary>The human's input: mouse look, WASD, Shift to sprint, space to jump, left mouse to fire (every action is a shot: loot, essence, banking, gates and shooting galleries), right mouse to zoom, middle mouse to ping. Reloading is shooting your flung capsule.</summary>
     [UpdateInGroup(typeof(GhostInputSystemGroup))]
     [WorldSystemFilter(WorldSystemFilterFlags.ClientSimulation)]
     public partial class ArenaLocalInputSystem : SystemBase
@@ -167,7 +167,7 @@ namespace FriendlyPersonShooter.Arena
             var mouse = Mouse.current;
             bool locked = Cursor.lockState == CursorLockMode.Locked;
             int h = 0, v = 0;
-            bool jump = false, swap = false, fire = false, reload = false, interact = false, zoom = false, sprint = false, ping = false;
+            bool jump = false, fire = false, zoom = false, sprint = false, ping = false;
             if (keyboard != null)
             {
                 if (keyboard.aKey.isPressed) h -= 1;
@@ -175,9 +175,6 @@ namespace FriendlyPersonShooter.Arena
                 if (keyboard.sKey.isPressed) v -= 1;
                 if (keyboard.wKey.isPressed) v += 1;
                 jump = keyboard.spaceKey.wasPressedThisFrame;
-                swap = keyboard.qKey.wasPressedThisFrame;
-                reload = keyboard.rKey.wasPressedThisFrame;
-                interact = keyboard.eKey.wasPressedThisFrame;
                 sprint = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
             }
             if (mouse != null && locked)
@@ -200,9 +197,6 @@ namespace FriendlyPersonShooter.Arena
             {
                 var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0, Zoom = zoom ? 1 : 0, Sprint = sprint ? 1 : 0 };
                 if (jump) i.Jump.Set();
-                if (swap) i.SwapGun.Set();
-                if (reload) i.Reload.Set();
-                if (interact) i.Interact.Set();
                 if (unstuck) i.Unstuck.Set();
                 if (ping) i.Ping.Set();
                 input.ValueRW = i;

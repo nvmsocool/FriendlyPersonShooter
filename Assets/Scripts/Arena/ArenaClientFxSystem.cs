@@ -11,6 +11,14 @@ namespace FriendlyPersonShooter.Arena
     {
         public static readonly List<(HitConfirm Hit, float Time)> Hits = new List<(HitConfirm, float)>();
         public static readonly List<(ShotFx Shot, float Time)> Shots = new List<(ShotFx, float)>();
+        /// <summary>Payload capsules in the air (removed when caught or when their flight ends).</summary>
+        public static readonly List<(CapsuleFx Capsule, float Time)> Capsules = new List<(CapsuleFx, float)>();
+        /// <summary>Capsules just shot out of the air (a flash where they were).</summary>
+        public static readonly List<(CapsuleFx Capsule, float Time)> CapsuleCatches = new List<(CapsuleFx, float)>();
+
+        /// <summary>Where a flying capsule is <paramref name="t"/> seconds after launch (Core.Arsenal.CapsuleFlight).</summary>
+        public static Unity.Mathematics.float3 CapsulePosition(CapsuleFx c, float t) =>
+            c.From + c.Velocity * t + new Unity.Mathematics.float3(0f, -0.5f * FriendlyPersonShooter.Core.Arsenal.CapsuleFlight.Gravity * t * t, 0f);
         public static readonly List<(ArenaAnnounce Message, float Time)> Announcements = new List<(ArenaAnnounce, float)>();
         /// <summary>Running totals for the HUD: damage dealt and healing given by the human.</summary>
         public static float DamageDealt, HealingGiven;
@@ -29,10 +37,6 @@ namespace FriendlyPersonShooter.Arena
         public static bool HasProgress;
         /// <summary>Skills the human chose to buy, sent to the server by the client system.</summary>
         public static readonly List<byte> SkillBuys = new List<byte>();
-        /// <summary>The human's answer to their open pick (an index, or PickRequest.Leave), sent once by the client system; -1 = none waiting.</summary>
-        public static int PickChoice = -1;
-        /// <summary>Which pick <see cref="PickChoice"/> answers.</summary>
-        public static byte PickSerial;
         /// <summary>Loot boxes the human has opened this session (drawn shut and dark).</summary>
         public static readonly HashSet<int> OpenedBoxes = new HashSet<int>();
     }
@@ -74,6 +78,26 @@ namespace FriendlyPersonShooter.Arena
             {
                 ecb.DestroyEntity(entity);
                 if (keep) ArenaFx.Shots.Add((shot.ValueRO, now));
+            }
+            foreach (var (capsule, entity) in SystemAPI.Query<RefRO<CapsuleFx>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
+            {
+                ecb.DestroyEntity(entity);
+                if (!keep) continue;
+                int who = capsule.ValueRO.ShooterNetworkId;
+                if (capsule.ValueRO.Caught != 0)
+                {
+                    // A flash where it was caught (From = that spot).
+                    int i = ArenaFx.Capsules.FindIndex(c => c.Capsule.ShooterNetworkId == who);
+                    if (i >= 0)
+                    {
+                        var c = ArenaFx.Capsules[i];
+                        var flash = c.Capsule;
+                        flash.From = ArenaFx.CapsulePosition(c.Capsule, now - c.Time);
+                        ArenaFx.CapsuleCatches.Add((flash, now));
+                    }
+                }
+                ArenaFx.Capsules.RemoveAll(c => c.Capsule.ShooterNetworkId == who);
+                if (capsule.ValueRO.Caught == 0) ArenaFx.Capsules.Add((capsule.ValueRO, now));
             }
             foreach (var (msg, entity) in SystemAPI.Query<RefRO<ArenaAnnounce>>().WithAll<ReceiveRpcCommandRequest>().WithEntityAccess())
             {
@@ -117,13 +141,6 @@ namespace FriendlyPersonShooter.Arena
                     ecb.AddComponent<SendRpcCommandRequest>(rpc);
                 }
                 ArenaFx.SkillBuys.Clear();
-            }
-            if (keep && ArenaFx.PickChoice >= 0 && SystemAPI.HasSingleton<NetworkId>())
-            {
-                var rpc = ecb.CreateEntity();
-                ecb.AddComponent(rpc, new PickRequest { Index = (byte)ArenaFx.PickChoice, Serial = ArenaFx.PickSerial });
-                ecb.AddComponent<SendRpcCommandRequest>(rpc);
-                ArenaFx.PickChoice = -1;
             }
             ecb.Playback(EntityManager);
         }

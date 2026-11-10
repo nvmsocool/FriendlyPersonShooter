@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Numerics;
 using FriendlyPersonShooter.Core.Arsenal;
@@ -142,19 +143,19 @@ namespace FriendlyPersonShooter.Core.Tests
         // ---- Equipping ----
 
         [Test]
-        public void Equip_GunFillsEmptySlotThenReplacesGunInHand()
+        public void Equip_GunAlwaysReplacesTheGunInHand()
         {
             var l = new Loadout(new Gun(FrameKind.Pistol));
             var r1 = l.Equip(LootItem.Of(new Gun(FrameKind.Smg)));
-            Assert.That(r1.GunSlot, Is.EqualTo(1));
-            Assert.That(r1.Dropped.IsNone, Is.True);
-            Assert.That(l.Active, Is.EqualTo(1));
+            Assert.That(r1.GunSlot, Is.EqualTo(0));
+            Assert.That(r1.Dropped.Gun.Frame, Is.EqualTo(FrameKind.Pistol));
+            Assert.That(l.InHand.Frame, Is.EqualTo(FrameKind.Smg));
+            Assert.That(l.GunB.IsEmpty, Is.True);
 
-            var r2 = l.Equip(LootItem.Of(new Gun(FrameKind.Launcher)));
-            Assert.That(r2.GunSlot, Is.EqualTo(1));
-            Assert.That(r2.Dropped.Gun.Frame, Is.EqualTo(FrameKind.Smg));
-            Assert.That(l.GunA.Frame, Is.EqualTo(FrameKind.Pistol));
-            Assert.That(l.GunB.Frame, Is.EqualTo(FrameKind.Launcher));
+            var empty = new Loadout();
+            var r2 = empty.Equip(LootItem.Of(new Gun(FrameKind.Launcher)));
+            Assert.That(r2.Dropped.IsNone, Is.True);
+            Assert.That(empty.InHand.Frame, Is.EqualTo(FrameKind.Launcher));
         }
 
         [Test]
@@ -217,16 +218,6 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(l.InHand.Payload1.IsEmpty, Is.True);
         }
 
-        [Test]
-        public void Swap_OnlyWhenTheOtherSlotHasAGun()
-        {
-            var l = new Loadout(new Gun(FrameKind.Pistol));
-            Assert.That(l.Swap(), Is.False);
-            l.GunB = new Gun(FrameKind.Smg);
-            Assert.That(l.Swap(), Is.True);
-            Assert.That(l.InHand.Frame, Is.EqualTo(FrameKind.Smg));
-        }
-
         // ---- Firing ----
 
         [Test]
@@ -235,9 +226,9 @@ namespace FriendlyPersonShooter.Core.Tests
             var s = GunStats.For(new Gun(FrameKind.Smg));
             var st = GunState.Full(s);
             int shots = 0;
-            for (double t = 0; t < 1.0 - 1e-6; t += 0.01) shots += FireControl.Step(ref st, s, t, true, false);
+            for (double t = 0; t < 1.0 - 1e-6; t += 0.01) shots += FireControl.Step(ref st, s, t, true).Shots;
             Assert.That(shots, Is.InRange(12, 13)); // 0.08 s interval
-            Assert.That(st.Ammo, Is.EqualTo(s.Magazine - shots));
+            Assert.That(st.Charge, Is.EqualTo(s.Magazine - shots));
         }
 
         [Test]
@@ -245,46 +236,127 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var s = GunStats.For(new Gun(FrameKind.Rifle));
             var st = GunState.Full(s);
-            int shots = FireControl.Step(ref st, s, 0, true, false);
-            for (double t = 0.01; t < 0.3; t += 0.01) shots += FireControl.Step(ref st, s, t, false, false);
+            int shots = FireControl.Step(ref st, s, 0, true).Shots;
+            for (double t = 0.01; t < 0.3; t += 0.01) shots += FireControl.Step(ref st, s, t, false).Shots;
             Assert.That(shots, Is.EqualTo(s.BurstCount));
         }
 
+        /// <summary>Fires until the capsule launches; returns the time it did.</summary>
+        private static double EmptyAndLaunch(ref GunState st, GunStats s, out int payloaded, out int shots)
+        {
+            payloaded = 0;
+            shots = 0;
+            for (double t = 0; t < 30; t += 0.05)
+            {
+                var r = FireControl.Step(ref st, s, t, true);
+                payloaded += r.Payloaded;
+                shots += r.Shots;
+                if (r.Launched) return t;
+            }
+            return -1;
+        }
+
         [Test]
-        public void Fire_EmptyMagazineReloadsByItself()
+        public void Capsule_DrainsThenLaunchesAndShotsNeverStop()
         {
             var s = GunStats.For(new Gun(FrameKind.Launcher));
             var st = GunState.Full(s);
-            double t = 0;
-            int shots = 0;
-            for (; t < 10 && shots < s.Magazine; t += 0.05) shots += FireControl.Step(ref st, s, t, true, false);
-            Assert.That(st.Ammo, Is.EqualTo(0));
-            Assert.That(st.Reloading, Is.True);
-            Assert.That(FireControl.Step(ref st, s, t + 0.1, true, false), Is.EqualTo(0));
-            FireControl.Step(ref st, s, t + s.Reload + 0.01, false, false);
-            Assert.That(st.Ammo, Is.EqualTo(s.Magazine));
+            double t = EmptyAndLaunch(ref st, s, out int payloaded, out int shots);
+            Assert.That(t, Is.GreaterThan(0));
+            Assert.That(payloaded, Is.EqualTo(s.Magazine));
+            Assert.That(shots, Is.EqualTo(s.Magazine + 1), "the shot after the last payload shot launches it");
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Flying));
+            // Still firing, plain.
+            var r = FireControl.Step(ref st, s, t + 1.0, true);
+            Assert.That(r.Shots, Is.EqualTo(1));
+            Assert.That(r.Payloaded, Is.EqualTo(0));
+            Assert.That(r.Launched, Is.False);
         }
 
         [Test]
-        public void Fire_ReloadKeyOnlyWhenNotFull()
+        public void Capsule_CaughtRefillsIt()
         {
             var s = GunStats.For(new Gun(FrameKind.Pistol));
             var st = GunState.Full(s);
-            FireControl.Step(ref st, s, 0, false, true);
-            Assert.That(st.Reloading, Is.False);
-            FireControl.Step(ref st, s, 0.1, true, false);
-            FireControl.Step(ref st, s, 0.5, false, true);
-            Assert.That(st.Reloading, Is.True);
+            EmptyAndLaunch(ref st, s, out _, out _);
+            Assert.That(FireControl.Catch(ref st, s), Is.True);
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Seated));
+            Assert.That(st.Charge, Is.EqualTo(s.Magazine));
+            Assert.That(FireControl.Catch(ref st, s), Is.False, "only a flying capsule can be caught");
         }
 
         [Test]
-        public void Fire_SwappingInDelaysTheFirstShot()
+        public void Capsule_RefillFillsItFromAnyState()
         {
             var s = GunStats.For(new Gun(FrameKind.Pistol));
             var st = GunState.Full(s);
-            FireControl.SwappedIn(ref st, 1.0);
-            Assert.That(FireControl.Step(ref st, s, 1.1, true, false), Is.EqualTo(0));
-            Assert.That(FireControl.Step(ref st, s, 1.0 + FireControl.SwapTime + 0.01, true, false), Is.EqualTo(1));
+            st.Charge = 3;
+            Assert.That(FireControl.Refill(ref st, s), Is.True);
+            Assert.That(st.Charge, Is.EqualTo(s.Magazine));
+            st.Capsule = CapsuleState.Regrowing;
+            st.Charge = 0;
+            FireControl.Refill(ref st, s);
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Seated));
+            Assert.That(st.Charge, Is.EqualTo(s.Magazine));
+        }
+
+        [Test]
+        public void Capsule_MissedRegrowsEmptyThenLaunchesAgain()
+        {
+            var s = GunStats.For(new Gun(FrameKind.Marksman));
+            var st = GunState.Full(s);
+            double t = EmptyAndLaunch(ref st, s, out _, out _);
+            FireControl.StepCapsule(ref st, s, t + CapsuleFlight.Life + 0.01);
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Regrowing));
+            Assert.That(st.CapsuleGrown(t + CapsuleFlight.Life + 0.01 + s.Reload / 2), Is.EqualTo(0.5f).Within(0.02f));
+            double grown = t + CapsuleFlight.Life + 0.02 + s.Reload;
+            FireControl.StepCapsule(ref st, s, grown);
+            Assert.That(st.Capsule, Is.EqualTo(CapsuleState.Seated));
+            Assert.That(st.Charge, Is.EqualTo(0));
+            var r = FireControl.Step(ref st, s, grown + 5, true);
+            Assert.That(r.Launched, Is.True, "an empty capsule launches on the next shot");
+        }
+
+        [Test]
+        public void Capsule_ReloadModsAndFrenzyRegrowFaster()
+        {
+            var bare = GunStats.For(new Gun(FrameKind.Smg));
+            var modded = GunStats.For(new Gun(FrameKind.Smg, M(ModKind.Reload, ModTier.Epic)));
+            var a = GunState.Full(bare);
+            var b = GunState.Full(modded);
+            a.Capsule = b.Capsule = CapsuleState.Flying;
+            FireControl.StepCapsule(ref a, bare, CapsuleFlight.Life);
+            FireControl.StepCapsule(ref b, modded, CapsuleFlight.Life, 2f);
+            Assert.That(b.RegrowTime, Is.LessThan(a.RegrowTime / 2f));
+        }
+
+        [Test]
+        public void Capsule_MagazineModsMakeItBigger()
+        {
+            var bare = GunStats.For(new Gun(FrameKind.Smg));
+            var modded = GunStats.For(new Gun(FrameKind.Smg, M(ModKind.Magazine, ModTier.Epic)));
+            Assert.That(GunState.Full(modded).Charge, Is.GreaterThan(GunState.Full(bare).Charge));
+        }
+
+        [Test]
+        public void Capsule_FliesUpAndOutWithinTheSpread()
+        {
+            var rng = new CombatRandom(9);
+            for (int i = 0; i < 200; i++)
+            {
+                var f = CapsuleFlight.Launch(Vector3.Zero, 90f, 0f, 1, ref rng);
+                Assert.That(f.Velocity.Y, Is.GreaterThan(0f));
+                float yaw = MathF.Atan2(f.Velocity.X, f.Velocity.Z) * 180f / MathF.PI;
+                Assert.That(yaw, Is.InRange(90f - CapsuleFlight.SpreadDegrees - 0.01f, 90f + CapsuleFlight.SpreadDegrees + 0.01f));
+                Assert.That(f.At(0.5f).Y, Is.GreaterThan(0.5f));
+            }
+            var deep = CapsuleFlight.Launch(Vector3.Zero, 0f, 0f, 3, ref rng);
+            var shallow = CapsuleFlight.Launch(Vector3.Zero, 0f, 0f, 1, ref rng);
+            Assert.That(deep.HitRadius, Is.LessThan(shallow.HitRadius));
+            Assert.That(deep.Velocity.Length(), Is.GreaterThan(shallow.Velocity.Length()));
+            Assert.That(CapsuleFlight.Catchable(0.05f), Is.False);
+            Assert.That(CapsuleFlight.Catchable(1f), Is.True);
+            Assert.That(CapsuleFlight.Catchable(CapsuleFlight.Life), Is.False);
         }
 
         [Test]

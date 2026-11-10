@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Arsenal;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Expedition;
+using FriendlyPersonShooter.Core.Gallery;
 using FriendlyPersonShooter.Core.Progression;
 using Unity.Entities;
 using Unity.Mathematics;
@@ -21,8 +22,6 @@ namespace FriendlyPersonShooter.Arena
         private const float InteractRange = 2.5f;
         /// <summary>A box roll or raid reward waits this long for its owner.</summary>
         private const float PersonalItemLife = 180f;
-        /// <summary>A box's pick closes when its player walks this far from where they opened it.</summary>
-        private const float BoxPickRange = 6f;
         /// <summary>An item someone swapped out stays on the ground this long, for anyone.</summary>
         private const float DroppedItemLife = 120f;
 
@@ -69,8 +68,8 @@ namespace FriendlyPersonShooter.Arena
         // ---------- Loadouts ----------
 
         /// <summary>
-        /// A new player's kit: a choice of starting guns (each with a payload mod, no frame or payload twice).
-        /// They hold the first one until they pick (<see cref="PickStartingGun"/>).
+        /// A new player's kit: a starting gallery of three guns (each with a payload mod, no frame or payload twice),
+        /// with no time limit. They hold the first one until they shoot a card.
         /// </summary>
         private void EnsureKit(PlayerState s)
         {
@@ -78,85 +77,12 @@ namespace FriendlyPersonShooter.Arena
             var guns = LootRolls.StartingChoices(SeedHash.Of(_lootSeed, 0x6A1, s.Vitals.Id));
             var items = new LootItem[guns.Length];
             for (int i = 0; i < guns.Length; i++) items[i] = LootItem.Of(guns[i]);
-            OpenPick(s, PickKind.Start, items);
             s.Loadout = new Loadout(guns[0]);
             Refit(s);
+            OpenGallery(s, GalleryKind.Starter, 0f, 0f, true, items, SeedHash.Of(_lootSeed, 0x6A2, s.Vitals.Id));
         }
 
-        private static void OpenPick(PlayerState s, PickKind kind, LootItem[] items)
-        {
-            s.Pick = kind;
-            s.Choices = items;
-            s.PickSerial++;
-        }
-
-        private static void ClosePick(PlayerState s)
-        {
-            s.Pick = PickKind.None;
-            s.Choices = null;
-            s.PickBox = -1;
-        }
-
-        /// <summary>The player answered their open pick: took one of the choices, or left a box for later.</summary>
-        private void AnswerPick(PlayerState s, PickRequest request, EntityCommandBuffer ecb)
-        {
-            if (s.Pick == PickKind.None || s.Choices == null || request.Serial != s.PickSerial) return;
-            if (request.Index == PickRequest.Leave)
-            {
-                if (s.Pick == PickKind.Box) ClosePick(s);
-                return;
-            }
-            int index = request.Index;
-            if (index >= s.Choices.Length) return;
-            var item = s.Choices[index];
-            if (s.Pick == PickKind.Reward)
-            {
-                ClosePick(s);
-                var feet = new float3(s.Position.X, s.Position.Y, s.Position.Z);
-                if (!Take(s, item, feet, ecb)) SpawnItem(item, s.Vitals.Id, ExpeditionWorld.Wrap(feet + new float3(0f, 1.1f, 0f)), PersonalItemLife);
-                UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked boss reward {item}");
-                return;
-            }
-            if (s.Pick == PickKind.Start)
-            {
-                ClosePick(s);
-                s.Loadout = new Loadout(item.Gun);
-                Refit(s);
-                UnityEngine.Debug.Log($"[Guns] player {s.Vitals.Id} picked {item.Gun.Frame} with {item.Gun.Payload}");
-                return;
-            }
-            int box = s.PickBox;
-            var at = s.PickAt;
-            ClosePick(s);
-            if (s.Vitals.IsDown || !_boxLedger.TryOpen(box, s.Vitals.Id)) return;
-            _boxesOpened++;
-            if (!s.BotKit) _usage.BoxOpened();
-            if (!Take(s, item, at, ecb)) SpawnItem(item, s.Vitals.Id, ExpeditionWorld.Wrap(at + new float3(0f, 1.1f, 0f)), PersonalItemLife);
-            if (_connections.TryGetValue(s.Vitals.Id, out var connection))
-            {
-                var rpc = ecb.CreateEntity();
-                ecb.AddComponent(rpc, new LootBoxOpened { BoxId = box });
-                ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = connection });
-            }
-        }
-
-        /// <summary>
-        /// A box pick closes if its player goes down or walks away from the box. A waiting boss reward opens once
-        /// no other pick is open.
-        /// </summary>
-        private void StepPicks()
-        {
-            foreach (var kv in _players)
-            {
-                var s = kv.Value;
-                if (s.Pick == PickKind.None && s.Rewards.Count > 0 && s.Loadout != null) OpenPick(s, PickKind.Reward, s.Rewards.Dequeue());
-                if (s.Pick != PickKind.Box) continue;
-                var pos = new float3(s.Position.X, s.Position.Y, s.Position.Z);
-                if (s.Vitals.IsDown || math.distancesq(ExpeditionWorld.Near(s.PickAt, pos), pos) > BoxPickRange * BoxPickRange) ClosePick(s);
-            }
-        }
-
-        /// <summary>After a loadout change: new stats; a new gun comes loaded, a re-modded one keeps its ammo.</summary>
+        /// <summary>After a loadout change: new stats; a new gun comes with a full capsule, a re-modded one keeps its charge.</summary>
         private void Refit(PlayerState s)
         {
             for (int i = 0; i < 2; i++)
@@ -170,8 +96,9 @@ namespace FriendlyPersonShooter.Arena
                 else FireControl.Refit(ref s.Guns[i], s.Stats[i]);
                 s.Packed[i] = packed;
             }
-            // A Relay bullet hands on the other gun's payload.
-            var other = s.Loadout.Other.Payload;
+            // A Relay bullet hands on the gun's other payload (a Split gun's second), else Might.
+            var gun0 = s.Loadout.InHand;
+            var other = gun0.Payload == PayloadKind.Relay ? gun0.SecondPayload : gun0.Payload;
             s.Vitals.RelayCarry = other == PayloadKind.None || other == PayloadKind.Relay ? PayloadKind.Might : other;
         }
 
@@ -182,20 +109,9 @@ namespace FriendlyPersonShooter.Arena
             var ghost = new ArenaLoadout
             {
                 Payload = l.InHand.Payload, GunA = l.GunA.Pack(), GunB = l.GunB.Pack(), Active = (byte)l.Active,
-                Ammo = st.Ammo, Reload = st.ReloadProgress(_time), Pick = s.Pick, PickSerial = s.PickSerial,
+                Charge = st.Charge, Capsule = (byte)st.Capsule, Grown = st.CapsuleGrown(_time),
             };
-            if (s.Pick != PickKind.None && s.Choices != null)
-            {
-                ghost.Choice0 = s.Choices.Length > 0 ? s.Choices[0].Pack() : 0;
-                ghost.Choice1 = s.Choices.Length > 1 ? s.Choices[1].Pack() : 0;
-                ghost.Choice2 = s.Choices.Length > 2 ? s.Choices[2].Pack() : 0;
-            }
             return ghost;
-        }
-
-        private void SwapGun(PlayerState s)
-        {
-            if (s.Loadout.Swap()) FireControl.SwappedIn(ref s.Guns[s.Loadout.Active], _time);
         }
 
         private ShotEffects EffectsOf(GunStats stats)
@@ -225,19 +141,6 @@ namespace FriendlyPersonShooter.Arena
                          .WithAll<ArenaPlayer>().WithEntityAccess())
             {
                 if (!_players.TryGetValue(entity, out var shooter) || shooter.Loadout == null) continue;
-                int slot = shooter.Loadout.Active;
-                var stats = shooter.Stats[slot];
-                if (stats == null) continue;
-                int ranks = shooter.Progress.PackedRanks;
-                bool trigger = input.ValueRO.Fire != 0 && !shooter.Vitals.IsDown;
-                // Frenzy speeds fire and reload; Overdrive (Haste + Frenzy) stops ammo running down.
-                int shots = FireControl.Step(ref shooter.Guns[slot], stats, _time, trigger, input.ValueRO.Reload.IsSet,
-                    PlayerProgress.FireRateFor(ranks) * shooter.Vitals.FireRateMultiplier, shooter.Vitals.ReloadSpeedMultiplier,
-                    shooter.Vitals.NoReload);
-                if (shots <= 0) continue;
-                _shots += shots;
-                if (!shooter.BotKit) _usage.Shots(stats.Frame.Kind, shots);
-
                 // Rewind everyone else to the tick this player was looking at when they fired.
                 int delay = 0;
                 if (SystemAPI.HasComponent<CommandDataInterpolationDelay>(entity))
@@ -245,28 +148,67 @@ namespace FriendlyPersonShooter.Arena
                     delay = (int)SystemAPI.GetComponent<CommandDataInterpolationDelay>(entity).Delay;
                 }
                 int seenTick = tick - delay;
+                shooter.AimDelay = delay;
+                shooter.LastYaw = input.ValueRO.Yaw;
+                shooter.LastPitch = input.ValueRO.Pitch;
+                bool trigger = input.ValueRO.Fire != 0 && !shooter.Vitals.IsDown;
+                // In a shooting gallery, shots go at its targets.
+                if (shooter.Gallery.Open)
+                {
+                    GalleryInput(shooter, input.ValueRO, trigger, seenTick, ecb);
+                    continue;
+                }
+                shooter.FireHeld = trigger;
+                int slot = shooter.Loadout.Active;
+                var stats = shooter.Stats[slot];
+                if (stats == null) continue;
+                int ranks = shooter.Progress.PackedRanks;
+                // Frenzy speeds fire and capsule regrowth; Overdrive (Haste + Frenzy) stops the payload running out.
+                var step = FireControl.Step(ref shooter.Guns[slot], stats, _time, trigger,
+                    PlayerProgress.FireRateFor(ranks) * shooter.Vitals.FireRateMultiplier, shooter.Vitals.ReloadSpeedMultiplier,
+                    shooter.Vitals.NoReload);
+                int shots = step.Shots;
+                if (shots <= 0) continue;
+                _shots += shots;
+                if (!shooter.BotKit) _usage.Shots(stats.Frame.Kind, shots);
 
                 var eye = transform.ValueRO.Position + new float3(0f, ArenaSettings.EyeHeight, 0f);
                 var aim = math.normalize(ArenaSettings.Forward(input.ValueRO.Yaw, input.ValueRO.Pitch));
                 bool zoomed = input.ValueRO.Zoom != 0;
                 float reach = stats.Range * PlayerProgress.RangeFor(ranks);
                 BuildTargets(seenTick, shooter.Vitals.Id, eye);
-                var fx = EffectsOf(stats);
+                var payloadFx = EffectsOf(stats);
+                // Shots after the capsule runs dry are plain: damage, and the plain heal on allies.
+                var plainFx = payloadFx;
+                plainFx.Payload = PayloadKind.None;
+                plainFx.Second = PayloadKind.None;
                 var rng = new CombatRandom(NextSeed() | 1u);
                 int shooterId = owner.ValueRO.NetworkId;
+                double seenTime = _time - GalleryClock.Seconds(delay);
+                if (step.Launched) LaunchCapsule(shooter, shooterId, eye, input.ValueRO.Yaw, input.ValueRO.Pitch, payloadFx.Payload, ecb);
 
                 for (int n = 0; n < shots; n++)
                 {
+                    var fx = n < step.Payloaded ? payloadFx : plainFx;
                     var d = FireControl.Spread(ToVec(aim), stats.SpreadFor(zoomed), ref rng);
                     var dir = ToFloat3(d);
                     float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
                     // Raid Color Locks: a crystal in front stops the shot.
                     int crystal = CrystalOnShot(shooter.Vitals.Id, eye, dir, range, out float crystalAt);
                     if (crystal >= 0) range = crystalAt;
+                    // Loot boxes, items and reward chests are opened and taken by shooting them; the capsule is caught.
+                    var obj = shooter.BotKit || _time < shooter.NextObjectShot ? default : WorldObjectOnShot(shooter, eye, dir, range, seenTime);
+                    if (obj.Kind != ShotObjectKind.None) range = obj.At;
                     var end = eye + dir * range;
                     bool landed = HitScan.Cast(ToVec(eye), d, range, _targets, out var hit, shooter.Vitals.Id);
                     if (landed) end = ToFloat3(hit.Point);
-                    else if (crystal >= 0)
+                    if (!landed && obj.Kind != ShotObjectKind.None)
+                    {
+                        SendShot(shooterId, eye - new float3(0f, 0.2f, 0f), end, fx.Payload, stats.Frame.Kind, ecb);
+                        ShootObject(shooter, obj, input.ValueRO.Yaw, input.ValueRO.Pitch, ecb);
+                        break;
+                    }
+                    else if (!landed && crystal >= 0)
                     {
                         int marker = CrystalHit(crystal, shooter.Vitals.Id);
                         if (marker != 0)
@@ -537,19 +479,11 @@ namespace FriendlyPersonShooter.Arena
                     continue;
                 }
                 ps.BotKit = true;
-                ClosePick(ps);
+                ps.Gallery.Round = null;
                 ps.Loadout = new Loadout(LootRolls.BotGun(payload, SeedHash.Of(_lootSeed, 0xB07, id)));
                 Refit(ps);
             }
 
-            foreach (var (request, receive, rpc) in SystemAPI.Query<RefRO<PickRequest>, RefRO<ReceiveRpcCommandRequest>>().WithEntityAccess())
-            {
-                ecb.DestroyEntity(rpc);
-                if (!SystemAPI.HasComponent<NetworkId>(receive.ValueRO.SourceConnection)) continue;
-                int id = SystemAPI.GetComponent<NetworkId>(receive.ValueRO.SourceConnection).Value;
-                if (_playerById.TryGetValue(id, out var pe) && _players.TryGetValue(pe, out var ps)) AnswerPick(ps, request.ValueRO, ecb);
-            }
-            StepPicks();
 
             if (ExpeditionWorld.Active && (_boxes == null || _boxesLayer != ExpeditionWorld.Layer))
             {
@@ -571,25 +505,19 @@ namespace FriendlyPersonShooter.Arena
                          .WithAll<ArenaPlayer>().WithEntityAccess())
             {
                 if (!input.ValueRO.Interact.IsSet || !_players.TryGetValue(entity, out var state)) continue;
-                if (state.Loadout == null || state.Vitals.IsDown) continue;
+                if (!state.BotKit || state.Loadout == null || state.Vitals.IsDown || state.Gallery.Open) continue;
                 _interacts.Add((state, transform.ValueRO.Position));
             }
             foreach (var (state, feet) in _interacts) Interact(state, feet, ecb);
         }
 
         /// <summary>
-        /// E: take the nearest item you may take; failing that, start the raid countdown if you're at the door
-        /// with a full key; failing that, open the nearest box you haven't opened (its pick of three).
-        /// E again while a box's pick is open leaves it for later.
+        /// A bot's interact: take the nearest item it may take; failing that, start the raid countdown if it's at the
+        /// door with a full key. (Players do all of this by shooting.)
         /// </summary>
         private void Interact(PlayerState state, float3 feet, EntityCommandBuffer ecb)
         {
             int id = state.Vitals.Id;
-            if (state.Pick == PickKind.Box)
-            {
-                ClosePick(state);
-                return;
-            }
             Entity bestItem = Entity.Null;
             float bestD = InteractRange * InteractRange;
             foreach (var kv in _items)
@@ -607,42 +535,20 @@ namespace FriendlyPersonShooter.Arena
                 ecb.DestroyEntity(bestItem);
                 return;
             }
-
-            if (TryStartRaid(id, feet)) return;
-            if (_boxes == null) return;
-            int box = -1;
-            bestD = InteractRange * InteractRange;
-            foreach (var b in _boxes)
-            {
-                if (_boxLedger.HasOpened(b.Id, id)) continue;
-                var p = ExpeditionWorld.Near(BoxPosition(b), feet);
-                float d = math.distancesq(p.xz, feet.xz);
-                if (d >= bestD || math.abs(p.y - feet.y) > 2.5f) continue;
-                bestD = d;
-                box = b.Id;
-            }
-            if (box < 0 || state.Pick != PickKind.None) return;
-            // The box opens for good when one is picked (AnswerPick); until then it can be left and come back to,
-            // with the same three on offer.
-            OpenPick(state, PickKind.Box, LootRolls.BoxChoices(LootBoxLedger.RollSeed(_lootSeed, box, id)));
-            state.PickBox = box;
-            state.PickAt = feet;
+            TryStartRaid(id, feet);
         }
 
         /// <summary>
-        /// Equips an item (from the ground or a box pick): what it replaces drops at the player's feet.
-        /// False if it can't be equipped. Taking loot settles the kit, so a starting pick still open is gone.
+        /// Equips an item (from the ground or a gallery): what it replaces drops at the player's feet.
+        /// False if it can't be equipped.
         /// </summary>
         private bool Take(PlayerState state, LootItem item, float3 feet, EntityCommandBuffer ecb)
         {
-            int before = state.Loadout.Active;
             var result = state.Loadout.Equip(item);
             if (!result.Equipped) return false;
-            if (state.Pick == PickKind.Start) ClosePick(state);
             _itemsTaken++;
             if (!state.BotKit) _usage.Took(item);
             Refit(state);
-            if (state.Loadout.Active != before) FireControl.SwappedIn(ref state.Guns[state.Loadout.Active], _time);
             var at = feet + new float3(0f, 0.6f, 0f);
             if (!result.Dropped.IsNone) SpawnItem(result.Dropped, 0, at, DroppedItemLife);
             if (!result.Dropped2.IsNone) SpawnItem(result.Dropped2, 0, at + new float3(0.5f, 0f, 0f), DroppedItemLife);
@@ -662,8 +568,8 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// Raid clear or world boss: three rare-or-better items for this player to pick one from, on the same pick
-        /// screen as boxes (it opens once no other pick is open). Bots keep their role's kit.
+        /// Raid clear or world boss: three rare-or-better items for this player, in a reward chest that lands beside
+        /// them once they're out of the raid (<see cref="PlaceChest"/>). Bots keep their role's kit.
         /// </summary>
         private void GiveBossLoot(int playerId)
         {

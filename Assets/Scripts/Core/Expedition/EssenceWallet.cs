@@ -22,6 +22,9 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// <item>Gifts move pool to pool: carried essence arrives carried, banked essence arrives banked.
     /// So handing a friend banked essence at the gate lets them pay right away, while carried
     /// essence stays at risk until they bank it. By default carried goes first.</item>
+    /// <item>A player carries at most <see cref="CarryCap"/> of each color; anything over it is lost. Banked
+    /// essence (the party's pool) has no cap. The game's wallets pass the cap in; a wallet built without one
+    /// (tests of other rules) carries any amount.</item>
     /// <item>A bleed-out cache drops the share of each carried color rounded down, so a single
     /// carried essence is never lost. Banked essence never drops.</item>
     /// </list>
@@ -42,13 +45,23 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// from it, and every wallet built on the same pool sees the same banked amounts. Carried essence stays
         /// each player's own.
         /// </summary>
-        public EssenceWallet(int playerId, EssenceAmounts sharedBank)
+        public EssenceWallet(int playerId, EssenceAmounts sharedBank, int carryCap = int.MaxValue)
         {
             PlayerId = playerId;
             _banked = sharedBank ?? throw new ArgumentNullException(nameof(sharedBank));
+            Cap = carryCap;
         }
 
+        /// <summary>The most of one color a player can carry.</summary>
+        public const int CarryCap = 7;
+
         public int PlayerId { get; }
+
+        /// <summary>This wallet's carry cap per color (<see cref="CarryCap"/> in the game).</summary>
+        public int Cap { get; } = int.MaxValue;
+
+        /// <summary>How much more of <paramref name="color"/> this player can carry.</summary>
+        public int Room(EssenceColor color) => Math.Max(0, Cap - _carried[color]);
 
         public int Carried(EssenceColor color) => _carried[color];
         public int Banked(EssenceColor color) => _banked[color];
@@ -60,18 +73,25 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>A copy of everything banked.</summary>
         public EssenceAmounts BankedAll() => _banked.Clone();
 
-        /// <summary>Adds picked-up essence to carried.</summary>
-        public void PickUp(EssenceColor color, int amount)
+        /// <summary>Adds picked-up essence to carried, up to the cap. Returns how much fit; the rest is lost.</summary>
+        public int PickUp(EssenceColor color, int amount)
         {
             if (amount < 0) throw new ArgumentOutOfRangeException(nameof(amount));
-            _carried.Add(color, amount);
+            int n = Math.Min(amount, Room(color));
+            _carried.Add(color, n);
+            return n;
         }
 
-        /// <summary>Adds essence straight to carried or banked (gifts, cache returns).</summary>
+        /// <summary>Adds essence straight to carried (up to the cap; the rest is lost) or banked (gifts, cache returns).</summary>
         public void Receive(EssenceAmounts amounts, bool banked)
         {
             if (amounts == null) throw new ArgumentNullException(nameof(amounts));
-            (banked ? _banked : _carried).Add(amounts);
+            if (banked)
+            {
+                _banked.Add(amounts);
+                return;
+            }
+            foreach (var c in EssenceColors.All) PickUp(c, amounts[c]);
         }
 
         /// <summary>Moves all carried essence to banked (standing at the raid door or a gate). Returns what moved.</summary>
@@ -81,6 +101,23 @@ namespace FriendlyPersonShooter.Core.Expedition
             _banked.Add(moved);
             _carried.Clear();
             return moved;
+        }
+
+        /// <summary>Banks up to <paramref name="amount"/> carried essence of one color. Returns how much moved.</summary>
+        public int BankSome(EssenceColor color, int amount)
+        {
+            int n = Math.Max(0, Math.Min(amount, _carried[color]));
+            _carried[color] -= n;
+            _banked.Add(color, n);
+            return n;
+        }
+
+        /// <summary>Loses up to <paramref name="amount"/> carried essence of one color (a missed banking target). Returns how much.</summary>
+        public int LoseCarried(EssenceColor color, int amount)
+        {
+            int n = Math.Max(0, Math.Min(amount, _carried[color]));
+            _carried[color] -= n;
+            return n;
         }
 
         /// <summary>True when banked essence covers the amount. Carried essence can't be spent.</summary>
@@ -118,6 +155,8 @@ namespace FriendlyPersonShooter.Core.Expedition
 
             int fromCarried = source == GiftSource.BankedOnly ? 0 : Math.Min(amount, _carried[color]);
             int fromBanked = amount - fromCarried;
+            // Carried essence arrives carried, so it has to fit under their cap.
+            if (fromCarried > to.Room(color)) return false;
             _carried[color] -= fromCarried;
             _banked[color] -= fromBanked;
             to._carried.Add(color, fromCarried);
@@ -127,12 +166,12 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         /// <summary>
         /// Takes up to <paramref name="amount"/> of one color, carried first, then banked (a raid key pledge).
-        /// Returns how much was taken.
+        /// With <paramref name="bankedOnly"/>, carried essence is left alone. Returns how much was taken.
         /// </summary>
-        public int Take(EssenceColor color, int amount)
+        public int Take(EssenceColor color, int amount, bool bankedOnly = false)
         {
             if (amount <= 0) return 0;
-            int fromCarried = Math.Min(amount, _carried[color]);
+            int fromCarried = bankedOnly ? 0 : Math.Min(amount, _carried[color]);
             _carried[color] -= fromCarried;
             int fromBanked = Math.Min(amount - fromCarried, _banked[color]);
             _banked[color] -= fromBanked;

@@ -8,6 +8,8 @@ namespace FriendlyPersonShooter.Core.Expedition
     public sealed class RaidRunSettings
     {
         public int RoomCount { get; set; } = 3;
+        /// <summary>Every room (not the boss) keeps at least this many enemies in it until it's solved.</summary>
+        public int MinRoomEnemies { get; set; } = 2;
         /// <summary>Once someone steps into an open portal: seconds until everyone moves on.</summary>
         public double PortalSeconds { get; set; } = 5.0;
         /// <summary>Paid to everyone inside when a room is solved (raids pay XP and loot, never essence).</summary>

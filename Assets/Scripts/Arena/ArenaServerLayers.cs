@@ -43,12 +43,12 @@ namespace FriendlyPersonShooter.Arena
                 _announce.Add((AnnounceKind.LayerTravel, 0, 0, 0));
             }
 
-            // The up-portal: anyone standing in it starts the move up.
+            // The up-portal: a bot standing in it starts the move up (players shoot it: ArenaServerGallery).
             if (!_travel.Pending && RaidAllowsTravel && LayerTravel.TryPortal(_map, ExpeditionWorld.Layer, out var portal))
             {
                 foreach (var kv in _players)
                 {
-                    if (kv.Value.Vitals.IsDown) continue;
+                    if (kv.Value.Vitals.IsDown || !kv.Value.BotKit) continue;
                     var pos = ExpeditionWorld.Ground(EntityManager.GetComponentData<Unity.Transforms.LocalTransform>(kv.Key).Position);
                     if (_map.Distance(portal, pos) > LayerTravel.PortalRadius) continue;
                     if (_travel.BeginUp(_time, kv.Value.Vitals.Id))
@@ -60,6 +60,15 @@ namespace FriendlyPersonShooter.Arena
             }
 
             if (_travel.Step(_time)) ChangeLayer(ecb, _travel.Layer, _travel.Arrival);
+        }
+
+        /// <summary>The up-portal was shot (or a bot stood in it): the group heads up.</summary>
+        private bool TryGoUp(int id)
+        {
+            if (_travel == null || _travel.Pending || !RaidAllowsTravel || !LayerTravel.TryPortal(_map, ExpeditionWorld.Layer, out _)) return false;
+            if (!_travel.BeginUp(_time, id)) return false;
+            _announce.Add((AnnounceKind.LayerTravel, (int)LayerTravel.Countdown, id, _travel.Target));
+            return true;
         }
 
         /// <summary>Someone went through the open gate: the group heads down (false on the deepest layer).</summary>
@@ -94,6 +103,7 @@ namespace FriendlyPersonShooter.Arena
             _groupEnds.Clear();
             foreach (var kv in _items) ecb.DestroyEntity(kv.Key);
             _items.Clear();
+            ClearOrbs(ecb);
 
             // Dropped caches go home to their owners rather than being lost on the old map.
             _intScratch.Clear();

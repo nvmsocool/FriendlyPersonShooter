@@ -15,9 +15,9 @@ namespace FriendlyPersonShooter.Core.Combat
         public float MinBlinkInterval { get; set; } = 1.2f;
         public float MaxBlinkInterval { get; set; } = 2.0f;
         /// <summary>Seconds after each blink during which the Wisp can be hit.</summary>
-        public float HittableWindow { get; set; } = 0.6f;
+        public float HittableWindow { get; set; } = 0.9f;
         /// <summary>Whole-body hitbox; Wisps have no separate weak point.</summary>
-        public float BodyRadius { get; set; } = 0.35f;
+        public float BodyRadius { get; set; } = 0.5f;
     }
 
     /// <summary>

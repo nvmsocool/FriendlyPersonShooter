@@ -22,6 +22,7 @@ namespace FriendlyPersonShooter.Arena
         [SerializeField] private Camera viewCamera;
 
         private Mesh _cube;
+        private Mesh _sphere;
         private Material _floorMat, _wallMat, _pillarMat;
         private readonly List<Matrix4x4> _batch = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _static = new List<Matrix4x4>();
@@ -42,6 +43,9 @@ namespace FriendlyPersonShooter.Arena
             if (viewCamera == null) viewCamera = Camera.main;
             var temp = GameObject.CreatePrimitive(PrimitiveType.Cube);
             _cube = temp.GetComponent<MeshFilter>().sharedMesh;
+            Destroy(temp);
+            temp = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            _sphere = temp.GetComponent<MeshFilter>().sharedMesh;
             Destroy(temp);
 
             _baseMat = GraphicsSettings.currentRenderPipeline != null
@@ -98,8 +102,8 @@ namespace FriendlyPersonShooter.Arena
         {
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            // Esc frees the mouse, unless it is closing a pick (up this frame or the last).
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame && SessionHud.PickFrame < Time.frameCount - 1) Cursor.lockState = CursorLockMode.None;
+            // Esc frees the mouse.
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Cursor.lockState = CursorLockMode.None;
             // Clicking into the game captures the mouse, except on an overlay button (the session's Leave and Copy).
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked &&
                 !(UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()))
@@ -132,6 +136,7 @@ namespace FriendlyPersonShooter.Arena
                 _localPlayer = em.CreateEntityQuery(ComponentType.ReadOnly<ArenaPlayer>(), ComponentType.ReadOnly<LocalTransform>(),
                     ComponentType.ReadOnly<GhostOwnerIsLocal>());
                 CreateCombatQueries(em);
+                CreateShootableQueries(em);
                 CreateExpeditionQueries(em);
             }
 
@@ -178,9 +183,11 @@ namespace FriendlyPersonShooter.Arena
                     SeedOf(em, local, myId), PlayerColors.Index(myId));
             }
             DrawGuns();
+            DrawShootables(world, local);
+            DrawGallery(world, local);
 
             _center.text = "";
-            if (_wrap) WriteExpeditionHud();
+            WriteExpeditionHud();
             WriteCombatHud(world, local);
             WriteFeedbackHud(world, local);
             _hud.Apply();
@@ -244,14 +251,16 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        private void DrawList(List<Matrix4x4> list, Material mat)
+        private void DrawList(List<Matrix4x4> list, Material mat) => DrawList(list, mat, _cube);
+
+        private void DrawList(List<Matrix4x4> list, Material mat, Mesh mesh)
         {
             if (list.Count == 0) return;
             var rp = new RenderParams(mat);
             for (int start = 0; start < list.Count; start += 1023)
             {
                 int count = Mathf.Min(1023, list.Count - start);
-                Graphics.RenderMeshInstanced(rp, _cube, 0, list, count, start);
+                Graphics.RenderMeshInstanced(rp, mesh, 0, list, count, start);
             }
         }
     }

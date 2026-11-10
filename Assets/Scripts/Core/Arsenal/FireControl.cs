@@ -4,90 +4,99 @@ using FriendlyPersonShooter.Core.Combat;
 
 namespace FriendlyPersonShooter.Core.Arsenal
 {
-    /// <summary>One gun's firing state: ammo, reload, the burst in progress and the beam's target.</summary>
+    /// <summary>Where a gun's payload capsule is.</summary>
+    public enum CapsuleState : byte
+    {
+        /// <summary>On the gun (full, part-full or empty).</summary>
+        Seated = 0,
+        /// <summary>Flung into the air: shoot it for a full capsule.</summary>
+        Flying = 1,
+        /// <summary>Missed: a new, empty one is growing on the gun.</summary>
+        Regrowing = 2,
+    }
+
+    /// <summary>What one <see cref="FireControl.Step"/> fired.</summary>
+    public struct FireStep
+    {
+        /// <summary>Bullets (pulses, projectiles) fired.</summary>
+        public int Shots;
+        /// <summary>The first this many of them carry the payload; the rest are plain.</summary>
+        public int Payloaded;
+        /// <summary>One of the shots flung the empty capsule into the air.</summary>
+        public bool Launched;
+    }
+
+    /// <summary>One gun's firing state: payload charge and capsule, the burst in progress and the beam's target.</summary>
     public struct GunState
     {
-        public int Ammo;
-        /// <summary>When the reload in progress finishes (0 = not reloading).</summary>
-        public double ReloadEnds;
-        public float ReloadTime;
+        /// <summary>Payload charge in the capsule: each payload shot uses one.</summary>
+        public int Charge;
+        public CapsuleState Capsule;
+        /// <summary>Flying: when it was launched. Regrowing: when the new one is grown.</summary>
+        public double CapsuleAt;
+        /// <summary>Regrowing: how long the new one takes.</summary>
+        public float RegrowTime;
         public double NextShot;
         /// <summary>Bullets left in the burst in progress, and when the next burst may start.</summary>
         public int BurstLeft;
         public double CycleEnds;
-        /// <summary>No firing before this (just swapped to this gun).</summary>
-        public double ReadyAt;
         public int BeamTarget;
         public double BeamSince;
         public double BeamLastHit;
 
-        public bool Reloading => ReloadEnds > 0;
+        public static GunState Full(GunStats stats) => new GunState { Charge = stats?.Magazine ?? 0, BeamTarget = -1 };
 
-        public static GunState Full(GunStats stats) => new GunState { Ammo = stats?.Magazine ?? 0, BeamTarget = -1 };
-
-        /// <summary>Reload progress 0..1 (1 when not reloading).</summary>
-        public float ReloadProgress(double now) =>
-            ReloadEnds <= 0 || ReloadTime <= 0f ? 1f : (float)Math.Max(0, Math.Min(1, 1 - (ReloadEnds - now) / ReloadTime));
+        /// <summary>How grown the capsule on the gun is, 0..1 (1 when seated, 0 while it's flying).</summary>
+        public float CapsuleGrown(double now)
+        {
+            switch (Capsule)
+            {
+                case CapsuleState.Flying: return 0f;
+                case CapsuleState.Regrowing:
+                    return RegrowTime <= 0f ? 1f : (float)Math.Max(0, Math.Min(1, 1 - (CapsuleAt - now) / RegrowTime));
+                default: return 1f;
+            }
+        }
     }
 
     /// <summary>
-    /// Fire timing for every frame, shared by the server and (for drawing) the client. Holding the
-    /// trigger fires at the gun's rate; a Burst frame fires its whole burst once started. An empty
-    /// magazine reloads by itself; R reloads early. Reserve ammo is unlimited.
+    /// Fire timing for every frame, shared by the server and (for drawing) the client. Holding the trigger fires at
+    /// the gun's rate; a Burst frame fires its whole burst once started. Guns never stop firing: what runs out is the
+    /// payload. Each payload shot uses one charge from the capsule on top of the gun (its size is the frame's
+    /// magazine). Once it's empty, the next shot flings the capsule into the air (<see cref="CapsuleFlight"/>): shoot
+    /// it for a full capsule (<see cref="Catch"/>), or miss and a new, empty one regrows over the frame's reload time.
+    /// Shots without charge are plain (damage, and the plain heal on allies).
     /// </summary>
     public static class FireControl
     {
-        /// <summary>Seconds after swapping guns before the new one can fire.</summary>
-        public const float SwapTime = 0.3f;
         /// <summary>The beam builds up on a target as long as hits on it are no further apart than this.</summary>
         public const float BeamGrace = 0.3f;
 
         /// <summary>
-        /// Advances one gun to <paramref name="now"/> and returns how many bullets (pulses, projectiles)
-        /// it fires. <paramref name="rateScale"/> speeds up firing (skills, Frenzy): 1.1 = 10% faster;
-        /// <paramref name="reloadScale"/> speeds up reloads the same way (Frenzy). With <paramref name="noReload"/>
-        /// (Overdrive) shots use no ammo, and a reload in progress finishes at once.
+        /// Advances one gun to <paramref name="now"/>: what it fires, how many carry the payload, and whether the
+        /// capsule was launched. <paramref name="rateScale"/> speeds up firing (skills, Frenzy): 1.1 = 10% faster;
+        /// <paramref name="regrowScale"/> speeds up regrowing the same way (Frenzy). With <paramref name="overdrive"/>
+        /// payload shots use no charge.
         /// </summary>
-        public static int Step(ref GunState st, GunStats s, double now, bool trigger, bool reloadPressed, float rateScale = 1f,
-            float reloadScale = 1f, bool noReload = false)
+        public static FireStep Step(ref GunState st, GunStats s, double now, bool trigger, float rateScale = 1f,
+            float regrowScale = 1f, bool overdrive = false)
         {
-            if (s == null) return 0;
-            if (st.ReloadEnds > 0)
-            {
-                if (now < st.ReloadEnds && !noReload) return 0;
-                st.ReloadEnds = 0;
-                st.Ammo = s.Magazine;
-            }
-            if (reloadPressed && st.Ammo < s.Magazine && !noReload)
-            {
-                StartReload(ref st, s, now, reloadScale);
-                return 0;
-            }
-            // Overdrive: a free bullet for every one fired, so the magazine never runs down.
-            int spare = noReload ? 1 : 0;
-            if (now < st.ReadyAt) return 0;
+            var r = new FireStep();
+            if (s == null) return r;
+            StepCapsule(ref st, s, now, regrowScale);
 
             float interval = s.Interval / Math.Max(0.1f, rateScale);
-            int shots = 0;
             for (int guard = 0; guard < 8; guard++)
             {
                 if (st.BurstLeft > 0)
                 {
                     if (now < st.NextShot) break;
-                    if (st.Ammo <= 0) { st.BurstLeft = 0; break; }
-                    st.Ammo -= 1 - spare;
-                    shots++;
+                    Fire(ref st, ref r, overdrive, now);
                     st.BurstLeft--;
                     st.NextShot = st.BurstLeft > 0 ? st.NextShot + s.BurstGap : st.CycleEnds;
-                    if (st.Ammo == 0) { st.BurstLeft = 0; StartReload(ref st, s, now, reloadScale); break; }
                     continue;
                 }
                 if (!trigger || now < st.NextShot) break;
-                if (st.Ammo <= 0)
-                {
-                    StartReload(ref st, s, now, reloadScale);
-                    break;
-                }
                 // Don't bank up shots while the trigger was up: a fresh pull starts from now.
                 double start = now - st.NextShot > interval ? now : st.NextShot;
                 if (s.Mode == FireMode.Burst)
@@ -97,38 +106,72 @@ namespace FriendlyPersonShooter.Core.Arsenal
                     st.CycleEnds = start + interval;
                     continue;
                 }
-                st.Ammo -= 1 - spare;
-                shots++;
+                Fire(ref st, ref r, overdrive, now);
                 st.NextShot = start + interval;
-                if (st.Ammo == 0)
-                {
-                    StartReload(ref st, s, now, reloadScale);
-                    break;
-                }
             }
-            return shots;
+            return r;
         }
 
-        public static void StartReload(ref GunState st, GunStats s, double now, float reloadScale = 1f)
+        /// <summary>One bullet: it carries the payload while the capsule has charge; an empty seated capsule is launched.</summary>
+        private static void Fire(ref GunState st, ref FireStep r, bool overdrive, double now)
         {
-            st.BurstLeft = 0;
-            st.ReloadTime = s.Reload / Math.Max(0.1f, reloadScale);
-            st.ReloadEnds = now + st.ReloadTime;
+            r.Shots++;
+            if (st.Capsule != CapsuleState.Seated) return;
+            if (st.Charge > 0)
+            {
+                // Charge only runs out within a step, so the payload shots always come first.
+                r.Payloaded++;
+                if (!overdrive) st.Charge--;
+                return;
+            }
+            if (overdrive) return;
+            st.Capsule = CapsuleState.Flying;
+            st.CapsuleAt = now;
+            r.Launched = true;
         }
 
-        /// <summary>Call on the gun being swapped to: a short delay before it fires; a reload in progress restarts later.</summary>
-        public static void SwappedIn(ref GunState st, double now)
+        /// <summary>A flying capsule not shot in time is lost and a new one starts growing; a grown one seats, empty.</summary>
+        public static void StepCapsule(ref GunState st, GunStats s, double now, float regrowScale = 1f)
         {
-            st.ReadyAt = now + SwapTime;
-            st.ReloadEnds = 0;
-            st.BurstLeft = 0;
+            if (st.Capsule == CapsuleState.Flying && now - st.CapsuleAt >= CapsuleFlight.Life)
+            {
+                st.Capsule = CapsuleState.Regrowing;
+                st.RegrowTime = s.Reload / Math.Max(0.1f, regrowScale);
+                st.CapsuleAt = now + st.RegrowTime;
+            }
+            if (st.Capsule == CapsuleState.Regrowing && now >= st.CapsuleAt)
+            {
+                st.Capsule = CapsuleState.Seated;
+                st.Charge = 0;
+            }
         }
 
-        /// <summary>After the gun's mods change: ammo stays, capped by the new magazine.</summary>
+        /// <summary>The flying capsule was shot: it's back on the gun, full.</summary>
+        public static bool Catch(ref GunState st, GunStats s)
+        {
+            if (st.Capsule != CapsuleState.Flying || s == null) return false;
+            st.Capsule = CapsuleState.Seated;
+            st.Charge = s.Magazine;
+            return true;
+        }
+
+        /// <summary>
+        /// A friend shot your capsule's partner out of the air: yours is full too, whatever state it was in
+        /// (a regrowing one is back at once). Use <see cref="Catch"/> for a capsule that's flying.
+        /// </summary>
+        public static bool Refill(ref GunState st, GunStats s)
+        {
+            if (s == null) return false;
+            st.Capsule = CapsuleState.Seated;
+            st.Charge = s.Magazine;
+            return true;
+        }
+
+        /// <summary>After the gun's mods change: charge stays, capped by the new capsule size.</summary>
         public static void Refit(ref GunState st, GunStats s)
         {
             if (s == null) return;
-            if (st.Ammo > s.Magazine) st.Ammo = s.Magazine;
+            if (st.Charge > s.Magazine) st.Charge = s.Magazine;
         }
 
         /// <summary>The beam's damage multiplier for a pulse on <paramref name="targetId"/> (-1 = no target): it builds while it stays on one target.</summary>

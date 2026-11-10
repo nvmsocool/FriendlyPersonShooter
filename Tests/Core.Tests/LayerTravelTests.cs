@@ -96,5 +96,17 @@ namespace FriendlyPersonShooter.Core.Tests
             }
             Assert.That(ids.Count, Is.EqualTo(total));
         }
+
+        [Test]
+        public void Map_RemembersItsLayer()
+        {
+            // The zone art builds each layer's own biome from this.
+            for (int layer = 1; layer <= LayerSettings.LayerCount; layer++)
+            {
+                var map = LayerGenerator.Generate(LayerSettings.SeedFor(7u, layer), LayerSettings.MvpTiling(), LayerSettings.ForLayer(layer));
+                Assert.That(map.Layer, Is.EqualTo(layer));
+            }
+            Assert.That(LayerGenerator.Generate(7u, LayerSettings.MvpTiling()).Layer, Is.EqualTo(1), "default settings are the top layer");
+        }
     }
 }

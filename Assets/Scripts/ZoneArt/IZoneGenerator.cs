@@ -101,6 +101,12 @@ namespace FriendlyPersonShooter.ZoneArt
         /// </summary>
         public bool Headless { get; set; }
 
+        /// <summary>
+        /// Which layer of the world the zone is on (1 = the top). Generators may build a different biome per layer;
+        /// like everything else, it must give the same zone on the server and every client.
+        /// </summary>
+        public int Layer { get; set; } = 1;
+
         /// <summary>The middle of the zone (y = 0): the outline's centroid, always inside it.</summary>
         public Vector3 Center { get; }
         /// <summary>Metres from <see cref="Center"/> to the nearest edge.</summary>
@@ -202,6 +208,7 @@ namespace FriendlyPersonShooter.ZoneArt
             {
                 WrapA = new Vector2(tiling.PeriodA.X, tiling.PeriodA.Y),
                 WrapB = new Vector2(tiling.PeriodB.X, tiling.PeriodB.Y),
+                Layer = map.Layer,
             };
         }
 

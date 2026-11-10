@@ -38,7 +38,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private PrismCollision _world;
         private PrismWalk _walk;
 
-        private float _sunElev, _sunAz, _fogDensity;
+        private float _sunElev, _sunAz, _fogDensity, _sunIntensity;
+        private Color _sunColor;
         private ZoneRandom _look;
         private ZoneView _hero;
         private List<Species> _species;
@@ -198,10 +199,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 yield return null;
                 _step.Restart();
-                ZoneLook.Sun(root.transform, _sunElev, _sunAz, _pal.Dusk ? Color.Lerp(_pal.Sun, Color.white, 0.35f) : _pal.Sun, _pal.Dusk ? 1.15f : 1.35f);
-                ZoneLook.Ambient(_pal.AmbientSky, _pal.AmbientEquator, _pal.AmbientGround, 1.05f);
-                ZoneLook.Fog(_pal.Fog, _fogDensity);
-                ZoneLook.PostProcessing(root.transform, 0.75f, 0.95f, 14f, 14f, 0.22f, _pal.Dusk ? 0.15f : 0f);
+                bool night = _pal.Biome == PrismBiome.Glowdeep;
+                ZoneLook.Sun(root.transform, _sunElev, _sunAz, _sunColor, _sunIntensity);
+                ZoneLook.Ambient(_pal.AmbientSky, _pal.AmbientEquator, _pal.AmbientGround, night ? 1.55f : 1.05f);
+                ZoneLook.Fog(_pal.Fog, night ? _fogDensity * 1.3f : _fogDensity);
+                // Night glows harder: more bloom from a lower threshold, so the plants and crystals light the scene.
+                if (night) ZoneLook.PostProcessing(root.transform, 1.3f, 0.8f, 18f, 16f, 0.3f, 0.35f);
+                else ZoneLook.PostProcessing(root.transform, 0.75f, 0.95f, 14f, 14f, 0.22f, _pal.Dusk ? 0.15f : 0f);
                 Lap("sun and post");
                 yield return null;
                 _step.Restart();
@@ -334,7 +338,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             {
                 if (a.Kind != ZoneAnchorKind.Landmark) continue;
                 var lp = new LandmarkPlan { Local = L(a.World), Name = a.Name, Dir = prng.Range(0f, Mathf.PI * 2f) };
-                lp.Kind = PrismaticaGenerator.PickLandmark(zone.Tile, usedKinds, ref prng);
+                lp.Kind = PrismaticaGenerator.PickLandmark(zone.Tile, usedKinds, ref prng, PrismBiomes.For(zone));
                 usedKinds.Add(lp.Kind);
                 var dir = new Vector2(Mathf.Cos(lp.Dir), Mathf.Sin(lp.Dir));
                 switch (lp.Kind)
@@ -479,9 +483,23 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     var tpl = new MeshBuilder();
                     var c = pal.Foliage[trng.Range(0, pal.Foliage.Length)];
                     var bark = pal.Bark[trng.Range(0, pal.Bark.Length)];
-                    if (trng.Chance(0.5f)) PrismFlora.CloudTree(tpl, ref trng, c, bark);
-                    else PrismFlora.Lollipop(tpl, ref trng, c, pal.Foliage[trng.Range(0, pal.Foliage.Length)], bark);
-                    float s = trng.Range(3.2f, 4.2f);
+                    float s;
+                    if (pal.Biome == PrismBiome.Wonderwood)
+                    {
+                        PrismFlora.SpiralBloom(tpl, ref trng, c, pal.Foliage[trng.Range(0, pal.Foliage.Length)], pal.Crystal[0], bark);
+                        s = trng.Range(1.7f, 2.1f);
+                    }
+                    else if (pal.Biome == PrismBiome.Glowdeep)
+                    {
+                        PrismFlora.CrystalTree(tpl, ref trng, c, pal.Crystal[0], bark);
+                        s = trng.Range(3.2f, 4f);
+                    }
+                    else
+                    {
+                        if (trng.Chance(0.5f)) PrismFlora.CloudTree(tpl, ref trng, c, bark);
+                        else PrismFlora.Lollipop(tpl, ref trng, c, pal.Foliage[trng.Range(0, pal.Foliage.Length)], bark);
+                        s = trng.Range(3.2f, 4.2f);
+                    }
                     st.Decor.Append(tpl, Matrix4x4.TRS(pos + Vector3.down * 0.3f, trng.YawOnly(), Vector3.one * s), Color.white);
                     PrismGeo.Prism(st.Solid, pos + Vector3.down, Vector3.up, 0.9f, 9f, 8, 0f, bark, bark);
                     for (int k = 0; k < 7; k++)
@@ -577,7 +595,9 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 {
                     var tpl = new MeshBuilder();
                     var c = pal.Foliage[trng.Range(0, pal.Foliage.Length)];
-                    PrismFlora.Lollipop(tpl, ref trng, c, c, pal.Bark[0]);
+                    if (pal.Biome == PrismBiome.Wonderwood) PrismFlora.JellyCap(tpl, ref trng, c, pal.Crystal[0], pal.Bark[0]);
+                    else if (pal.Biome == PrismBiome.Glowdeep) PrismFlora.CrystalTree(tpl, ref trng, c, pal.Crystal[0], pal.Bark[0]);
+                    else PrismFlora.Lollipop(tpl, ref trng, c, c, pal.Bark[0]);
                     mb.Append(tpl, Matrix4x4.TRS(pos, trng.YawOnly(), Vector3.one * trng.Range(0.8f, 1.3f)), Color.white);
                     var tpl2 = new MeshBuilder();
                     PrismFlora.Puffball(tpl2, ref trng, pal.Foliage[trng.Range(0, pal.Foliage.Length)], c, pal.Flowers[0]);
@@ -842,7 +862,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
         private void LookAndHero()
         {
             _look = ZoneRandom.For(_zone.Seed, "look");
-            _sunElev = _pal.Dusk ? _look.Range(16f, 30f) : _look.Range(30f, 52f);
+            PrismBiomes.Light(_pal.Biome, _pal, ref _look, out _sunElev, out _sunColor, out _sunIntensity);
             _sunAz = 45f + _look.Sign() * _look.Range(70f, 115f);
             _fogDensity = _look.Range(0.0009f, 0.0012f);
             var sunForward = Quaternion.Euler(_sunElev, _sunAz, 0f) * Vector3.forward;

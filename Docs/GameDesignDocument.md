@@ -260,6 +260,11 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 2. **Layer 2 (tier 2).** Denser elites and mixed enemy families. Built for duos and small groups.
 3. **Layer 3 (tier 3).** Hardest families, rarer blooms. Launch ships these 3 layers.
 
+**Biomes.** Each layer looks different, on the same zone tiling, terrain rules and walk checks:
+- **Layer 1, Prismatica:** the bright geometric dreamscape, day or dusk.
+- **Layer 2, Wonderwood:** a giant forest at sunset. Spiral-trunked trees crowned with huge petals and hung with lanterns, jellyfish caps trailing glowing tendrils, shelf-fungus spires and lantern pods. Softer, rolling ground with fewer basalt columns, a low sun, magenta and orange skies, and more giant-tree landmarks.
+- **Layer 3, Glowdeep:** night. Dark basalt and moss lit by glowing plants: crystal trees, glow coral, anemones and jelly caps. Sharper ground with more columns, a cool moon, stars and auroras, and more crystal-spire landmarks. The moon and ambient light keep the ground and enemies readable.
+
 **Moving between layers (built).** The group moves together, so friends are never on different layers.
 
 - Shooting the open gate on layer 1 or 2 (and hitting its gallery's target) starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then the whole group goes to the next layer's start.
@@ -554,6 +559,8 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 **Enemies in every raid room (Nov 9, 2026; not yet playtested).** Each room keeps at least 2 enemies until it's solved, topped up at once (Skitters, or Wisps over the Gauntlet). The Gauntlet had none before, and the puzzle rooms had none for their first 10 s.
 
 **Robotic insect enemies (Nov 9, 2026; first pass, not yet playtested).** The cubes and pillars are replaced by low-poly robotic insects in the robots' style, each built from a seed every client shares. Each is sized to its hit sphere. Walkers scuttle on alternating legs while they move, fliers beat their wings, and Skitters, Wisps and Mites turn to face where they're going. The gameplay marks stay on top: the Sentinel's eye and lid, the Bulwark's plate (on its nose), the elite crown, bars and debuff marks. A Wisp between blinks is a small grey ghost, and a telegraph turns the whole bug orange. Mites share 12 looks to keep swarms cheap. Glimmers are little butterflies hovering in place, their wings banded in all six essence colours (the colours they can drop), in a different order on each. The raid bosses and the Colossus are unchanged.
+
+**Layer biomes (Nov 9, 2026; first pass, not yet playtested).** Layers 2 and 3 have their own biomes, Wonderwood and Glowdeep (see Biomes above), with their own colour moods, plants, lighting, sky, terrain character and landmark mix. Layer 1 builds exactly as before. Checked over 6 zones per layer: walkable ground is 86–95% on layer 2 and 87–97% on layer 3 (layer 1: 90–96%), and the server's headless build matches the clients' colliders in all 12.
 
 **Open questions from the prototype**
 

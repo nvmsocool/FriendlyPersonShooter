@@ -17,9 +17,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         private readonly ZoneInfo[] _zones;
 
         internal LayerMap(uint seed, ZoneTiling tiling, ZoneInfo[] zones, IReadOnlyList<Landmark> landmarks,
-            IReadOnlyList<Shrine> shrines, IReadOnlyList<GateSite> gates, ZoneCoord startZone, MapPoint startPoint)
+            IReadOnlyList<Shrine> shrines, IReadOnlyList<GateSite> gates, ZoneCoord startZone, MapPoint startPoint, int layer = 1)
         {
             Seed = seed;
+            Layer = layer;
             Tiling = tiling;
             _zones = zones;
             Landmarks = landmarks;
@@ -30,6 +31,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         public uint Seed { get; }
+        /// <summary>Which layer this map is (1 = the top). Each layer has its own biome (see the zone art).</summary>
+        public int Layer { get; }
         public ZoneTiling Tiling { get; }
         /// <summary>All zones, in the tiling's index order.</summary>
         public IReadOnlyList<ZoneInfo> Zones => _zones;

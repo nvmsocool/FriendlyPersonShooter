@@ -28,7 +28,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
 
         public IEnumerator BuildSteps(ZoneRequest request, Transform parent, ZoneResult result) => new PrismBuild(request, parent, result).Run();
 
-        internal static LandmarkKind PickLandmark(TileKind tile, HashSet<LandmarkKind> used, ref ZoneRandom rng)
+        internal static LandmarkKind PickLandmark(TileKind tile, HashSet<LandmarkKind> used, ref ZoneRandom rng, PrismBiome biome = PrismBiome.Prismatica)
         {
             // CrystalSpire, MonolithRing, RainbowArch, FloatingSpiral, GiantTree, Ziggurat
             float[] w = tile switch
@@ -42,6 +42,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 TileKind.River => new float[] { 1.5f, 1, 4, 1.5f, 2, 1 },
                 _ => new float[] { 1.5f, 2.5f, 2, 1.5f, 3, 2 },
             };
+            PrismBiomes.Landmarks(biome, w);
             if (used.Count < w.Length) foreach (var k in used) w[(int)k] = 0f;
             return (LandmarkKind)rng.Weighted(w);
         }
@@ -105,8 +106,17 @@ namespace FriendlyPersonShooter.ZoneArt.C
             sky.SetColor("_BankFront", pal.BankFront);
             sky.SetFloat("_BankHeight", rng.Range(0.06f, 0.15f));
             sky.SetFloat("_BankSeed", rng.Range(0f, 100f));
-            sky.SetFloat("_Stars", pal.Dusk ? rng.Range(0.8f, 1.4f) : rng.Range(0.25f, 0.7f));
-            sky.SetFloat("_Aurora", pal.Dusk ? (rng.Chance(0.7f) ? rng.Range(0.5f, 1.2f) : 0f) : (rng.Chance(0.15f) ? rng.Range(0.3f, 0.6f) : 0f));
+            if (pal.Biome == PrismBiome.Glowdeep)
+            {
+                // Night: a full star field and nearly always an aurora.
+                sky.SetFloat("_Stars", rng.Range(1.5f, 2.2f));
+                sky.SetFloat("_Aurora", rng.Chance(0.9f) ? rng.Range(0.9f, 1.5f) : 0.4f);
+            }
+            else
+            {
+                sky.SetFloat("_Stars", pal.Dusk ? rng.Range(0.8f, 1.4f) : rng.Range(0.25f, 0.7f));
+                sky.SetFloat("_Aurora", pal.Dusk ? (rng.Chance(0.7f) ? rng.Range(0.5f, 1.2f) : 0f) : (rng.Chance(0.15f) ? rng.Range(0.3f, 0.6f) : 0f));
+            }
             sky.SetColor("_AuroraA", pal.AuroraA);
             sky.SetColor("_AuroraB", pal.AuroraB);
 

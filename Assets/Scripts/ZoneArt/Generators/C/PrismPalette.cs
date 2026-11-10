@@ -10,6 +10,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
     public sealed class PrismPalette
     {
         public string Mood;
+        /// <summary>The layer's biome (see <see cref="PrismBiome"/>).</summary>
+        public PrismBiome Biome;
         public Color[] Grass;      // ground tones on flats (patchwork)
         public Color[] Strata;     // cliff bands
         public Color[] HexTop;     // basalt column tops
@@ -118,15 +120,90 @@ namespace FriendlyPersonShooter.ZoneArt.C
             },
         };
 
+        /// <summary>Wonderwood (layer 2): dusk over a giant forest. Olive and amber moss, plum bark, magenta and orange skies.</summary>
+        private static readonly MoodDef[] WonderMoods =
+        {
+            new MoodDef
+            {
+                Name = "ember", Grass = new[] { "#7A9A3A", "#A88A34", "#5E8A42", "#C99A48" },
+                Strata = new[] { "#7A3466", "#B44E74", "#E07A4F", "#F4B860", "#5A3670", "#C9637E" },
+                HexTop = new[] { "#E8A36B", "#B5527A", "#7E4C8C" }, Foliage = new[] { "#FF8A3D", "#E8457A", "#3FB8AF", "#FFC145", "#B455D6", "#5FC46B" },
+                Flowers = new[] { "#FFD23F", "#FF4F8B", "#5CE1E6", "#FFFFFF", "#FF7A30", "#C77DFF" }, Bark = new[] { "#4A2A4E", "#5A2E3E", "#3A2C55" },
+                Crystal = new[] { "#FFB0E0", "#7CF5FF" }, Stone = new[] { "#E9C9B1", "#D9A1B8", "#B9A3D9" }, Path = "#D9A66B", Water = "#2FB5C9",
+                Zenith = "#2A1650", Mid = "#B8358A", Horizon = "#FF9A4D", Sun = "#FFD08A", CloudLit = "#FFC38F", CloudShade = "#8A3F86", Shadow = "#4A1F5C", Dusk = true,
+            },
+            new MoodDef
+            {
+                Name = "rosewood", Grass = new[] { "#6FA34A", "#A3B347", "#4F8F5A", "#D9A441" },
+                Strata = new[] { "#7D2E68", "#D35D8C", "#F59E7A", "#FFD3A5", "#5A3D7A", "#E86A6A" },
+                HexTop = new[] { "#F2B6A0", "#D35D8C", "#8E6BBF" }, Foliage = new[] { "#FF6FA8", "#FFB347", "#2EC4B6", "#9B5DE5", "#FF5E5B", "#7BD389" },
+                Flowers = new[] { "#FFE66D", "#FF3D7F", "#7DF9FF", "#FFFFFF", "#FF9F1C", "#E0AAFF" }, Bark = new[] { "#4E2A4C", "#62304A", "#38345A" },
+                Crystal = new[] { "#FFC4E8", "#A0FFF0" }, Stone = new[] { "#F3D5C0", "#E6B3C8", "#C7B8EA" }, Path = "#E4B07A", Water = "#3BC4D0",
+                Zenith = "#3A1C6B", Mid = "#D1478F", Horizon = "#FFB070", Sun = "#FFE0A8", CloudLit = "#FFD0B0", CloudShade = "#9A4A92", Shadow = "#5A2470", Dusk = true,
+            },
+            new MoodDef
+            {
+                Name = "violet hour", Grass = new[] { "#4E8C6A", "#7A9E4E", "#3E7A7A", "#B07ACF" },
+                Strata = new[] { "#4A3478", "#6E4AA8", "#C266B8", "#F2A0C0", "#38548A", "#FF9E80" },
+                HexTop = new[] { "#C9A0E8", "#F2A0C0", "#7FB8E0" }, Foliage = new[] { "#C266FF", "#3FD0C9", "#FF8FC8", "#FFD166", "#6EE7A0", "#FF7B54" },
+                Flowers = new[] { "#FFEE88", "#FF5FA2", "#88F7FF", "#FFFFFF", "#FFB347", "#B98CFF" }, Bark = new[] { "#3A2A56", "#4A2E62", "#2A3656" },
+                Crystal = new[] { "#D6B4FF", "#8CF5FF" }, Stone = new[] { "#E8D8F5", "#D8C0E8", "#B8D8F0" }, Path = "#C8A8D8", Water = "#4CB8E0",
+                Zenith = "#1E1450", Mid = "#7A3FB0", Horizon = "#FF8FB0", Sun = "#FFD6E8", CloudLit = "#FFC0E0", CloudShade = "#5E3A9A", Shadow = "#2E1A60", Dusk = true,
+            },
+            new MoodDef
+            {
+                Name = "amber", Grass = new[] { "#8FA03A", "#B8923A", "#6E8E3E", "#E0B04A" },
+                Strata = new[] { "#8A3B2E", "#D9683A", "#F2B15A", "#FFE0A8", "#7A345A", "#B8504A" },
+                HexTop = new[] { "#F2C47A", "#D9683A", "#A0506E" }, Foliage = new[] { "#FF9F1C", "#E84A5F", "#2BB3A3", "#FFD23F", "#8E5BE0", "#9BD35A" },
+                Flowers = new[] { "#FFE45E", "#FF3366", "#66E0FF", "#FFFFFF", "#FF8C42", "#D4A5FF" }, Bark = new[] { "#4E2C2C", "#5E3232", "#40304E" },
+                Crystal = new[] { "#FFD08A", "#9CF0FF" }, Stone = new[] { "#F5DEC0", "#E8C0A0", "#D8B8C8" }, Path = "#E8B87A", Water = "#36B0BF",
+                Zenith = "#3A1A55", Mid = "#C8456E", Horizon = "#FFB45A", Sun = "#FFE2A0", CloudLit = "#FFD4A0", CloudShade = "#A0466E", Shadow = "#5A2A4A", Dusk = true,
+            },
+        };
+
+        /// <summary>Glowdeep (layer 3): night. Dark basalt and moss, neon plants and crystals, deep blue skies.</summary>
+        private static readonly MoodDef[] GlowMoods =
+        {
+            new MoodDef
+            {
+                Name = "abyss", Grass = new[] { "#24506A", "#2C5C70", "#38407A", "#1C6A5E" },
+                Strata = new[] { "#20264A", "#33306A", "#46347A", "#24466E", "#56286A", "#184A5A" },
+                HexTop = new[] { "#34487E", "#46387E", "#285E6E" }, Foliage = new[] { "#3CF2D2", "#FF4FD8", "#6A8CFF", "#B8FF4F", "#FF9B3D", "#9B5CFF" },
+                Flowers = new[] { "#7DFFEA", "#FF7AF0", "#FFF27A", "#FFFFFF", "#7AB8FF", "#C6FF7A" }, Bark = new[] { "#1C2440", "#281C40", "#142E36" },
+                Crystal = new[] { "#5CFFF0", "#FF5CF2" }, Stone = new[] { "#46528A", "#584690", "#365E74" }, Path = "#4A5C90", Water = "#1FA0C8",
+                Zenith = "#03051A", Mid = "#0E1A4A", Horizon = "#2A4F8A", Sun = "#BFE8FF", CloudLit = "#4A6AA8", CloudShade = "#141E44", Shadow = "#0A0E30", Dusk = true,
+            },
+            new MoodDef
+            {
+                Name = "ember deep", Grass = new[] { "#3E3460", "#4E3050", "#2A4460", "#5A3A44" },
+                Strata = new[] { "#2C1A3A", "#4A2046", "#66244A", "#34285A", "#7A3432", "#20344A" },
+                HexTop = new[] { "#5A2C48", "#463670", "#6A3A3A" }, Foliage = new[] { "#FF6A3D", "#FFD03D", "#FF3D8B", "#3DFFB8", "#FF9F5A", "#C45CFF" },
+                Flowers = new[] { "#FFE07A", "#FF7AA8", "#7AFFD8", "#FFFFFF", "#FFB07A", "#E07AFF" }, Bark = new[] { "#24162C", "#301824", "#1A2430" },
+                Crystal = new[] { "#FF8A5C", "#FFD45C" }, Stone = new[] { "#5A3C64", "#6A4650", "#46466E" }, Path = "#6A4658", Water = "#3AA0B0",
+                Zenith = "#0A0412", Mid = "#2A0E2E", Horizon = "#7A2A3A", Sun = "#FFC8A0", CloudLit = "#7A3A5A", CloudShade = "#200E28", Shadow = "#14081E", Dusk = true,
+            },
+            new MoodDef
+            {
+                Name = "mycelium", Grass = new[] { "#245A4C", "#30684E", "#2C406A", "#46623A" },
+                Strata = new[] { "#1E3434", "#2A4458", "#363254", "#225650", "#46462E", "#2C2838" },
+                HexTop = new[] { "#30585A", "#44446A", "#306A56" }, Foliage = new[] { "#9CFF6A", "#4FE8FF", "#FFE45C", "#FF6AD8", "#6AFFC4", "#A07AFF" },
+                Flowers = new[] { "#E8FF7A", "#7AFFF0", "#FF9AEA", "#FFFFFF", "#FFD27A", "#B8A0FF" }, Bark = new[] { "#162626", "#20203A", "#12241C" },
+                Crystal = new[] { "#9CFF6A", "#4FE8FF" }, Stone = new[] { "#466262", "#4C4C6C", "#3A5A4E" }, Path = "#466C60", Water = "#2AC8B0",
+                Zenith = "#020A0E", Mid = "#0A2230", Horizon = "#1E5A5A", Sun = "#D8FFE8", CloudLit = "#3A6A6A", CloudShade = "#0E2028", Shadow = "#061418", Dusk = true,
+            },
+        };
+
         public static PrismPalette Create(ZoneRequest zone)
         {
             var rng = ZoneRandom.For(zone.Seed, "palette");
+            var biome = PrismBiomes.For(zone);
+            var moods = biome == PrismBiome.Wonderwood ? WonderMoods : biome == PrismBiome.Glowdeep ? GlowMoods : Moods;
             // Tile kinds lean toward some moods but any mood can appear.
-            var w = new float[Moods.Length];
+            var w = new float[moods.Length];
             for (int i = 0; i < w.Length; i++) w[i] = 1f;
             void Lean(string name, float add)
             {
-                for (int i = 0; i < Moods.Length; i++) if (Moods[i].Name == name) w[i] += add;
+                for (int i = 0; i < moods.Length; i++) if (moods[i].Name == name) w[i] += add;
             }
             switch (zone.Tile)
             {
@@ -139,15 +216,15 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 case TileKind.Ruins: Lean("lavender", 1.5f); Lean("sunset", 1f); Lean("autumn", 1f); break;
                 case TileKind.Tower: Lean("citrus", 1f); Lean("neon", 1f); Lean("sunset", 1f); break;
             }
-            var m = Moods[rng.Weighted(w)];
+            var m = moods[rng.Weighted(w)];
             // A second mood donates some foliage and flowers, so the same mood never repeats exactly.
-            var donor = Moods[rng.Range(0, Moods.Length)];
+            var donor = moods[rng.Range(0, moods.Length)];
             float hue = rng.Range(-0.045f, 0.045f);
 
             Color H(string hex) => Shift(ZoneLook.Hex(hex), hue);
             Color[] HA(string[] hexes) => System.Array.ConvertAll(hexes, H);
 
-            var p = new PrismPalette { Mood = m.Name + "+" + donor.Name, Dusk = m.Dusk };
+            var p = new PrismPalette { Mood = m.Name + "+" + donor.Name, Dusk = m.Dusk, Biome = biome };
             var grass = HA(m.Grass);
             // The first two entries of each mood are ground tones, the last two are accents.
             if (rng.Chance(0.4f)) (grass[0], grass[1]) = (grass[1], grass[0]);
@@ -159,7 +236,10 @@ namespace FriendlyPersonShooter.ZoneArt.C
             for (int i = 0; i < p.Strata.Length; i++)
             {
                 Color.RGBToHSV(p.Strata[i], out float sh, out float ss, out float sv);
-                p.Strata[i] = Color.HSVToRGB(sh, Mathf.Min(ss, i == 0 ? 0.85f : 0.68f), Mathf.Max(sv, i == 0 ? 0.55f : 0.72f));
+                // Glowdeep keeps its rock dark (the plants and crystals bring the light); the others stay bright.
+                p.Strata[i] = biome == PrismBiome.Glowdeep
+                    ? Color.HSVToRGB(sh, Mathf.Min(ss, 0.7f), Mathf.Clamp(sv, 0.26f, 0.52f))
+                    : Color.HSVToRGB(sh, Mathf.Min(ss, i == 0 ? 0.85f : 0.68f), Mathf.Max(sv, i == 0 ? 0.55f : 0.72f));
             }
             p.HexTop = HA(m.HexTop);
             p.Foliage = Mix(HA(m.Foliage), HA(donor.Foliage), 2, ref rng);
@@ -202,6 +282,22 @@ namespace FriendlyPersonShooter.ZoneArt.C
             p.Moons = new[] { Color.Lerp(p.Stone[0], Color.white, 0.5f), Color.Lerp(p.Crystal[1], Color.white, 0.4f), Color.Lerp(p.Flowers[1], Color.white, 0.5f) };
             p.AuroraA = Color.Lerp(p.Crystal[0], new Color(0.3f, 1f, 0.7f), 0.5f);
             p.AuroraB = Color.Lerp(p.Crystal[1], new Color(1f, 0.3f, 0.9f), 0.5f);
+            if (biome == PrismBiome.Glowdeep)
+            {
+                // Night: no washed-out haze. Deep blue fog, cool ambient light bright enough to read the ground by,
+                // and neon rims from the crystals.
+                p.Fog = Color.Lerp(p.SkyHorizon, p.SkyMid, 0.35f);
+                p.AmbientSky = Color.Lerp(p.SkyHorizon, Color.white, 0.3f) * 0.95f;
+                p.AmbientEquator = Color.Lerp(p.SkyHorizon, p.Crystal[0], 0.3f) * 0.75f;
+                p.AmbientGround = Color.Lerp(p.Grass[0], p.Foliage[0], 0.3f) * 0.6f;
+                p.Rim = Color.Lerp(p.Crystal[0], p.SkyHorizon, 0.4f);
+                p.BankBack = Color.Lerp(p.SkyHorizon, p.CloudLit, 0.5f);
+            }
+            else if (biome == PrismBiome.Wonderwood)
+            {
+                // A warm sunset haze between the giants.
+                p.Fog = Color.Lerp(Color.Lerp(p.SkyHorizon, p.SkyMid, 0.3f), Color.white, 0.12f);
+            }
             return p;
         }
 

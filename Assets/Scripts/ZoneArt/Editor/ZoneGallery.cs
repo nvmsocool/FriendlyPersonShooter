@@ -35,14 +35,17 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
     /// </summary>
     public static class ZoneGallery
     {
-        /// <summary>The zones judged for a gallery seed: one zone from each of <paramref name="count"/> different layers.</summary>
-        public static List<ZoneRequest> Zones(int count, uint seed)
+        /// <summary>
+        /// The zones judged for a gallery seed: one zone from each of <paramref name="count"/> different maps, all on
+        /// <paramref name="layer"/> (each layer has its own biome).
+        /// </summary>
+        public static List<ZoneRequest> Zones(int count, uint seed, int layer = 1)
         {
             var list = new List<ZoneRequest>();
             for (int i = 0; i < count; i++)
             {
                 uint layerSeed = ZoneRandom.Hash(seed, 0x6A11, i);
-                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpTiling(), LayerSettings.ForPlaytest());
+                var map = LayerGenerator.Generate(layerSeed, LayerSettings.MvpTiling(), LayerSettings.ForLayer(layer));
                 var zones = map.Zones;
                 // Prefer zones with something on them, and vary the pick.
                 int start = (int)(ZoneRandom.Hash(layerSeed, 99) % (uint)zones.Count);
@@ -70,6 +73,8 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             public bool InWorld;
             public bool NoRender;
             public bool HeadlessCheck;
+            /// <summary>Which world layer (biome) to draw zones from.</summary>
+            public int Layer = 1;
         }
 
         public static void RunFromCommandLine()
@@ -173,7 +178,7 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
             var generator = ZoneGenerators.Find(generatorName);
             outDir = Path.GetFullPath(outDir);
             Directory.CreateDirectory(outDir);
-            var zones = Zones(options.Count, seed);
+            var zones = Zones(options.Count, seed, options.Layer);
             var report = new StringBuilder();
             string mode = (options.InWorld ? "in world" : "standalone") + (options.HeadlessCheck ? ", headless check" : "");
             report.AppendLine($"# Zone gallery: {generator.Name} (seed {seed}, {mode})\n");
@@ -347,10 +352,10 @@ namespace FriendlyPersonShooter.ZoneArt.EditorTools
         }
 
         /// <summary>Builds one gallery zone into a new scene in the open Editor so you can fly around it.</summary>
-        public static void OpenInScene(string generatorName, int index, uint seed = 1)
+        public static void OpenInScene(string generatorName, int index, uint seed = 1, int layer = 1)
         {
             var generator = ZoneGenerators.Find(generatorName);
-            var zone = Zones(index + 1, seed)[index];
+            var zone = Zones(index + 1, seed, layer)[index];
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             ZoneLook.Reset();
             var holder = new GameObject("ZoneGallery");

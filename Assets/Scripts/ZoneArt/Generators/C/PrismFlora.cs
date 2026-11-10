@@ -9,6 +9,8 @@ namespace FriendlyPersonShooter.ZoneArt.C
     {
         Lollipop, ConeTree, Palm, CloudTree, Willow, GiantMushroom, Bamboo, Cactus,
         Puffball, Succulent, Mushroom, OrbPlant, Fern, Flowers, Grass, Reeds,
+        // Added later: append only (the value seeds each species' random stream).
+        SpiralBloom, JellyCap, ShelfSpire, BulbPod, CrystalTree, GlowCoral, Anemone,
     }
 
     public enum Layer { Tree, Shrub, Flower, Grass, Reed }
@@ -52,6 +54,21 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 case TileKind.River: tw = new float[] { 2.5f, 1.5f, 3, 1.5f, 3, 0.8f, 2, 0.3f }; sw = new float[] { 2.5f, 1, 1.2f, 1.5f, 2.5f }; break;
                 case TileKind.Crater: tw = new float[] { 1.5f, 1.2f, 0.8f, 1.2f, 1, 3.5f, 0.8f, 1.2f }; sw = new float[] { 1.5f, 2, 3, 3, 1 }; break;
                 case TileKind.Meadow: tw = new float[] { 3.5f, 2, 1.2f, 2.5f, 1.5f, 0.6f, 0.8f, 0.4f }; sw = new float[] { 3, 1.5f, 1.2f, 1.5f, 1.5f }; break;
+            }
+            switch (pal.Biome)
+            {
+                case PrismBiome.Wonderwood:
+                    trees = new[] { Archetype.SpiralBloom, Archetype.JellyCap, Archetype.ShelfSpire, Archetype.GiantMushroom, Archetype.Willow, Archetype.CloudTree };
+                    tw = new float[] { 8, 3, 2.5f, 2, 1.5f, 1 };
+                    shrubs = new[] { Archetype.BulbPod, Archetype.Puffball, Archetype.Mushroom, Archetype.Fern, Archetype.OrbPlant };
+                    sw = new float[] { 3, 2, 2, 1.5f, 1.5f };
+                    break;
+                case PrismBiome.Glowdeep:
+                    trees = new[] { Archetype.CrystalTree, Archetype.JellyCap, Archetype.GiantMushroom, Archetype.Willow, Archetype.SpiralBloom, Archetype.CloudTree };
+                    tw = new float[] { 8, 3, 2.5f, 1.5f, 0.8f, 1 };
+                    shrubs = new[] { Archetype.GlowCoral, Archetype.Anemone, Archetype.OrbPlant, Archetype.Mushroom, Archetype.Succulent };
+                    sw = new float[] { 3, 2.5f, 2, 2, 1 };
+                    break;
             }
             int treeCount = zone.Tile == TileKind.Forest ? 5 : rng.Range(3, 5);
             int shrubCount = rng.Range(3, 5);
@@ -135,6 +152,13 @@ namespace FriendlyPersonShooter.ZoneArt.C
                 case Archetype.Flowers: s.Layer = Layer.Flower; s.Spacing = 3.2f; s.Tilt = 6f; s.ScaleMin = 1.6f; s.ScaleMax = 2.1f; break;
                 case Archetype.Grass: s.Layer = Layer.Grass; s.Spacing = 2f; s.Tilt = 6f; s.GroundTint = true; s.ScaleMin = 1.5f; s.ScaleMax = 1.9f; break;
                 case Archetype.Reeds: s.Layer = Layer.Reed; s.Spacing = 2.4f; s.Tilt = 5f; s.ScaleMin = 1.05f; s.ScaleMax = 1.35f; break;
+                case Archetype.SpiralBloom: s.Layer = Layer.Tree; s.Spacing = 15f; s.TrunkR = 0.95f; s.TrunkH = 8f; s.Tilt = 2f; s.ScaleMin = 0.85f; s.ScaleMax = 1.15f; break;
+                case Archetype.JellyCap: s.Layer = Layer.Tree; s.Spacing = 10f; s.TrunkR = 0.4f; s.TrunkH = 5f; s.Tilt = 3f; break;
+                case Archetype.ShelfSpire: s.Layer = Layer.Tree; s.Spacing = 10f; s.TrunkR = 0.55f; s.TrunkH = 6f; s.Tilt = 2f; break;
+                case Archetype.CrystalTree: s.Layer = Layer.Tree; s.Spacing = 8f; s.TrunkR = 0.4f; s.TrunkH = 4f; s.Tilt = 3f; break;
+                case Archetype.BulbPod: s.Layer = Layer.Shrub; s.Spacing = 4.4f; s.Tilt = 8f; s.ScaleMin = 1.1f; s.ScaleMax = 1.5f; break;
+                case Archetype.GlowCoral: s.Layer = Layer.Shrub; s.Spacing = 4.2f; s.Tilt = 6f; s.ScaleMin = 1.1f; s.ScaleMax = 1.5f; break;
+                case Archetype.Anemone: s.Layer = Layer.Shrub; s.Spacing = 4f; s.Tilt = 6f; s.ScaleMin = 1.1f; s.ScaleMax = 1.5f; break;
             }
             for (int v = 0; v < variants; v++)
             {
@@ -158,6 +182,23 @@ namespace FriendlyPersonShooter.ZoneArt.C
                     case Archetype.Flowers: FlowerPatch(mb, ref rng, main, pal.Flowers[rng.Range(0, pal.Flowers.Length)], pal.Grass[0]); break;
                     case Archetype.Grass: GrassTuft(mb, ref rng); break;
                     case Archetype.Reeds: Reeds(mb, ref rng, c, accent); break;
+                    case Archetype.SpiralBloom: SpiralBloom(mb, ref rng, c, second, accent, bark); break;
+                    case Archetype.JellyCap: JellyCap(mb, ref rng, c, accent, bark); break;
+                    case Archetype.ShelfSpire: ShelfSpire(mb, ref rng, c, second, accent, bark); break;
+                    case Archetype.BulbPod: BulbPod(mb, ref rng, c, accent); break;
+                    case Archetype.CrystalTree: CrystalTree(mb, ref rng, c, accent, bark); break;
+                    case Archetype.GlowCoral: GlowCoral(mb, ref rng, c, accent); break;
+                    case Archetype.Anemone: Anemone(mb, ref rng, c, accent); break;
+                }
+                // Glowdeep's night: every plant glows a little (the crystal and lantern parts already glow a lot).
+                if (pal.Biome == PrismBiome.Glowdeep)
+                {
+                    float cap = s.Layer == Layer.Grass ? 0.93f : 0.8f;
+                    for (int i = 0; i < mb.Colors.Count; i++)
+                    {
+                        var col = mb.Colors[i];
+                        if (col.a > cap) mb.Colors[i] = WithAlpha(col, cap);
+                    }
                 }
                 s.Variants.Add(mb);
             }
@@ -409,6 +450,240 @@ namespace FriendlyPersonShooter.ZoneArt.C
                         Dot(mb, top + Vector3.Scale(d, new Vector3(rc, rc * 0.55f, rc)) * 1.02f, d.normalized, rc * 0.14f, Color.white);
                     }
                 }
+            }
+        }
+
+        /// <summary>A double-sided petal or leaf: base, two side points and a tip, coloured base to tip.</summary>
+        private static void Petal(MeshBuilder mb, Vector3 basePos, Vector3 left, Vector3 tip, Vector3 right, Color baseC, Color midC, Color tipC)
+        {
+            var n = Vector3.Cross(left - basePos, right - basePos).normalized;
+            if (n.y < 0f) n = -n;
+            int i = mb.Vertex(basePos, baseC, n);
+            mb.Vertex(left, midC, n);
+            mb.Vertex(tip, tipC, n);
+            mb.Vertex(right, midC, n);
+            mb.Triangle(i, i + 1, i + 2);
+            mb.Triangle(i, i + 2, i + 3);
+        }
+
+        /// <summary>
+        /// Wonderwood's giant: three or four strands twisting round each other into a tall trunk, with glowing veins,
+        /// crowned by huge petals and hung with lantern pods.
+        /// </summary>
+        public static void SpiralBloom(MeshBuilder mb, ref ZoneRandom rng, Color c, Color c2, Color glow, Color bark)
+        {
+            float h = rng.Range(9f, 14f);
+            int strands = rng.Range(3, 5);
+            float twist = rng.Range(0.6f, 1.1f) * Mathf.PI * 2f * rng.Sign();
+            float spread = rng.Range(0.55f, 0.75f);
+            var lean = new Vector3(rng.Range(-0.8f, 0.8f), 0, rng.Range(-0.8f, 0.8f));
+            var vein = WithAlpha(glow, 0.3f);
+            const int segs = 9;
+            Vector3 At(int strand, float t)
+            {
+                float a = strand / (float)strands * Mathf.PI * 2f + twist * t;
+                float r = spread * (1f - 0.75f * t) + 0.08f;
+                return new Vector3(Mathf.Cos(a) * r, t * h, Mathf.Sin(a) * r) + lean * (t * t);
+            }
+            for (int s = 0; s < strands; s++)
+            {
+                var barkS = Color.Lerp(bark, Shade(bark, 1.25f), s / (float)strands);
+                for (int i = 0; i < segs; i++)
+                {
+                    float t0 = i / (float)segs, t1 = (i + 1) / (float)segs;
+                    var p0 = At(s, t0);
+                    var p1 = At(s, t1);
+                    mb.Tube(p0, p1, Mathf.Lerp(0.42f, 0.2f, t0), Mathf.Lerp(0.42f, 0.2f, t1), 6, Shade(barkS, 0.8f + 0.2f * t0), Shade(barkS, 0.8f + 0.2f * t1));
+                    // A thin glowing vein on the outside of each strand.
+                    var o0 = new Vector3(p0.x - lean.x * t0 * t0, 0, p0.z - lean.z * t0 * t0).normalized * Mathf.Lerp(0.4f, 0.19f, t0);
+                    var o1 = new Vector3(p1.x - lean.x * t1 * t1, 0, p1.z - lean.z * t1 * t1).normalized * Mathf.Lerp(0.4f, 0.19f, t1);
+                    mb.Tube(p0 + o0, p1 + o1, 0.06f, 0.05f, 3, vein, vein);
+                }
+                // Root flare.
+                var root = At(s, 0f);
+                var outD = new Vector3(root.x, 0, root.z).normalized;
+                mb.Tube(root + Vector3.up * 1.2f, root + outD * 1.3f + Vector3.down * 0.3f, 0.3f, 0.12f, 5, bark, Shade(bark, 0.7f));
+            }
+            var top = At(0, 1f);
+            top.x = lean.x;
+            top.z = lean.z;
+            // Two rings of petals: big outer ones drooping at the tips, smaller inner ones cupped upward.
+            int petals = rng.Range(5, 8);
+            float P = rng.Range(4f, 6f);
+            float rot = rng.Range(0f, Mathf.PI * 2f);
+            for (int ring = 0; ring < 2; ring++)
+            {
+                float len = ring == 0 ? P : P * 0.55f;
+                float lift = ring == 0 ? 0.6f : 1.4f;
+                float droop = ring == 0 ? -1.2f : 0.9f;
+                var col = ring == 0 ? c : c2;
+                for (int i = 0; i < petals; i++)
+                {
+                    float a = rot + (i + ring * 0.5f) / petals * Mathf.PI * 2f + rng.Range(-0.1f, 0.1f);
+                    var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                    var side = new Vector3(-d.z, 0, d.x);
+                    float w = len * rng.Range(0.32f, 0.42f);
+                    var b0 = top + Vector3.up * (ring * 0.3f);
+                    var mid = b0 + d * len * 0.5f + Vector3.up * lift;
+                    var tip = b0 + d * len + Vector3.up * (lift + droop);
+                    Petal(mb, b0, mid - side * w, tip, mid + side * w, Shade(col, 0.75f), col, Lite(Color.Lerp(col, glow, 0.35f), 0.2f));
+                }
+            }
+            Ball(mb, top + Vector3.up * 0.9f, Vector3.one * rng.Range(0.6f, 0.9f), glow, Lite(glow, 0.4f), ref rng, 0.05f, 1, false, 0.3f);
+            int pods = rng.Range(3, 7);
+            for (int i = 0; i < pods; i++)
+            {
+                float a = rng.Range(0f, Mathf.PI * 2f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var hang = top + d * P * rng.Range(0.45f, 0.75f) + Vector3.up * 0.2f;
+                float drop = rng.Range(0.8f, 2f);
+                mb.Tube(hang, hang + Vector3.down * drop, 0.03f, 0.03f, 3, bark, bark);
+                Ball(mb, hang + Vector3.down * (drop + 0.25f), new Vector3(0.22f, 0.32f, 0.22f), glow, Lite(glow, 0.5f), ref rng, 0.04f, 1, false, 0.25f);
+            }
+        }
+
+        /// <summary>A jellyfish mushroom: a translucent bell on a bending stalk, trailing glowing tendrils.</summary>
+        public static void JellyCap(MeshBuilder mb, ref ZoneRandom rng, Color c, Color glow, Color bark)
+        {
+            float h = rng.Range(5f, 8.5f);
+            var top = new Vector3(rng.Range(-0.8f, 0.8f), h, rng.Range(-0.8f, 0.8f));
+            var stalk = Color.Lerp(bark, c, 0.35f);
+            Trunk(mb, Vector3.zero, new Vector3(rng.Range(-0.8f, 0.8f), h * 0.5f, rng.Range(-0.8f, 0.8f)), top, 0.38f, 0.22f, Shade(stalk, 0.8f), stalk, 4, 6);
+            float rc = rng.Range(2.1f, 3.1f), ry = rc * rng.Range(0.6f, 0.8f);
+            var bell = top + Vector3.up * ry * 0.35f;
+            Ball(mb, bell, new Vector3(rc, ry, rc), Shade(c, 0.85f), Lite(c, 0.35f), ref rng, 0.04f, 2, false, 0.7f);
+            Ball(mb, bell, new Vector3(rc, ry, rc) * 0.55f, glow, Lite(glow, 0.4f), ref rng, 0.04f, 1, false, 0.25f);
+            int tendrils = rng.Range(14, 24);
+            var t0 = WithAlpha(Color.Lerp(c, glow, 0.5f), 0.35f);
+            var t1 = WithAlpha(Lite(glow, 0.3f), 0.2f);
+            for (int i = 0; i < tendrils; i++)
+            {
+                float a = i / (float)tendrils * Mathf.PI * 2f + rng.Range(-0.1f, 0.1f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var p = bell + d * rc * rng.Range(0.75f, 0.92f) - Vector3.up * ry * 0.3f;
+                float len = rng.Range(1.6f, Mathf.Max(1.8f, Mathf.Min(4.5f, p.y - 1.8f)));
+                var mid = p + Vector3.down * len * 0.5f + d * rng.Range(-0.3f, 0.3f);
+                Blade1(mb, p, mid, 0.16f, t0, t1);
+                Blade1(mb, mid, mid + Vector3.down * len * 0.5f - d * rng.Range(0f, 0.3f), 0.12f, t1, t1);
+            }
+        }
+
+        /// <summary>A column stacked with shelf fungus, alternating sides and colours, the shelf rims glowing.</summary>
+        public static void ShelfSpire(MeshBuilder mb, ref ZoneRandom rng, Color c, Color c2, Color glow, Color bark)
+        {
+            float h = rng.Range(6f, 10f);
+            var top = new Vector3(rng.Range(-0.4f, 0.4f), h, rng.Range(-0.4f, 0.4f));
+            Trunk(mb, Vector3.zero, new Vector3(rng.Range(-0.5f, 0.5f), h * 0.5f, rng.Range(-0.5f, 0.5f)), top, 0.55f, 0.28f, Shade(bark, 0.8f), bark, 4, 7);
+            int shelves = rng.Range(4, 8);
+            float a = rng.Range(0f, Mathf.PI * 2f);
+            for (int i = 0; i < shelves; i++)
+            {
+                float t = Mathf.Lerp(0.35f, 1f, i / (float)Mathf.Max(1, shelves - 1));
+                var at = new Vector3(top.x * t, h * t, top.z * t);
+                a += rng.Range(1.8f, 2.8f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                float r = Mathf.Lerp(2.2f, 1.1f, t) * rng.Range(0.85f, 1.15f);
+                var col = i % 2 == 0 ? c : c2;
+                var centre = at + d * r * 0.55f;
+                Ball(mb, centre, new Vector3(r, r * 0.16f, r), Shade(col, 0.7f), Lite(col, 0.25f), ref rng, 0.05f, 1, true);
+                // Glowing rim along the shelf's outer edge.
+                for (int k = -3; k <= 3; k++)
+                {
+                    float ak = a + k * 0.32f;
+                    var e = centre + new Vector3(Mathf.Cos(ak), 0, Mathf.Sin(ak)) * r * 0.97f - Vector3.up * r * 0.06f;
+                    Dot(mb, e, new Vector3(Mathf.Cos(ak), 0.3f, Mathf.Sin(ak)).normalized, r * 0.12f, WithAlpha(glow, 0.3f));
+                }
+            }
+            Mushroom(mb, ref rng, c2, glow, false);
+            Ball(mb, top + Vector3.up * 0.4f, new Vector3(0.9f, 0.5f, 0.9f), Shade(c, 0.8f), Lite(c, 0.3f), ref rng, 0.05f, 1, true);
+        }
+
+        /// <summary>Arching stems that hang glowing lantern bulbs.</summary>
+        public static void BulbPod(MeshBuilder mb, ref ZoneRandom rng, Color c, Color glow)
+        {
+            int stems = rng.Range(3, 7);
+            for (int i = 0; i < stems; i++)
+            {
+                float a = rng.Range(0f, Mathf.PI * 2f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                float h = rng.Range(0.9f, 1.7f);
+                var tip = d * rng.Range(0.5f, 0.9f) + Vector3.up * h * 0.85f;
+                Trunk(mb, d * 0.05f, d * 0.1f + Vector3.up * h * 1.15f, tip, 0.04f, 0.025f, Shade(c, 0.7f), c, 3, 4);
+                Ball(mb, tip + Vector3.down * 0.22f, new Vector3(0.14f, 0.22f, 0.14f) * rng.Range(0.8f, 1.3f), glow, Lite(glow, 0.5f), ref rng, 0.04f, 1, false, 0.25f);
+            }
+            for (int i = 0; i < 6; i++)
+            {
+                float a = i * 1.05f + rng.Range(0f, 0.3f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                Petal(mb, Vector3.zero, d * 0.3f + new Vector3(-d.z, 0, d.x) * 0.18f + Vector3.up * 0.2f, d * 0.7f + Vector3.up * 0.15f,
+                    d * 0.3f - new Vector3(-d.z, 0, d.x) * 0.18f + Vector3.up * 0.2f, Shade(c, 0.6f), c, Lite(c, 0.2f));
+            }
+        }
+
+        /// <summary>Glowdeep's tree: a faceted crystal trunk branching into prisms with glowing tips.</summary>
+        public static void CrystalTree(MeshBuilder mb, ref ZoneRandom rng, Color c, Color glow, Color bark)
+        {
+            float h = rng.Range(3.5f, 6.5f);
+            var top = new Vector3(rng.Range(-0.4f, 0.4f), h, rng.Range(-0.4f, 0.4f));
+            var stone = Color.Lerp(bark, c, 0.25f);
+            Trunk(mb, Vector3.zero, new Vector3(rng.Range(-0.4f, 0.4f), h * 0.5f, rng.Range(-0.4f, 0.4f)), top, 0.42f, 0.24f, Shade(stone, 0.8f), stone, 3, 5);
+            var crystal = WithAlpha(c, 0.6f);
+            var crystalTip = WithAlpha(Lite(Color.Lerp(c, glow, 0.4f), 0.3f), 0.35f);
+            int branches = rng.Range(4, 8);
+            float a0 = rng.Range(0f, Mathf.PI * 2f);
+            for (int i = 0; i < branches; i++)
+            {
+                float a = a0 + i / (float)branches * Mathf.PI * 2f + rng.Range(-0.3f, 0.3f);
+                float t = rng.Range(0.5f, 1f);
+                var from = top * t;
+                var d = new Vector3(Mathf.Cos(a), rng.Range(0.5f, 1.3f), Mathf.Sin(a)).normalized;
+                float len = rng.Range(1.8f, 3.4f) * (1.2f - 0.4f * t);
+                var to = from + d * len;
+                mb.Tube(from, to, rng.Range(0.18f, 0.28f), 0.02f, 4, crystal, crystalTip);
+                Ball(mb, to, Vector3.one * rng.Range(0.12f, 0.2f), glow, Lite(glow, 0.5f), ref rng, 0.04f, 0, true, 0.2f);
+            }
+            int spikes = rng.Range(3, 6);
+            for (int i = 0; i < spikes; i++)
+            {
+                var off = new Vector3(rng.Range(-0.3f, 0.3f), 0, rng.Range(-0.3f, 0.3f));
+                Cone(mb, top + off, rng.Range(0.25f, 0.45f), rng.Range(1.2f, 2.6f), 5, crystal, crystalTip, rng.Range(0f, 6f));
+            }
+            Ball(mb, top + Vector3.up * 0.3f, Vector3.one * 0.45f, glow, Lite(glow, 0.5f), ref rng, 0.05f, 1, false, 0.25f);
+        }
+
+        /// <summary>A cluster of glowing tubes, open at the top.</summary>
+        public static void GlowCoral(MeshBuilder mb, ref ZoneRandom rng, Color c, Color glow)
+        {
+            int tubes = rng.Range(5, 12);
+            for (int i = 0; i < tubes; i++)
+            {
+                float a = rng.Range(0f, Mathf.PI * 2f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                float h = rng.Range(0.5f, 1.7f);
+                float r = rng.Range(0.07f, 0.14f);
+                var b = d * rng.Range(0f, 0.35f);
+                var tip = b + d * rng.Range(0.1f, 0.4f) * h + Vector3.up * h;
+                mb.Tube(b, tip, r * 0.8f, r, 5, Shade(c, 0.6f), WithAlpha(c, 0.6f));
+                Ball(mb, tip, new Vector3(r * 1.3f, r * 0.5f, r * 1.3f), glow, Lite(glow, 0.5f), ref rng, 0.03f, 0, true, 0.2f);
+            }
+        }
+
+        /// <summary>A low dome with a crown of glowing tentacles.</summary>
+        public static void Anemone(MeshBuilder mb, ref ZoneRandom rng, Color c, Color glow)
+        {
+            float R = rng.Range(0.4f, 0.65f);
+            Ball(mb, Vector3.up * R * 0.25f, new Vector3(R, R * 0.6f, R), Shade(c, 0.6f), c, ref rng, 0.06f, 1, true);
+            int n = rng.Range(18, 30);
+            var tipC = WithAlpha(Lite(glow, 0.3f), 0.2f);
+            for (int i = 0; i < n; i++)
+            {
+                float a = rng.Range(0f, Mathf.PI * 2f);
+                float rr = R * rng.Range(0.1f, 0.75f);
+                var d = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a));
+                var p = d * rr + Vector3.up * R * 0.7f;
+                float len = rng.Range(0.5f, 1.1f);
+                var tip = p + (d * rng.Range(0.3f, 0.8f) + Vector3.up).normalized * len;
+                Blade1(mb, p, tip, 0.09f, WithAlpha(c, 0.7f), tipC);
             }
         }
 
@@ -959,6 +1234,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             // Clearings: open glades (about a third of the ground) with no trees and few shrubs.
             float clearing = PrismTerrain.Smooth(0.0f, 0.12f, ZoneNoise.Fbm(wx + ctx.ClearOff.x, wz + ctx.ClearOff.y, 1f / 80f, 2));
             Cover(ctx.Zone.Tile, out float treeCover, out float shrubCover);
+            PrismBiomes.Cover(PrismBiomes.For(ctx.Zone), ref treeCover, ref shrubCover);
             switch (sp.Layer)
             {
                 case Layer.Grass: return Mathf.Clamp01(0.55f + 0.5f * moist) * (0.7f + 0.3f * pm);

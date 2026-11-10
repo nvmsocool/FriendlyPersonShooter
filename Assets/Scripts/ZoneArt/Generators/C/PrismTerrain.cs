@@ -240,6 +240,7 @@ namespace FriendlyPersonShooter.ZoneArt.C
             s.MassPoint = mid + (new Vector2(r.Range(80f, 170f), r.Range(80f, 170f)) - new Vector2(125f, 125f)) * k;
             s.MassR = r.Range(62f, 85f) * k;
             s.MassW = r.Range(26f, 42f) * Mathf.Max(k, 0.5f);
+            PrismBiomes.Shape(PrismBiomes.For(zone), s);
             return s;
         }
 

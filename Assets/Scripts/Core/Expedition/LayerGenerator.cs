@@ -43,7 +43,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
             var startPoint = zones[tiling.IndexOf(startZone)].Shrines[0].Point;
             var gates = PlaceGates(seed, tiling, settings, startPoint.World, zones, takenByZone, ref layerRandom);
-            return new LayerMap(seed, tiling, zones, landmarks, shrines, gates, startZone, startPoint);
+            return new LayerMap(seed, tiling, zones, landmarks, shrines, gates, startZone, startPoint, settings.Layer);
         }
 
         /// <summary>

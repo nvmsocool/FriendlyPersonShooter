@@ -69,6 +69,7 @@ namespace FriendlyPersonShooter.Arena
             CreateLootMaterials();
             CreateGunMaterials();
             CreateRobotMaterials();
+            CreateBugMaterials();
             if (viewCamera != null) viewCamera.farClipPlane = FriendlyPersonShooter.ZoneArt.ZoneWorld.ViewFogEnd + 40f;
 
             BuildStatic();

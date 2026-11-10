@@ -217,6 +217,8 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public EliteKind Elite;
         /// <summary>A Diver's nose pitch (degrees, down is positive), so a dive reads from the ground.</summary>
         [GhostField(Quantization = 10)] public float Pitch;
+        /// <summary>Seed for how this enemy looks (see Core.Avatars.BugLook), so every client draws the same bug.</summary>
+        [GhostField] public uint LookSeed;
     }
 
     /// <summary>A downed player's soul fragment. Shoot it to help revive them.</summary>

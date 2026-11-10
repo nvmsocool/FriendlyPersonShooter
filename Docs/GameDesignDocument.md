@@ -59,7 +59,7 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 | Diver | Vertical tracking | Circles overhead, then dives at you | Wings | Orange |
 | Glimmer | Quick flicks | Small, short-lived target that pops up near players; never attacks; dies to one shot | Whole body, small | 25% chance of 1 random essence |
 
-**Glimmers** keep you shooting between fights. They appear often and die to any single hit. Each kill has a 25% chance to drop 1 essence of a random color (Yellow, Red or Green), so they're a small bonus, never a reliable source of any color.
+**Glimmers** keep you shooting between fights. They appear often and die to any single hit. Each kill has a 25% chance to drop 1 essence of a random color (any of the six), so they're a small bonus, never a reliable source of any color.
 
 **Difficulty tiers.** Each family has tiers that scale hitbox size, speed, pattern randomness and how long the weak point stays open. The tier is the layer's number. Tier 2 is 88% size, 115% speed and 85% open time; tier 3 is 76%, 130% and 70%. Health and damage stay the same, so deeper enemies are harder to hit, not harder to survive. Elites combine two families (a Skitter that blinks, a Bulwark guarded by Mites), so higher regions test mixed skills.
 
@@ -78,6 +78,7 @@ Each enemy family trains one aim skill and drops one essence color. That means a
 - Enemies don't belong to whoever hit first. Everyone who lands a hit gets the full drop, so there is no kill stealing.
 - Buffing counts as hitting. For 8 seconds after you land a payload buff on someone, every enemy they hit counts as yours too, for drops and kill XP. Supports earn as they help. A plain bullet with no payload doesn't count.
 - Each family has a distinct silhouette and sound, so players can describe them to each other ("lots of Wisps by the river").
+- Enemies are robotic insects, one kind per family: Skitters are beetles, Mites gnats, Wisps fireflies with a glowing lantern, Divers dragonflies or wasps, Sentinels mantises, roaming Bulwarks armoured pill bugs, and Glimmers butterflies whose wings show the colours they can drop (all six). Each enemy is built from its own seed, so no two look exactly alike: legs, segments, antennae, mandibles, horns, eyes, wings and stripes vary. The shell keeps its family's essence colour (only a slight shade shift), so the colour still says what it drops.
 
 ## Resources: essence
 
@@ -551,6 +552,8 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - Still text: quick-chat and kudos lines, ping labels, damage numbers, shoot prompts, gallery titles and the big center messages.
 
 **Enemies in every raid room (Nov 9, 2026; not yet playtested).** Each room keeps at least 2 enemies until it's solved, topped up at once (Skitters, or Wisps over the Gauntlet). The Gauntlet had none before, and the puzzle rooms had none for their first 10 s.
+
+**Robotic insect enemies (Nov 9, 2026; first pass, not yet playtested).** The cubes and pillars are replaced by low-poly robotic insects in the robots' style, each built from a seed every client shares. Each is sized to its hit sphere. Walkers scuttle on alternating legs while they move, fliers beat their wings, and Skitters, Wisps and Mites turn to face where they're going. The gameplay marks stay on top: the Sentinel's eye and lid, the Bulwark's plate (on its nose), the elite crown, bars and debuff marks. A Wisp between blinks is a small grey ghost, and a telegraph turns the whole bug orange. Mites share 12 looks to keep swarms cheap. Glimmers are little butterflies hovering in place, their wings banded in all six essence colours (the colours they can drop), in a different order on each. The raid bosses and the Colossus are unchanged.
 
 **Open questions from the prototype**
 

@@ -17,7 +17,7 @@ namespace FriendlyPersonShooter.Arena
         private const float TracerSeconds = 0.08f;
         private const float MarkerSeconds = 0.25f;
 
-        private Material _wispMat, _wispDimMat, _skitterMat, _coreMat, _miteMat, _telegraphMat;
+        private Material _wispDimMat, _telegraphMat;
         private Material _vigorMat, _mightMat, _barBackMat, _barHealthMat, _barShieldMat, _witherMat, _exposeMat;
         private Material _frenzyMat, _wardMat, _focusMat, _jamMat, _brittleMat, _markMat, _frozenMat;
         private readonly List<Matrix4x4> _tFrenzy = new List<Matrix4x4>();
@@ -43,11 +43,7 @@ namespace FriendlyPersonShooter.Arena
 
         private void CreateCombatMaterials()
         {
-            _wispMat = MakeMat(new Color(1f, 0.9f, 0.2f));
             _wispDimMat = MakeMat(new Color(0.45f, 0.42f, 0.3f));
-            _skitterMat = MakeGlow(new Color(1f, 0.15f, 0.1f), 1.1f);
-            _coreMat = MakeMat(new Color(1f, 0.95f, 0.8f));
-            _miteMat = MakeGlow(new Color(0.3f, 1f, 0.35f), 1.6f);
             _telegraphMat = MakeMat(new Color(1f, 0.55f, 0.1f));
             _vigorMat = MakeMat(new Color(0.55f, 1f, 0.6f));
             _mightMat = MakeMat(new Color(1f, 0.4f, 0.2f));
@@ -132,9 +128,9 @@ namespace FriendlyPersonShooter.Arena
         {
             using var enemies = _enemies.ToComponentDataArray<ArenaEnemy>(Allocator.Temp);
             using var transforms = _enemies.ToComponentDataArray<LocalTransform>(Allocator.Temp);
-            _a.Clear(); _b.Clear(); _c.Clear(); _d.Clear(); _e.Clear(); _f.Clear();
-            var cores = new List<Matrix4x4>();
-            var mites = new List<Matrix4x4>();
+            using var entities = _enemies.ToEntityArray(Allocator.Temp);
+            _d.Clear(); _e.Clear(); _f.Clear();
+            BeginBugs();
             var withered = new List<Matrix4x4>();
             var exposed = new List<Matrix4x4>();
             var slowed = new List<Matrix4x4>();
@@ -143,7 +139,6 @@ namespace FriendlyPersonShooter.Arena
             var brittle = new List<Matrix4x4>();
             var marked = new List<Matrix4x4>();
             var frozen = new List<Matrix4x4>();
-            var glimmers = new List<Matrix4x4>();
             _bossSeen = false;
             _colossusSeen = false;
             ClearFamilyLists();
@@ -157,35 +152,29 @@ namespace FriendlyPersonShooter.Arena
                 switch (en.Family)
                 {
                     case EnemyFamily.Wisp:
-                        // As wide as its hit sphere (radius 0.5), so what you see is what you can hit.
-                        size = 1f * scale;
-                        var wm = Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 90f, 45f), Vector3.one * (en.Hittable ? size : size * 0.6f));
-                        (en.Telegraph ? _f : en.Hittable ? _a : _b).Add(wm);
-                        break;
                     case EnemyFamily.Skitter:
-                        size = 1.2f * scale;
-                        (en.Telegraph ? _f : _c).Add(Matrix4x4.TRS(p, Quaternion.identity, new Vector3(size, 0.9f * scale, size)));
-                        cores.Add(Matrix4x4.TRS(p + Vector3.up * 0.1f, Quaternion.identity, Vector3.one * 0.4f * scale));
+                    case EnemyFamily.Mite:
+                        // A firefly, a beetle or a gnat about as big as its hit sphere, so what you see is what you can hit.
+                        size = DrawSmallBug(entities[i], en, p, scale);
+                        bar = en.Family != EnemyFamily.Mite;
                         break;
                     case EnemyFamily.Sentinel:
                         size = 1.4f * scale;
-                        AddSentinel(en, p);
+                        AddSentinel(entities[i], en, p);
                         break;
                     case EnemyFamily.Diver:
                         size = 1f * scale;
-                        AddDiver(en, p);
+                        AddDiver(entities[i], en, p);
                         break;
                     case EnemyFamily.Glimmer:
-                        // A small spinning yellow diamond: one shot pops it for a little Yellow.
-                        size = 0.5f;
+                        // A little butterfly in the colours it may drop: one shot pops it.
+                        size = DrawSmallBug(entities[i], en, p, 1f);
                         bar = false;
-                        float pulse = 1f + 0.12f * Mathf.Sin(Time.time * 9f);
-                        glimmers.Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 200f, 45f), new Vector3(size, size * 1.4f, size) * pulse));
                         break;
                     case EnemyFamily.Bulwark when !en.World && !en.Boss:
                         // A Bulwark roaming the world (the raid boss and the Colossus are drawn below).
                         size = 2.4f * scale;
-                        AddRoamingBulwark(en, p);
+                        AddRoamingBulwark(entities[i], en, p);
                         break;
                     case EnemyFamily.Bulwark:
                         // The raid boss: a big shell with a plate on one side (its health bar is on the HUD).
@@ -194,10 +183,8 @@ namespace FriendlyPersonShooter.Arena
                         AddBoss(en, p);
                         break;
                     default:
-                        // A bright green spinning chip, a little bigger than its hit sphere so swarms read from afar.
                         size = 0.4f * scale;
                         bar = false;
-                        (en.Telegraph ? _f : mites).Add(Matrix4x4.TRS(p, Quaternion.Euler(45f, Time.time * 180f + i * 37f, 45f), Vector3.one * size));
                         break;
                 }
 
@@ -233,12 +220,6 @@ namespace FriendlyPersonShooter.Arena
                 // Pinned: an icy shell while it is frozen.
                 if (en.Frozen) frozen.Add(Matrix4x4.TRS(p, Quaternion.Euler(0f, 45f, 0f), Vector3.one * (size + 0.3f)));
             }
-            DrawList(_a, _wispMat);
-            DrawList(_b, _wispDimMat);
-            DrawList(_c, _skitterMat);
-            DrawList(cores, _coreMat);
-            DrawList(mites, _miteMat);
-            DrawList(glimmers, _glimmerMat);
             DrawBosses();
             DrawFamilies();
             DrawList(_f, _telegraphMat);

@@ -336,7 +336,7 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------------- Low-poly primitives ----------------
 
-        private static Matrix4x4 M(Vector3 pos, Quaternion rot, Vector3 scale) => Matrix4x4.TRS(pos, rot, scale);
+        internal static Matrix4x4 M(Vector3 pos, Quaternion rot, Vector3 scale) => Matrix4x4.TRS(pos, rot, scale);
 
         private static readonly Vector3[] BoxVerts =
         {
@@ -348,10 +348,10 @@ namespace FriendlyPersonShooter.Arena
             0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6, 0, 4, 5, 0, 5, 1, 3, 2, 6, 3, 6, 7, 0, 3, 7, 0, 7, 4, 1, 5, 6, 1, 6, 2,
         };
 
-        private static void Box(MeshBuilder b, Matrix4x4 m, Color color) => Convex(b, BoxVerts, BoxTris, m, color);
+        internal static void Box(MeshBuilder b, Matrix4x4 m, Color color) => Convex(b, BoxVerts, BoxTris, m, color);
 
         /// <summary>A unit icosphere (radius 1) through <paramref name="m"/>: 20 facets at 0, 80 at 1.</summary>
-        private static void Ico(MeshBuilder b, int subdivisions, Matrix4x4 m, Color color)
+        internal static void Ico(MeshBuilder b, int subdivisions, Matrix4x4 m, Color color)
         {
             var (verts, tris) = MeshBuilder.Icosphere(subdivisions);
             Convex(b, verts, tris, m, color);
@@ -363,7 +363,7 @@ namespace FriendlyPersonShooter.Arena
         /// A unit prism along Y (height 1, diameter 1, centred) with <paramref name="sides"/> sides; the bottom and
         /// top rings are scaled by the two ratios (0 makes a point: a cone or pyramid).
         /// </summary>
-        private static void Prism(MeshBuilder b, int sides, float bottom, float top, Matrix4x4 m, Color color)
+        internal static void Prism(MeshBuilder b, int sides, float bottom, float top, Matrix4x4 m, Color color)
         {
             long key = sides * 1000000L + Mathf.RoundToInt(bottom * 1000f) * 1000L + Mathf.RoundToInt(top * 1000f);
             if (!PrismCache.TryGetValue(key, out var shape))
@@ -410,7 +410,7 @@ namespace FriendlyPersonShooter.Arena
         /// Adds a convex shape as flat-shaded triangles, turning each one to face away from the shape's centre
         /// (so primitives never need hand-checked winding).
         /// </summary>
-        private static void Convex(MeshBuilder b, Vector3[] verts, int[] tris, Matrix4x4 m, Color color)
+        internal static void Convex(MeshBuilder b, Vector3[] verts, int[] tris, Matrix4x4 m, Color color)
         {
             var w = new Vector3[verts.Length];
             var center = Vector3.zero;

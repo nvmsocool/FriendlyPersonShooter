@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using FriendlyPersonShooter.Core.Arsenal;
+using FriendlyPersonShooter.Core.Avatars;
 using FriendlyPersonShooter.Core.Combat;
 using FriendlyPersonShooter.Core.Expedition;
 using FriendlyPersonShooter.Core.Progression;
@@ -434,6 +435,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 Family = state.Family, Health = state.Vitals.Health, MaxHealth = state.Vitals.Health, Hittable = true,
                 Yaw = state.Boss.Yaw, World = state.WorldBoss, Boss = IsRaidBoss(state), Tier = (byte)state.Tier, Elite = state.Elite,
+                LookSeed = BugLook.SeedFrom((uint)id),
             });
             _enemies[e] = state;
             _enemyById[id] = e;
@@ -609,6 +611,7 @@ namespace FriendlyPersonShooter.Arena
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
                     Jammed = s.Vitals.Debuffs.Has(EffectKind.Jam), Brittle = s.Vitals.Debuffs.Has(EffectKind.Brittle),
                     Marked = s.Vitals.Debuffs.Has(EffectKind.Mark), Frozen = s.Vitals.IsFrozen, Shattered = s.Vitals.IsShattered,
+                    LookSeed = BugLook.SeedFrom((uint)s.Vitals.Id),
                 });
                 if (wither > 0f && s.Vitals.IsDead) _scratch.Add(e);
             }

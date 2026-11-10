@@ -22,7 +22,7 @@ namespace FriendlyPersonShooter.Arena
         private const float StuckSeconds = 6f;
         private const float StuckDistance = 2f;
 
-        private Material _boltMat, _glimmerMat;
+        private Material _boltMat;
         private float _attacksSeenUpTo = -1f, _hitsSeenUpTo = -1f;
         private float _flash;
         private Vector3 _lastAttacker;
@@ -37,7 +37,6 @@ namespace FriendlyPersonShooter.Arena
         private void CreateFeedbackMaterials()
         {
             _boltMat = MakeMat(new Color(1f, 0.15f, 0.1f));
-            _glimmerMat = MakeMat(new Color(1f, 0.95f, 0.35f));
         }
 
         /// <summary>World-space parts: bolts from enemies to whoever they hit. Also notices hits on you and your own hits.</summary>

@@ -50,7 +50,7 @@ namespace FriendlyPersonShooter.Core.Tests
             var g = new GalleryRound(GalleryDifficulty.For(GalleryKind.Box, 1), 5);
             g.Step(2f);
             var shot = ShootAt(g, 2, 2f);
-            Assert.That(shot.Hit && shot.Counted, Is.True);
+            Assert.That(shot.Hit, Is.True);
             Assert.That(g.Outcome, Is.EqualTo(GalleryOutcome.Won));
             Assert.That(g.Chosen, Is.EqualTo(2));
         }
@@ -89,28 +89,6 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void OrderedNeedsTheRightOrder()
-        {
-            var g = new GalleryRound(new GallerySpec(GalleryKind.None, GalleryRule.Ordered, 3, 10f, 0f, false, 4f, 9f), 11);
-            Assert.That(g.Count, Is.EqualTo(3));
-            // Targets can overlap at a given moment; find times where each stands alone.
-            float t = 0.5f;
-            var wrong = ShootAt(g, 1, t);
-            if (wrong.Target == 1)
-            {
-                Assert.That(wrong.Counted, Is.False);
-                Assert.That(g.Over, Is.False);
-            }
-            for (int i = 0; i < 3; i++)
-            {
-                t += 0.5f;
-                Assert.That(ShootAt(g, i, t).Counted, Is.True, $"target {i}");
-                Assert.That(g.Visible(i, t), Is.False);
-            }
-            Assert.That(g.Outcome, Is.EqualTo(GalleryOutcome.Won));
-        }
-
-        [Test]
         public void CacheNeedsEveryTargetInAnyOrder()
         {
             var g = new GalleryRound(GalleryDifficulty.For(GalleryKind.Cache, 2), 3);
@@ -118,38 +96,12 @@ namespace FriendlyPersonShooter.Core.Tests
             float t = 1f;
             foreach (int i in new[] { 4, 0, 3, 1 })
             {
-                Assert.That(ShootAt(g, i, t += 0.3f).Counted, Is.True);
+                Assert.That(ShootAt(g, i, t += 0.3f).Hit, Is.True);
                 Assert.That(g.Over, Is.False);
             }
             ShootAt(g, 2, t + 0.3f);
             Assert.That(g.Outcome, Is.EqualTo(GalleryOutcome.Won));
             Assert.That(g.HitCount, Is.EqualTo(5));
-        }
-
-        [Test]
-        public void SequenceDealsTargetsOneAtATime()
-        {
-            const int n = 5;
-            var spec = new GallerySpec(GalleryKind.None, GalleryRule.Sequence, n, 0f, 3f, false, 4f, 9f);
-            var g = new GalleryRound(spec, 8);
-            Assert.That(g.Visible(0, 0f) && !g.Visible(1, 0f), Is.True);
-
-            // Hit the first quickly: the second comes up at once.
-            Assert.That(ShootAt(g, 0, 1f).Counted, Is.True);
-            Assert.That(g.Next, Is.EqualTo(1));
-            Assert.That(g.Visible(1, 1f), Is.True);
-
-            // Let the second run out: missed, the third comes up.
-            var missed = new List<int>();
-            g.Step(1f + spec.PerTarget, missed);
-            Assert.That(missed, Is.EqualTo(new[] { 1 }));
-            Assert.That(g.Next, Is.EqualTo(2));
-
-            // Let the rest run out: the gallery ends.
-            g.Step(100f, missed);
-            Assert.That(missed, Is.EqualTo(new[] { 1, 2, 3, 4 }));
-            Assert.That(g.Over, Is.True);
-            Assert.That(g.HitCount, Is.EqualTo(1));
         }
 
         [Test]

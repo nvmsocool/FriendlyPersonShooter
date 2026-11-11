@@ -20,11 +20,12 @@ namespace FriendlyPersonShooter.Arena
     /// - Enemies spawn at the layer's spawn points (and blooms) in zones near players, and stay until killed. A
     ///   cleared spawn point refills 2 minutes later with a new random enemy, once no player is within 100 m
     ///   (see <see cref="SpawnSchedule"/>). Bloom groups and boss adds leave after their time, once nobody is near.
-    /// - Every player who hit an enemy gets its full essence drop, carried until they stand at the raid door
-    ///   or a gate, which bank it (not shrines; see <see cref="Banking"/>). A reset blocks banking for a minute.
-    /// - Standing at the gate with enough banked essence pays for access; walking through ends the expedition.
+    /// - Every player who hit an enemy gets its full essence drop as orbs to shoot, carried until banked by shooting the
+    ///   gate's empty slots (bots bank by walking up; see <see cref="Banking"/>). A reset blocks banking for a minute.
+    /// - Filling the gate's last slot opens it and starts the group's countdown down a layer (or, on the deepest
+    ///   layer, to the end of the run).
     /// - Bleeding out drops half the carried essence as a cache and respawns you at the nearest shrine (the rest stays carried).
-    ///   Anyone else who walks over the cache sends it back to its owner (and earns kudos).
+    ///   Anyone else who claims the cache sends it back to its owner (and earns kudos).
     /// </summary>
     public partial class ArenaServerSystem
     {
@@ -66,7 +67,7 @@ namespace FriendlyPersonShooter.Arena
             _blooms = new BloomSchedule(_map, layer.Blooms());
             _schedule = new SpawnSchedule(_map, _blooms, layer.Spawns());
             _ledger = new DropLedger(seed: (uint)System.Environment.TickCount);
-            _gate = new Gate(_map.Gates[0], NetTestSettings.WorldSeed, layer.Gate());
+            _gate = new Gate(_map.Gates[0], layer.Gate());
             _caches = new CacheRegistry();
             CreateSocial();
             CreateRaid();

@@ -100,16 +100,11 @@ namespace FriendlyPersonShooter.Core.Combat
             }
         }
 
-        /// <summary>Horizontal direction the plate faces.</summary>
-        public Vector3 Facing => FacingOf(Yaw);
-
         public static Vector3 FacingOf(float yaw)
         {
             float r = yaw * (float)Math.PI / 180f;
             return new Vector3((float)Math.Sin(r), 0f, (float)Math.Cos(r));
         }
-
-        public Vector3 PlateCenter(BulwarkSettings settings) => PlateCenterOf(Position, Yaw, settings);
 
         public static Vector3 PlateCenterOf(Vector3 position, float yaw, BulwarkSettings settings) =>
             position + FacingOf(yaw) * (settings.BodyRadius + settings.PlateOut);

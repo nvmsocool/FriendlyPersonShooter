@@ -161,14 +161,6 @@ namespace FriendlyPersonShooter.Core.World
         /// <summary>Zone steps between two zones (crossing edges), the short way around. Neighbours are 1 apart.</summary>
         public int Distance(ZoneCoord a, ZoneCoord b) => DistancesFrom(a)[IndexOf(b)];
 
-        /// <summary>The largest <see cref="Distance"/> from this zone to any other.</summary>
-        public int Farthest(ZoneCoord from)
-        {
-            int best = 0;
-            foreach (int d in DistancesFrom(from)) best = Math.Max(best, d);
-            return best;
-        }
-
         /// <summary>The zone and every zone within <paramref name="radius"/> steps of touching zones (edge or corner).</summary>
         public IReadOnlyCollection<ZoneCoord> Neighborhood(ZoneCoord center, int radius)
         {

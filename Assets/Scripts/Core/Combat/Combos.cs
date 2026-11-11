@@ -17,7 +17,7 @@ namespace FriendlyPersonShooter.Core.Combat
     /// The combos and which effects make them:
     /// - Plague: Wither + Tag on an enemy. Its Wither spreads to nearby enemies (see <see cref="Plague"/>).
     /// - Blitz: Haste + Might on a player. Their Empower bonus counts double (see <see cref="PlayerVitals.DamageBonus"/>).
-    /// - Overdrive: Haste + Frenzy on a player. Their shots use no ammo (see <see cref="PlayerVitals.NoReload"/>).
+    /// - Overdrive: Haste + Frenzy on a player. Their shots don't drain the payload capsule (see <see cref="PlayerVitals.NoReload"/>).
     /// - Deadeye: Might + Focus on a player. Their weak-point hits deal 3x (see <see cref="HitResolver.EnemyDamage(PlayerVitals, EnemyVitals, float, bool)"/>).
     /// - Bastion: Vigor (its shield) + Ward on a player. The Ward shield regenerates (see <see cref="PlayerVitals.Tick"/>).
     /// - Pinned: Slow + Mark on an enemy. It freezes for a moment when the combo forms (see <see cref="EnemyVitals.IsFrozen"/>).
@@ -67,9 +67,6 @@ namespace FriendlyPersonShooter.Core.Combat
         public ComboKind Discovered { get; private set; }
 
         public bool IsDiscovered(ComboKind kind) => (Discovered & kind) == kind;
-
-        /// <summary>Marks combos as known, for example when two lobbies merge (pass the other lobby's <see cref="Discovered"/>).</summary>
-        public void MarkDiscovered(ComboKind kinds) => Discovered |= kinds;
 
         /// <summary>Checks a player's buffs. Adds one event per combo that formed since the last check.</summary>
         public int Check(PlayerVitals player, List<ComboEvent> events)

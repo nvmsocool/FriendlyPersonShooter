@@ -26,18 +26,6 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Carry_GiftMustFitUnderTheirCap()
-        {
-            var a = new EssenceWallet(1, new EssenceAmounts(), EssenceWallet.CarryCap);
-            var b = new EssenceWallet(2, new EssenceAmounts(), EssenceWallet.CarryCap);
-            a.PickUp(EssenceColor.Blue, 6);
-            b.PickUp(EssenceColor.Blue, 4);
-            Assert.That(a.TryGift(b, EssenceColor.Blue, 4, GiftSource.CarriedOnly), Is.False);
-            Assert.That(a.TryGift(b, EssenceColor.Blue, 3, GiftSource.CarriedOnly), Is.True);
-            Assert.That(b.Carried(EssenceColor.Blue), Is.EqualTo(7));
-        }
-
-        [Test]
         public void Colors_MapToFamiliesBothWays()
         {
             Assert.That(EssenceColors.Of(EnemyFamily.Wisp), Is.EqualTo(EssenceColor.Yellow));
@@ -85,41 +73,6 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(w.Banked(EssenceColor.Yellow), Is.EqualTo(10));
             Assert.That(w.TrySpend(EssenceColor.Yellow, 11), Is.False);
             Assert.That(w.Banked(EssenceColor.Yellow), Is.EqualTo(10));
-        }
-
-        [Test]
-        public void Gift_CarriedFirstMovesPoolToPool()
-        {
-            var a = new EssenceWallet(1);
-            var b = new EssenceWallet(2);
-            a.PickUp(EssenceColor.Yellow, 10);
-            a.BankAll();
-            a.PickUp(EssenceColor.Yellow, 3);
-
-            Assert.That(a.TryGift(b, EssenceColor.Yellow, 5), Is.True);
-            Assert.That(a.Carried(EssenceColor.Yellow), Is.EqualTo(0));
-            Assert.That(a.Banked(EssenceColor.Yellow), Is.EqualTo(8));
-            Assert.That(b.Carried(EssenceColor.Yellow), Is.EqualTo(3), "carried arrives carried");
-            Assert.That(b.Banked(EssenceColor.Yellow), Is.EqualTo(2), "banked arrives banked");
-        }
-
-        [Test]
-        public void Gift_RespectsSourceAndIsAllOrNothing()
-        {
-            var a = new EssenceWallet(1);
-            var b = new EssenceWallet(2);
-            a.PickUp(EssenceColor.Yellow, 4);
-            a.BankAll();
-            a.PickUp(EssenceColor.Yellow, 2);
-
-            Assert.That(a.TryGift(b, EssenceColor.Yellow, 3, GiftSource.CarriedOnly), Is.False);
-            Assert.That(a.TryGift(b, EssenceColor.Yellow, 7), Is.False);
-            Assert.That(a.TryGift(a, EssenceColor.Yellow, 1), Is.False, "no gifting yourself");
-            Assert.That(a.Total(EssenceColor.Yellow), Is.EqualTo(6));
-
-            Assert.That(a.TryGift(b, EssenceColor.Yellow, 4, GiftSource.BankedOnly), Is.True);
-            Assert.That(a.Carried(EssenceColor.Yellow), Is.EqualTo(2));
-            Assert.That(b.Banked(EssenceColor.Yellow), Is.EqualTo(4));
         }
 
         [Test]

@@ -439,7 +439,7 @@ namespace FriendlyPersonShooter.Arena
                 }
             }
 
-            // A ring on the ground showing where to stand to pledge and go in.
+            // A ring on the ground around the door (bots pledge inside it).
             const int segments = 28;
             if (_doorRingGround == null || !_doorRingFor.Equals(door))
             {
@@ -654,8 +654,6 @@ namespace FriendlyPersonShooter.Arena
             foreach (var l in new[] { _bossColumn, _bossBodies, _bossTelegraph, _bossArmor, _bossSeams, _bossThrust, _platesShut, _platesWarn, _platesOpen }) l.Clear();
         }
 
-        private static readonly GateSettings GateLook = new GateSettings();
-
         private string ColossusHint()
         {
             if (!_colossusSeen) return "<color=#B8B0D8>dodge its bolts, jump its shockwave</color>";
@@ -758,6 +756,8 @@ namespace FriendlyPersonShooter.Arena
                     return $"{PlayerColors.Tag(m.PlayerNetworkId)} pledged {m.Value} to the raid key\n";
                 case AnnounceKind.GateUnlocked:
                     return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} filled the gate ({m.Value} {(EssenceColor)m.OtherNetworkId}) and it opened!</color>\n";
+                case AnnounceKind.CacheReturned:
+                    return $"{PlayerColors.Tag(m.OtherNetworkId)} sent {PlayerColors.Tag(m.PlayerNetworkId)}'s lost essence back ({m.Value})\n";
                 case AnnounceKind.ExpeditionComplete:
                     return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} went through the gate in {m.Value / 60}:{m.Value % 60:00}</color>\n";
                 case AnnounceKind.GateClosed:

@@ -46,8 +46,6 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Jump;
         /// <summary>1 while the fire button is held.</summary>
         public int Fire;
-        /// <summary>Bots only (players shoot instead): take the item at their feet, or start the raid at its door.</summary>
-        public InputEvent Interact;
         /// <summary>1 while aiming down the sights (right mouse).</summary>
         public int Zoom;
         /// <summary>1 while Shift is held.</summary>

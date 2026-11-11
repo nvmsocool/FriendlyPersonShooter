@@ -27,21 +27,18 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// A gate down one layer. Access is personal: each player pays the cost once from their banked
-    /// essence and can then pass for the rest of the seed. A group passes only when every member has
-    /// access (gifting a friend the shortfall is the natural fix). Going back up is always free.
-    /// Access is stored with the seed it was bought on, so it stops counting after a reseed.
-    /// An opening lasts <see cref="GateSettings.OpenSeconds"/>; then the gate shuts, everyone's
+    /// A gate down one layer. It's paid once from the party's shared bank (the server then grants every member
+    /// access), when the last of its slots is filled. Going back up is always free. An opening lasts <see cref="GateSettings.OpenSeconds"/>; then the gate shuts, everyone's
     /// access ends, and the next opening costs <see cref="GateSettings.CostStep"/> more.
     /// </summary>
     public sealed class Gate
     {
-        private readonly Dictionary<int, uint> _accessSeed = new Dictionary<int, uint>();
+        private readonly HashSet<int> _access = new HashSet<int>();
         private readonly int _baseCost, _costStep;
         private readonly double _openSeconds;
         private double? _closesAt;
 
-        public Gate(GateSite site, uint seed, GateSettings settings = null)
+        public Gate(GateSite site, GateSettings settings = null)
         {
             Site = site ?? throw new ArgumentNullException(nameof(site));
             settings = settings ?? new GateSettings();
@@ -50,7 +47,6 @@ namespace FriendlyPersonShooter.Core.Expedition
             _baseCost = settings.Cost;
             _costStep = settings.CostStep;
             _openSeconds = settings.OpenSeconds;
-            Seed = seed;
         }
 
         public GateSite Site { get; }
@@ -75,17 +71,11 @@ namespace FriendlyPersonShooter.Core.Expedition
         {
             if (!_closesAt.HasValue || now < _closesAt.Value) return false;
             _closesAt = null;
-            _accessSeed.Clear();
+            _access.Clear();
             TimesClosed++;
             return true;
         }
-        /// <summary>The world seed currently live. Access bought on any other seed doesn't count.</summary>
-        public uint Seed { get; private set; }
-
-        public bool HasAccess(int playerId) => _accessSeed.TryGetValue(playerId, out uint s) && s == Seed;
-
-        /// <summary>The seed a player bought access on, if they ever did.</summary>
-        public bool TryGetAccessSeed(int playerId, out uint seed) => _accessSeed.TryGetValue(playerId, out seed);
+        public bool HasAccess(int playerId) => _access.Contains(playerId);
 
         /// <summary>How much more banked essence the player needs (0 if they can pay or already have access).</summary>
         public int Shortfall(EssenceWallet wallet)
@@ -104,46 +94,12 @@ namespace FriendlyPersonShooter.Core.Expedition
             if (wallet == null) throw new ArgumentNullException(nameof(wallet));
             if (HasAccess(wallet.PlayerId)) return GateUnlockOutcome.AlreadyOpen;
             if (!wallet.TrySpend(Color, Cost)) return GateUnlockOutcome.NotEnough;
-            _accessSeed[wallet.PlayerId] = Seed;
+            _access.Add(wallet.PlayerId);
             if (!_closesAt.HasValue) _closesAt = now + _openSeconds;
             return GateUnlockOutcome.Unlocked;
         }
 
         /// <summary>Gives a player access without paying (a party member already paid with the shared bank).</summary>
-        public void GrantAccess(int playerId) => _accessSeed[playerId] = Seed;
-
-        /// <summary>True when every member has access. An empty group can't pass.</summary>
-        public bool CanGroupPass(IEnumerable<int> members)
-        {
-            if (members == null) throw new ArgumentNullException(nameof(members));
-            bool any = false;
-            foreach (int id in members)
-            {
-                any = true;
-                if (!HasAccess(id)) return false;
-            }
-            return any;
-        }
-
-        /// <summary>Members still without access, in the order given.</summary>
-        public IReadOnlyList<int> MissingAccess(IEnumerable<int> members)
-        {
-            if (members == null) throw new ArgumentNullException(nameof(members));
-            var missing = new List<int>();
-            foreach (int id in members)
-            {
-                if (!HasAccess(id)) missing.Add(id);
-            }
-            return missing;
-        }
-
-        /// <summary>Going back up a layer is always free, with or without access.</summary>
-        public bool CanGoUp(int playerId) => true;
-
-        /// <summary>The world moved to a new seed: everyone's access from the old one stops counting.</summary>
-        public void Reseed(uint newSeed)
-        {
-            Seed = newSeed;
-        }
+        public void GrantAccess(int playerId) => _access.Add(playerId);
     }
 }

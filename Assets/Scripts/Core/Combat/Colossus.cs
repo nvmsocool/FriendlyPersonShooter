@@ -98,8 +98,6 @@ namespace FriendlyPersonShooter.Core.Combat
 
         public float DamageMultiplier(ColossusSettings s) => Exposed ? 1f : s.ArmorMultiplier;
 
-        public Vector3 CoreCenter(ColossusSettings s) => CoreCenterOf(Position, s);
-
         public static Vector3 CoreCenterOf(Vector3 position, ColossusSettings s) => position + new Vector3(0f, s.BodyRadius * 0.85f, 0f);
 
         /// <summary>

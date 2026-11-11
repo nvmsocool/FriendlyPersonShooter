@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Numerics;
 using FriendlyPersonShooter.Core.Combat;
 
@@ -26,10 +25,6 @@ namespace FriendlyPersonShooter.Core.Gallery
     {
         /// <summary>Hit any one target; which one is the choice (cards).</summary>
         Choose = 0,
-        /// <summary>Hit every target in order (they're numbered); a wrong one does nothing.</summary>
-        Ordered = 1,
-        /// <summary>Targets come one at a time, each with its own short window; every hit and miss counts.</summary>
-        Sequence = 2,
         /// <summary>Hit every target, in any order.</summary>
         All = 3,
     }
@@ -47,10 +42,8 @@ namespace FriendlyPersonShooter.Core.Gallery
         public readonly GalleryKind Kind;
         public readonly GalleryRule Rule;
         public readonly int Targets;
-        /// <summary>Seconds for the whole gallery (Choose and Ordered); 0 = no limit.</summary>
+        /// <summary>Seconds for the whole gallery; 0 = no limit.</summary>
         public readonly float Seconds;
-        /// <summary>Seconds each target of a <see cref="GalleryRule.Sequence"/> stays up.</summary>
-        public readonly float PerTarget;
         /// <summary>A missed shot ends the gallery (lost).</summary>
         public readonly bool OneShot;
         /// <summary>Target radius in degrees (angular, as seen from the eye).</summary>
@@ -58,20 +51,16 @@ namespace FriendlyPersonShooter.Core.Gallery
         /// <summary>How fast targets move, degrees per second (at their fastest).</summary>
         public readonly float Speed;
 
-        public GallerySpec(GalleryKind kind, GalleryRule rule, int targets, float seconds, float perTarget, bool oneShot, float radius, float speed)
+        public GallerySpec(GalleryKind kind, GalleryRule rule, int targets, float seconds, bool oneShot, float radius, float speed)
         {
             Kind = kind;
             Rule = rule;
             Targets = targets;
             Seconds = seconds;
-            PerTarget = perTarget;
             OneShot = oneShot;
             Radius = radius;
             Speed = speed;
         }
-
-        /// <summary>Total time the gallery can run (0 = no limit).</summary>
-        public float Duration => Rule == GalleryRule.Sequence ? PerTarget * Targets : Seconds;
     }
 
     /// <summary>What one gallery shot did.</summary>
@@ -79,13 +68,10 @@ namespace FriendlyPersonShooter.Core.Gallery
     {
         /// <summary>The target hit, or -1.</summary>
         public readonly int Target;
-        /// <summary>The hit counted (a wrong target of an Ordered gallery doesn't).</summary>
-        public readonly bool Counted;
 
-        public GalleryShot(int target, bool counted)
+        public GalleryShot(int target)
         {
             Target = target;
-            Counted = counted;
         }
 
         public bool Hit => Target >= 0;
@@ -115,10 +101,6 @@ namespace FriendlyPersonShooter.Core.Gallery
         public int HitCount { get; private set; }
         /// <summary>Number of targets.</summary>
         public int Count => _base.Length;
-        /// <summary>Ordered: the next target to hit. Sequence: the target that's up.</summary>
-        public int Next { get; private set; }
-        /// <summary>Sequence: when the current target came up (seconds since the start).</summary>
-        public float NextSince { get; private set; }
         /// <summary>When the gallery ended (seconds since the start), once it has.</summary>
         public float EndedAt { get; private set; }
 
@@ -152,10 +134,9 @@ namespace FriendlyPersonShooter.Core.Gallery
                 case GalleryRule.Choose when n > 1:
                     // Cards in a row, spread across the view.
                     return new Vector2((i - (n - 1) * 0.5f) * 22f, random.Range(-5f, 5f));
-                case GalleryRule.Ordered:
                 case GalleryRule.All:
                 {
-                    // Around a ring, so the order has to be found.
+                    // Around a ring.
                     float a = random.Angle();
                     float r = random.Range(9f, 15f);
                     return new Vector2(MathF.Cos(a) * r * 1.4f, MathF.Sin(a) * r * 0.8f);
@@ -170,12 +151,9 @@ namespace FriendlyPersonShooter.Core.Gallery
         /// <summary>Seconds left (no limit = infinity), at <paramref name="t"/> seconds since the start.</summary>
         public float TimeLeft(float t)
         {
-            float d = Spec.Duration;
+            float d = Spec.Seconds;
             return d <= 0f ? float.PositiveInfinity : Math.Max(0f, d - t);
         }
-
-        /// <summary>Sequence: seconds the current target has left.</summary>
-        public float TargetTimeLeft(float t) => Math.Max(0f, Spec.PerTarget - (t - NextSince));
 
         /// <summary>Where target <paramref name="i"/> is at <paramref name="t"/> (offset from the opening aim, degrees).</summary>
         public Vector2 Offset(int i, float t)
@@ -191,31 +169,13 @@ namespace FriendlyPersonShooter.Core.Gallery
         public bool Visible(int i, float t)
         {
             if (Over || i < 0 || i >= _base.Length) return false;
-            switch (Spec.Rule)
-            {
-                case GalleryRule.Ordered:
-                case GalleryRule.All: return (Hits & (1 << i)) == 0;
-                case GalleryRule.Sequence: return i == Next && t >= NextSince;
-                default: return true;
-            }
+            return Spec.Rule != GalleryRule.All || (Hits & (1 << i)) == 0;
         }
 
-        /// <summary>
-        /// Runs the clock to <paramref name="t"/>: the time limit, and Sequence targets running out (each one missed is
-        /// added to <paramref name="missed"/>).
-        /// </summary>
-        public void Step(float t, List<int> missed = null)
+        /// <summary>Runs the clock to <paramref name="t"/>: a gallery past its time limit is lost.</summary>
+        public void Step(float t)
         {
             if (Over) return;
-            if (Spec.Rule == GalleryRule.Sequence)
-            {
-                while (!Over && t - NextSince >= Spec.PerTarget)
-                {
-                    missed?.Add(Next);
-                    Advance(NextSince + Spec.PerTarget);
-                }
-                return;
-            }
             if (Spec.Seconds > 0f && t >= Spec.Seconds) End(GalleryOutcome.Lost, Spec.Seconds);
         }
 
@@ -226,7 +186,7 @@ namespace FriendlyPersonShooter.Core.Gallery
         /// </summary>
         public GalleryShot Shoot(float yaw, float pitch, float aimPitch, float t)
         {
-            if (Over) return new GalleryShot(-1, false);
+            if (Over) return new GalleryShot(-1);
             int best = -1;
             float bestD = float.MaxValue;
             float squeeze = MathF.Cos(aimPitch * MathF.PI / 180f);
@@ -243,30 +203,19 @@ namespace FriendlyPersonShooter.Core.Gallery
             if (best < 0)
             {
                 if (Spec.OneShot) End(GalleryOutcome.Lost, t);
-                return new GalleryShot(-1, false);
+                return new GalleryShot(-1);
             }
-            switch (Spec.Rule)
+            Mark(best);
+            if (Spec.Rule == GalleryRule.All)
             {
-                case GalleryRule.Ordered:
-                    if (best != Next) return new GalleryShot(best, false);
-                    Mark(best);
-                    Next++;
-                    if (Next >= _base.Length) End(GalleryOutcome.Won, t);
-                    return new GalleryShot(best, true);
-                case GalleryRule.All:
-                    Mark(best);
-                    if (Hits == (1 << _base.Length) - 1) End(GalleryOutcome.Won, t);
-                    return new GalleryShot(best, true);
-                case GalleryRule.Sequence:
-                    Mark(best);
-                    Advance(t);
-                    return new GalleryShot(best, true);
-                default:
-                    Mark(best);
-                    Chosen = best;
-                    End(GalleryOutcome.Won, t);
-                    return new GalleryShot(best, true);
+                if (Hits == (1 << _base.Length) - 1) End(GalleryOutcome.Won, t);
             }
+            else
+            {
+                Chosen = best;
+                End(GalleryOutcome.Won, t);
+            }
+            return new GalleryShot(best);
         }
 
         /// <summary>Ends it early (walked away, a raid started): lost.</summary>
@@ -285,23 +234,13 @@ namespace FriendlyPersonShooter.Core.Gallery
         /// Sets the progress the host reported, so a player's screen draws the right targets (it only works out
         /// where they are).
         /// </summary>
-        public void Restore(int hits, int hitCount, int next, float nextSince, GalleryOutcome outcome, int chosen, float endedAt)
+        public void Restore(int hits, int hitCount, GalleryOutcome outcome, int chosen, float endedAt)
         {
             Hits = hits;
             HitCount = hitCount;
-            Next = next;
-            NextSince = nextSince;
             Outcome = outcome;
             Chosen = chosen;
             EndedAt = endedAt;
-        }
-
-        private void Advance(float since)
-        {
-            Next++;
-            NextSince = since;
-            // A sequence is won by getting through it (the hits and misses are what count).
-            if (Next >= _base.Length) End(GalleryOutcome.Won, since);
         }
 
         private void End(GalleryOutcome outcome, float t)

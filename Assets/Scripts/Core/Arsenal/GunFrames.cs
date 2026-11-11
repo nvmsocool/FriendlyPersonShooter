@@ -75,9 +75,6 @@ namespace FriendlyPersonShooter.Core.Arsenal
         public float SplashRadius { get; set; }
         /// <summary>Splash damage at the centre, as a share of <see cref="Damage"/>; it falls to half at the edge.</summary>
         public float SplashShare { get; set; }
-
-        /// <summary>Burst damage per second while the trigger is held (ignores reloads, falloff and beam build-up).</summary>
-        public float Dps => Damage * BurstCount / Interval;
     }
 
     public static class GunFrames

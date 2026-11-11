@@ -64,15 +64,14 @@ namespace FriendlyPersonShooter.Arena
     }
 
     /// <summary>
-    /// A player's gun (packed Core.Arsenal.Gun; GunB stays empty, one gun only) and its payload capsule.
+    /// A player's gun (a packed Core.Arsenal.Gun) and its payload capsule.
     /// <see cref="Payload"/> is the payload of the gun in hand (None when its payload slot is empty).
     /// </summary>
     public struct ArenaLoadout : IComponentData
     {
         [GhostField] public PayloadKind Payload;
-        [GhostField] public ulong GunA;
-        [GhostField] public ulong GunB;
-        [GhostField] public byte Active;
+        /// <summary>The gun in hand, packed (<see cref="Core.Arsenal.Gun.Unpack"/>).</summary>
+        [GhostField] public ulong Gun;
         /// <summary>Payload charge left in the capsule.</summary>
         [GhostField] public int Charge;
         /// <summary>A Core.Arsenal.CapsuleState: on the gun, flying, or regrowing.</summary>
@@ -111,27 +110,21 @@ namespace FriendlyPersonShooter.Arena
         [GhostField] public byte Layer;
         /// <summary>A Core.Gallery.GalleryOutcome.</summary>
         [GhostField] public byte Outcome;
-        [GhostField] public short Targets;
         [GhostField] public short Chosen;
         [GhostField] public uint Seed;
         /// <summary>Item cards: the seed for their target colours (<see cref="Core.Gallery.GalleryRound.ColorOrder"/>).</summary>
         [GhostField] public uint ColorSeed;
         [GhostField] public int StartTick;
         [GhostField] public int EndTick;
-        /// <summary>Sequence: the tick the current target came up.</summary>
-        [GhostField] public int NextTick;
         /// <summary>The aim when it opened (degrees); targets sit at offsets from it.</summary>
         [GhostField(Quantization = 100)] public float Yaw0;
         [GhostField(Quantization = 100)] public float Pitch0;
         [GhostField] public int Hits;
         [GhostField] public short HitCount;
-        [GhostField] public short Next;
         /// <summary>Item cards (packed loot items, 0 = none).</summary>
         [GhostField] public ulong Choice0;
         [GhostField] public ulong Choice1;
         [GhostField] public ulong Choice2;
-        /// <summary>Box galleries: the box; essence galleries: the essence colour.</summary>
-        [GhostField] public int Subject;
 
         /// <summary>The player's boss reward chest, waiting to be shot (one at a time).</summary>
         [GhostField] public byte ChestOut;
@@ -274,13 +267,13 @@ namespace FriendlyPersonShooter.Arena
         ChainCashed = 4,
         /// <summary>Expedition: a player paid the gate. Value = essence paid.</summary>
         GateUnlocked = 5,
-        /// <summary>Expedition: a player walked through the gate. Value = seconds taken.</summary>
+        /// <summary>Expedition: a player's run is complete (the last gate). Value = seconds taken.</summary>
         ExpeditionComplete = 6,
         /// <summary>Expedition: Other returned Player's cache. Value = essence returned.</summary>
         CacheReturned = 7,
         /// <summary>Player reached a new level. Value = the level.</summary>
         LevelUp = 8,
-        /// <summary>Raid: the key is full. Value = seconds until whoever stands at the door goes in.</summary>
+        /// <summary>Raid: the key is full. Value = seconds until everyone goes in.</summary>
         RaidGathering = 9,
         /// <summary>Raid: a group went in. Value = how many.</summary>
         RaidStarted = 10,

@@ -36,7 +36,7 @@ namespace FriendlyPersonShooter.Arena
             position = default;
             radius = 0f;
             if (s.Loadout == null) return false;
-            var st = s.Guns[s.Loadout.Active];
+            var st = s.Gun;
             if (st.Capsule != CapsuleState.Flying) return false;
             float t = (float)(time - st.CapsuleAt);
             if (!CapsuleFlight.Catchable(t)) return false;
@@ -48,8 +48,7 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>The capsule was shot: back on the gun, full.</summary>
         private void CatchCapsule(PlayerState s, EntityCommandBuffer ecb)
         {
-            int slot = s.Loadout.Active;
-            if (!FireControl.Catch(ref s.Guns[slot], s.Stats[slot])) return;
+            if (!FireControl.Catch(ref s.Gun, s.Stats)) return;
             _capsulesCaught++;
             SendCapsule(s.Vitals.Id, s, s.Loadout.InHand.Payload, true, ecb);
         }
@@ -62,10 +61,9 @@ namespace FriendlyPersonShooter.Arena
             CatchCapsule(owner, ecb);
             _friendCapsules++;
             if (shooter.Loadout == null) return;
-            int slot = shooter.Loadout.Active;
             // The shooter's own capsule may be in the air too: it snaps back like a catch.
-            if (shooter.Guns[slot].Capsule == CapsuleState.Flying) CatchCapsule(shooter, ecb);
-            else FireControl.Refill(ref shooter.Guns[slot], shooter.Stats[slot]);
+            if (shooter.Gun.Capsule == CapsuleState.Flying) CatchCapsule(shooter, ecb);
+            else FireControl.Refill(ref shooter.Gun, shooter.Stats);
         }
 
         private void StepBotCapsule(PlayerState s, EntityCommandBuffer ecb)

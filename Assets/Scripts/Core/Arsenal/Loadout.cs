@@ -45,8 +45,6 @@ namespace FriendlyPersonShooter.Core.Arsenal
     public struct EquipResult
     {
         public bool Equipped;
-        /// <summary>Gun slot the item went to (0 or 1).</summary>
-        public int GunSlot;
         public LootItem Dropped;
         /// <summary>A second drop: the extra payload when Split is replaced.</summary>
         public LootItem Dropped2;
@@ -55,37 +53,21 @@ namespace FriendlyPersonShooter.Core.Arsenal
     }
 
     /// <summary>
-    /// A player's gun. One gun only (the second slot stays empty; it's kept so saved and synced loadouts still
-    /// unpack). No inventory: a picked-up gun replaces the gun in hand; a picked-up mod goes on the gun in hand (an empty slot, else in place of the
-    /// same kind of mod, else the weakest). Whatever is replaced is handed back to drop on the ground.
+    /// A player's gun: one gun only, no inventory. A picked-up gun replaces the gun in hand; a picked-up mod goes on
+    /// the gun in hand (an empty slot, else in place of the same kind of mod, else the weakest). Whatever is replaced
+    /// is handed back to drop on the ground.
     /// </summary>
     public sealed class Loadout
     {
-        public Gun GunA;
-        public Gun GunB;
-        /// <summary>0 = GunA in hand, 1 = GunB.</summary>
-        public int Active;
+        /// <summary>The gun in hand (empty before the starting pick).</summary>
+        public Gun InHand;
 
         public Loadout() { }
 
-        public Loadout(Gun a, Gun b = default, int active = 0)
+        public Loadout(Gun gun)
         {
-            GunA = a;
-            GunB = b;
-            Active = active;
+            InHand = gun;
         }
-
-        public Loadout Clone() => new Loadout(GunA, GunB, Active);
-
-        public Gun Get(int slot) => slot == 0 ? GunA : GunB;
-
-        public void Set(int slot, Gun gun)
-        {
-            if (slot == 0) GunA = gun;
-            else GunB = gun;
-        }
-
-        public Gun InHand => Get(Active);
 
         public EquipResult Equip(LootItem item) => item.IsGun ? EquipGun(item.Gun) : EquipMod(item.Mod);
 
@@ -98,19 +80,15 @@ namespace FriendlyPersonShooter.Core.Arsenal
                 return r;
             }
             // One gun: a new one always replaces the gun in hand.
-            int slot = Active;
-            var old = Get(slot);
-            if (!old.IsEmpty) r.Dropped = LootItem.Of(old);
-            Set(slot, gun);
-            Active = slot;
+            if (!InHand.IsEmpty) r.Dropped = LootItem.Of(InHand);
+            InHand = gun;
             r.Equipped = true;
-            r.GunSlot = slot;
             return r;
         }
 
         public EquipResult EquipMod(Mod mod)
         {
-            var r = new EquipResult { GunSlot = Active };
+            var r = new EquipResult();
             var gun = InHand;
             if (mod.IsEmpty)
             {
@@ -146,7 +124,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
                     gun = gun.WithPayload(1, default);
                 }
             }
-            Set(Active, gun);
+            InHand = gun;
             r.Equipped = true;
             return r;
         }
@@ -172,8 +150,5 @@ namespace FriendlyPersonShooter.Core.Arsenal
 
         /// <summary>How much a mod is worth keeping: tier first; special mods count as one tier higher.</summary>
         private static int Weight(Mod m) => (int)m.Tier * 2 + (m.IsSpecial ? 2 : 0);
-
-        public (ulong A, ulong B, byte Active) Pack() => (GunA.Pack(), GunB.Pack(), (byte)Active);
-        public static Loadout Unpack(ulong a, ulong b, byte active) => new Loadout(Gun.Unpack(a), Gun.Unpack(b), active & 1);
     }
 }

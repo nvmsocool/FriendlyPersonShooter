@@ -171,24 +171,5 @@ namespace FriendlyPersonShooter.Arena
             if (elite == EliteKind.Guarded) SpawnSwarm(home + new Vector3(0f, 2.5f, 0f), tier);
         }
 
-        private HitTarget SentinelTarget(EnemyState s, HistorySample past, float grow)
-        {
-            var k = SentinelOf(s);
-            var t = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, k.BodyRadius * grow,
-                SentinelBehavior.EyeCenterOf(past.Position, s.Sentinel.Yaw, k), k.EyeRadius * grow);
-            t.WeakPointOnSurface = true;
-            return t;
-        }
-
-        private HitTarget DiverTarget(EnemyState s, HistorySample past, float grow)
-        {
-            var d = DiverOf(s);
-            var b = s.Diver;
-            b.Position = past.Position;
-            var t = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, d.BodyRadius * grow, b.Wing(1, d), d.WingRadius * grow);
-            t.HasSecondWeakPoint = true;
-            t.SecondWeakPointCenter = b.Wing(-1, d);
-            return t;
-        }
     }
 }

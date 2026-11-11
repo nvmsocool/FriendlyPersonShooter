@@ -97,7 +97,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(b.Banked(EssenceColor.Yellow), Is.EqualTo(30), "b sees what a banked");
             Assert.That(b.Carried(EssenceColor.Yellow), Is.EqualTo(15), "carried stays personal");
             b.BankAll();
-            var gate = new Gate(new GateSite(1, default), 1u);
+            var gate = new Gate(new GateSite(1, default));
             Assert.That(gate.Shortfall(a), Is.EqualTo(0));
             Assert.That(gate.Unlock(a), Is.EqualTo(GateUnlockOutcome.Unlocked));
             Assert.That(b.Banked(EssenceColor.Yellow), Is.EqualTo(5), "the gate took 40 from the shared pool");

@@ -85,13 +85,13 @@ namespace FriendlyPersonShooter.Arena
 
         /// <summary>Opens a gallery for this player (any open one is replaced).</summary>
         private void OpenGallery(PlayerState s, GalleryKind kind, float yaw, float pitch, bool aimPending, LootItem[] items = null,
-            uint colorSeed = 0, int subject = -1, int targets = 0)
+            uint colorSeed = 0, int subject = -1)
         {
             int layer = GalleryLayer();
             var g = s.Gallery;
             g.Kind = kind;
             g.Layer = layer;
-            g.Round = new GalleryRound(GalleryDifficulty.For(kind, layer, targets), NextSeed() | 1u);
+            g.Round = new GalleryRound(GalleryDifficulty.For(kind, layer), NextSeed() | 1u);
             g.Serial = ++s.GallerySerial;
             g.Yaw0 = yaw;
             g.Pitch0 = math.clamp(pitch, -GalleryPitchLimit, GalleryPitchLimit);
@@ -176,19 +176,15 @@ namespace FriendlyPersonShooter.Arena
                 ghost.Serial = g.Serial;
                 ghost.Layer = (byte)g.Layer;
                 ghost.Outcome = (byte)r.Outcome;
-                ghost.Targets = (short)r.Count;
                 ghost.Chosen = (short)r.Chosen;
                 ghost.Seed = r.Seed;
                 ghost.ColorSeed = g.ColorSeed;
                 ghost.StartTick = g.StartTick;
                 ghost.EndTick = g.EndTick;
-                ghost.NextTick = g.StartTick + (int)math.round(r.NextSince * GalleryClock.TicksPerSecond);
                 ghost.Yaw0 = g.Yaw0;
                 ghost.Pitch0 = g.Pitch0;
                 ghost.Hits = r.Hits;
                 ghost.HitCount = (short)r.HitCount;
-                ghost.Next = (short)r.Next;
-                ghost.Subject = g.Subject;
                 if (g.Items != null)
                 {
                     ghost.Choice0 = g.Items.Length > 0 ? g.Items[0].Pack() : 0;
@@ -325,7 +321,7 @@ namespace FriendlyPersonShooter.Arena
             return best;
         }
 
-        /// <summary>Caches, the bank crystal's orbs, the gate, the up-portal and the raid door.</summary>
+        /// <summary>Caches, the gate and its essence slots, the up-portal, and the raid door and its key slots.</summary>
         private void ExpeditionObjectsOnShot(PlayerState s, float3 eye, float3 dir, ref ShotObject best)
         {
             int id = s.Vitals.Id;

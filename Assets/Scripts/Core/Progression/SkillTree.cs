@@ -120,7 +120,7 @@ namespace FriendlyPersonShooter.Core.Progression
 
         /// <summary>A buff or heal that landed on an ally.</summary>
         public const int AllyBuff = 2;
-        /// <summary>Per essence banked (at the raid door or a gate).</summary>
+        /// <summary>Per essence banked.</summary>
         public const int PerEssenceBanked = 2;
         public const int Revive = 25;
     }
@@ -190,7 +190,6 @@ namespace FriendlyPersonShooter.Core.Progression
         }
 
         public float FireRateMultiplier => FireRateFor(PackedRanks);
-        public float RangeMultiplier => RangeFor(PackedRanks);
         public float RegenPerSecond => Rank(SkillId.SecondWind) * SkillTree.RegenPerRank;
 
         public static float FireRateFor(int packed) => 1f + RankIn(packed, SkillId.RapidFire) * SkillTree.FireRatePerRank;

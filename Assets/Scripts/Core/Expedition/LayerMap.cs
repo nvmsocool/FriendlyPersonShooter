@@ -68,9 +68,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         /// <summary>The shrine closest to a world position.</summary>
         public Shrine NearestShrine(Vector2 world) => Nearest(Shrines, world, s => s.Point.World);
 
-        /// <summary>The gate closest to a world position, or null if the layer has none.</summary>
-        public GateSite NearestGate(Vector2 world) => Nearest(Gates, world, g => g.Point.World);
-
         /// <summary>The closest spawn point of a family, or null if no zone spawns it.</summary>
         public SpawnPoint NearestSpawnPoint(Vector2 world, EnemyFamily family)
         {

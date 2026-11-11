@@ -187,9 +187,6 @@ namespace FriendlyPersonShooter.Arena
             Physics.SyncTransforms();
         }
 
-        /// <summary>The boss arena's fallen tiles (0 when the floor is whole).</summary>
-        public static ulong BossFloorFallen => _fallen;
-
         /// <summary>The layout seed a room's colliders were last built with (0 for the plain layout).</summary>
         public static uint SeedOf(RaidRoomKind kind) => _rooms.TryGetValue(kind, out var built) ? built.Seed : 0u;
 

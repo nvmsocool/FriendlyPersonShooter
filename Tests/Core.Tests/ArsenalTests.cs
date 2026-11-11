@@ -38,17 +38,6 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(m2.Mod.Tier, Is.EqualTo(ModTier.Epic));
         }
 
-        [Test]
-        public void Loadout_PacksAndUnpacks()
-        {
-            var l = new Loadout(new Gun(FrameKind.Smg), new Gun(FrameKind.Beam, payload0: M(ModKind.Vigor)), 1);
-            var (a, b, active) = l.Pack();
-            var l2 = Loadout.Unpack(a, b, active);
-            Assert.That(l2.GunA, Is.EqualTo(l.GunA));
-            Assert.That(l2.GunB, Is.EqualTo(l.GunB));
-            Assert.That(l2.Active, Is.EqualTo(1));
-        }
-
         // ---- Stats ----
 
         [Test]
@@ -147,10 +136,8 @@ namespace FriendlyPersonShooter.Core.Tests
         {
             var l = new Loadout(new Gun(FrameKind.Pistol));
             var r1 = l.Equip(LootItem.Of(new Gun(FrameKind.Smg)));
-            Assert.That(r1.GunSlot, Is.EqualTo(0));
             Assert.That(r1.Dropped.Gun.Frame, Is.EqualTo(FrameKind.Pistol));
             Assert.That(l.InHand.Frame, Is.EqualTo(FrameKind.Smg));
-            Assert.That(l.GunB.IsEmpty, Is.True);
 
             var empty = new Loadout();
             var r2 = empty.Equip(LootItem.Of(new Gun(FrameKind.Launcher)));
@@ -420,20 +407,6 @@ namespace FriendlyPersonShooter.Core.Tests
             }
             Assert.That(guns / (float)n, Is.InRange(0.25f, 0.35f));
             Assert.That(common / (float)(n - guns), Is.InRange(0.58f, 0.72f));
-        }
-
-        [Test]
-        public void Loot_StartingGunHasAPayloadAndNoStatMods()
-        {
-            var frames = new System.Collections.Generic.HashSet<FrameKind>();
-            for (uint seed = 1; seed < 200; seed++)
-            {
-                var g = LootRolls.StartingGun(seed);
-                frames.Add(g.Frame);
-                Assert.That(g.Payload, Is.Not.EqualTo(PayloadKind.None));
-                Assert.That(g.Mod0.IsEmpty && g.Mod1.IsEmpty && g.Mod2.IsEmpty, Is.True);
-            }
-            Assert.That(frames.Count, Is.EqualTo(GunFrames.All.Length));
         }
 
         [Test]

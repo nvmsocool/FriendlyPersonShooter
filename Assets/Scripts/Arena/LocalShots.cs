@@ -48,7 +48,7 @@ namespace FriendlyPersonShooter.Arena
             input.ShotTick = 0;
             if (!em.HasComponent<ArenaLoadout>(local)) return;
             var loadout = em.GetComponentData<ArenaLoadout>(local);
-            ulong packed = loadout.Active == 0 ? loadout.GunA : loadout.GunB;
+            ulong packed = loadout.Gun;
             var gun = Gun.Unpack(packed);
             if (gun.IsEmpty) return;
             if (packed != _statsFor)

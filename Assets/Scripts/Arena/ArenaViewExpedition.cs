@@ -195,10 +195,6 @@ namespace FriendlyPersonShooter.Arena
 
 
         /// <summary>
-        /// The gate shows the essence it needs: runes of its colour up both posts (front and back), faint until the
-        /// party bank holds enough to light them, and a gem of that colour on the lintel. All lit once it's open.
-        /// </summary>
-        /// <summary>
         /// A stone tablet over the gate with one slot per essence the gate costs, in the gate's color (see
         /// <see cref="EssenceSlots"/>). Shooting an empty one banks a carried essence and lights it; all are lit once it's open.
         /// </summary>

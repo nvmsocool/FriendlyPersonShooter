@@ -11,9 +11,9 @@ using Vector3 = System.Numerics.Vector3;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The first raid (MVP step 6) on the server. Players standing at the raid door pledge Blue, Purple and Green
-    /// toward its key (carried first, then the party bank), strangers into the same key. With a full key,
-    /// anyone shoots the door to start a countdown; whoever stands at the door when it ends goes up together for a run (see
+    /// The raid on the server. Players fill the raid door's key with Blue, Purple and Green by shooting its empty
+    /// slots (carried first, then the party bank; bots pledge by standing at it), anyone into the same key. A full
+    /// key starts a countdown, and when it ends every player on the layer goes up together for a run (see
     /// <see cref="RaidRun"/> and ArenaServerRaidRooms): three random rooms, then a Bulwark scaled to the
     /// group on the raid arena (<see cref="RaidArena"/>). Beating it blows the boss apart and pays everyone
     /// inside a level's worth of XP and an item (raids never pay essence); they can stay up there, and each goes home

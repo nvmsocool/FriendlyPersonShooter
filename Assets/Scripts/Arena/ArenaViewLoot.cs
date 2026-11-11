@@ -15,11 +15,12 @@ namespace FriendlyPersonShooter.Arena
     /// <summary>
     /// The loot half of the arena view: loot boxes (glowing until you've opened them), guns and mods
     /// on the ground (glowing in their tier's colour, with a light pillar to find them), launcher
-    /// shells and bursts, the E prompt, and the gun panel's text.
+    /// shells and bursts, the ground-item prompt, and the gun panel's text.
     /// </summary>
     public partial class ArenaView
     {
-        private const float InteractRange = 2.5f;
+        /// <summary>A ground item's prompt shows within this distance of your feet.</summary>
+        private const float ItemPromptRange = 2.5f;
         private const float BoxDrawDistance = 160f;
         private const float BlastSeconds = 0.3f;
 
@@ -41,11 +42,10 @@ namespace FriendlyPersonShooter.Arena
             new List<(Vector3, Vector3, PayloadKind, float, bool)>();
         private readonly Dictionary<PayloadKind, List<Matrix4x4>> _blastLists = new Dictionary<PayloadKind, List<Matrix4x4>>();
 
-        /// <summary>The gun in hand's zoom, its stats, and what E would do (for the HUD).</summary>
+        /// <summary>The gun in hand's zoom, its stats, and the ground-item prompt (for the HUD).</summary>
         private float _localZoom = 1f;
         private GunStats _localStats;
         private ulong _localKey = ulong.MaxValue;
-        private int _localActive = -1;
         private string _prompt;
 
         private void CreateLootMaterials()
@@ -59,15 +59,14 @@ namespace FriendlyPersonShooter.Arena
 
         // ---------- The gun in hand ----------
 
-        private static Gun InHand(ArenaLoadout lo) => Gun.Unpack(lo.Active == 0 ? lo.GunA : lo.GunB);
+        private static Gun InHand(ArenaLoadout lo) => Gun.Unpack(lo.Gun);
 
         /// <summary>Stats of the gun in hand, rebuilt when it changes.</summary>
         private GunStats LocalGunStats(ArenaLoadout lo, float now)
         {
-            ulong key = lo.Active == 0 ? lo.GunA : lo.GunB;
-            if (key == _localKey && lo.Active == _localActive) return _localStats;
+            ulong key = lo.Gun;
+            if (key == _localKey) return _localStats;
             _localKey = key;
-            _localActive = lo.Active;
             _localStats = GunStats.For(Gun.Unpack(key));
             return _localStats;
         }
@@ -193,7 +192,6 @@ namespace FriendlyPersonShooter.Arena
             float now = Time.time;
 
             // Loot boxes: the same spots the server uses, from the layer seed.
-            int nearBox = -1;
             if (_wrap)
             {
                 var map = ExpeditionWorld.Map;
@@ -205,7 +203,6 @@ namespace FriendlyPersonShooter.Arena
                     for (int i = 0; i < _boxY.Length; i++) _boxY[i] = float.NaN;
                 }
                 _lootA.Clear(); _lootB.Clear(); _lootC.Clear();
-                float best = InteractRange * InteractRange;
                 for (int i = 0; i < _boxes.Count; i++)
                 {
                     var b = _boxes[i];
@@ -225,12 +222,6 @@ namespace FriendlyPersonShooter.Arena
                     if (opened) continue;
                     // A faint gold column so boxes can be spotted from a distance.
                     _lootC.Add(Matrix4x4.TRS(p + Vector3.up * 3f, Quaternion.identity, new Vector3(0.05f, 4.5f, 0.05f)));
-                    var flat = new Vector2(p.x - feet.x, p.z - feet.z);
-                    if (local != Entity.Null && flat.sqrMagnitude < best && Mathf.Abs(p.y - feet.y) < 2.5f)
-                    {
-                        best = flat.sqrMagnitude;
-                        nearBox = b.Id;
-                    }
                 }
                 DrawList(_lootA, _boxMat);
                 DrawList(_lootB, _boxOpenMat);
@@ -242,7 +233,7 @@ namespace FriendlyPersonShooter.Arena
             bool hasItem = false;
             LootItem nearItem = default;
             int nearOwner = 0;
-            float bestItem = InteractRange * InteractRange;
+            float bestItem = ItemPromptRange * ItemPromptRange;
             using (var items = _itemQuery.ToComponentDataArray<ArenaGroundItem>(Allocator.Temp))
             using (var transforms = _itemQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp))
             {
@@ -274,32 +265,10 @@ namespace FriendlyPersonShooter.Arena
             if (hasItem) _prompt = ItemPrompt(lo, nearItem, nearOwner);
         }
 
-        /// <summary>A loot box pick card: the item, what it does, and what taking it would swap out.</summary>
-        public static string BoxCard(ArenaLoadout lo, LootItem item)
-        {
-            var preview = Loadout.Unpack(lo.GunA, lo.GunB, lo.Active);
-            var r = preview.Equip(item);
-            var sb = new StringBuilder();
-            sb.Append("<b><size=30>").Append(ItemLabel(item)).Append("</size></b>\n");
-            if (item.IsGun) sb.Append("<color=#B8B0D8>gun</color>\n");
-            sb.Append("\n<size=20>").Append(item.IsGun ? GunDetail(item.Gun).Replace("     ", "\n") : GunMods.Describe(item.Mod)).Append("</size>\n\n<size=19>");
-            if (!r.Equipped) sb.Append($"<color=#FF8C8C>{r.Refusal}</color>");
-            else if (!r.Dropped.IsNone)
-            {
-                sb.Append("<color=#B8B0D8>swaps out your</color> ").Append(ItemLabel(r.Dropped));
-                if (!r.Dropped2.IsNone) sb.Append(" <color=#B8B0D8>and</color> ").Append(ItemLabel(r.Dropped2));
-            }
-            else sb.Append(item.IsGun ? "<color=#B8B0D8>goes in your empty gun slot</color>" : "<color=#B8B0D8>goes in an empty mod slot</color>");
-            return sb.Append("</size>").ToString();
-        }
-
-        /// <summary>The colour of an item's tier (common, rare, epic).</summary>
-        public static Color ItemTierColor(LootItem item) => TierColor(item.Tier);
-
         /// <summary>What taking this item would do, before you take it: what it is and what it would swap out.</summary>
         private static string ItemPrompt(ArenaLoadout lo, LootItem item, int owner)
         {
-            var preview = Loadout.Unpack(lo.GunA, lo.GunB, lo.Active);
+            var preview = new Loadout(Gun.Unpack(lo.Gun));
             var r = preview.Equip(item);
             var sb = new StringBuilder();
             sb.Append("<color=#FFD84D>Shoot it</color> to take ").Append(ItemLabel(item));

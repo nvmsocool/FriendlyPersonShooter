@@ -69,13 +69,13 @@ namespace FriendlyPersonShooter.Core.Combat
         /// <summary>Multiply fire rate by this (Frenzy; 1 when not Frenzied).</summary>
         public float FireRateMultiplier => 1f + Buffs.StrengthOf(EffectKind.Frenzied);
 
-        /// <summary>Divide reload time by this (Frenzy; 1 when not Frenzied).</summary>
+        /// <summary>Divide the capsule's regrowth time by this (Frenzy; 1 when not Frenzied).</summary>
         public float ReloadSpeedMultiplier => 1f + Buffs.StrengthOf(EffectKind.Frenzied);
 
         /// <summary>How much larger weak points are for this player's hits (Focus; 0 when not Focused).</summary>
         public float WeakPointBonus => Buffs.StrengthOf(EffectKind.Focused);
 
-        /// <summary>Overdrive (Haste + Frenzy): shots use no ammo, so the gun never reloads.</summary>
+        /// <summary>Overdrive (Haste + Frenzy): shots don't drain the payload capsule.</summary>
         public bool NoReload => Buffs.Has(EffectKind.Hasted) && Buffs.Has(EffectKind.Frenzied);
 
         /// <summary>Deadeye (Might + Focus): weak-point hits deal 3x.</summary>

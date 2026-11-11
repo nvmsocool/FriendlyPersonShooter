@@ -14,9 +14,9 @@ namespace FriendlyPersonShooter.Core.Expedition
         public int BlueCost { get; set; } = 12;
         public int PurpleCost { get; set; } = 8;
         public int GreenCost { get; set; } = 12;
-        /// <summary>Stand this close to the door to pledge, to start the countdown (E), and to be counted in.</summary>
+        /// <summary>Bots stand this close to the door to pledge.</summary>
         public float UseRadius { get; set; } = 7f;
-        /// <summary>Once someone starts it: seconds everyone has to reach the door before it takes them in.</summary>
+        /// <summary>Seconds from the key filling until everyone goes in.</summary>
         public float GatherSeconds { get; set; } = 20f;
         /// <summary>A run (three rooms and the boss) ends as a loss after this long.</summary>
         public float TimeLimit { get; set; } = 720f;
@@ -42,7 +42,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     {
         /// <summary>Taking pledges toward the key (a full key starts the gather at once).</summary>
         Collecting = 0,
-        /// <summary>Someone started the countdown; when it ends, whoever stands at the door goes in.</summary>
+        /// <summary>The key is full and the countdown is running; when it ends, the group goes in.</summary>
         Gathering = 1,
         /// <summary>A group is inside fighting the boss.</summary>
         Running = 2,
@@ -72,11 +72,10 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// A raid door (MVP step 6). Players standing at it pledge Blue, Purple and Green essence toward its key,
-    /// carried first, then from their party bank; strangers pool into the same key. Once the key is
-    /// full, anyone at the door can press E to start a short countdown (<see cref="Begin"/>), so the
-    /// group decides when it is ready; whoever is standing at the door when it ends goes in together
-    /// (up to 8). The run ends when the boss dies, when everyone inside is down at once, or at the time
+    /// A raid door. Players fill its key with Blue, Purple and Green essence by shooting its empty slots, one
+    /// essence a shot (<see cref="PledgeOne"/>), carried first, then from their party bank; bots pledge by
+    /// standing at it (<see cref="Pledge"/>). Anyone can fill it, party or not. A full key starts a short
+    /// countdown (<see cref="Begin"/>); when it ends, the players the server lists go in together (up to 8). The run ends when the boss dies, when everyone inside is down at once, or at the time
     /// limit; then the door resets and takes pledges for a new key. One run at a time per door.
     /// </summary>
     public sealed class RaidDoor
@@ -128,11 +127,10 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
-        /// Moves what the key still needs from the wallet (carried first, then banked) into the key.
-        /// Players pledge <paramref name="bankedOnly"/>: carried essence is banked by shooting first.
+        /// Moves what the key still needs from the wallet (carried first, then banked) into the key: a bot at the door.
         /// Only while collecting. Returns how much essence moved.
         /// </summary>
-        public int Pledge(EssenceWallet wallet, bool bankedOnly = false)
+        public int Pledge(EssenceWallet wallet)
         {
             if (wallet == null) throw new ArgumentNullException(nameof(wallet));
             if (Phase != RaidPhase.Collecting) return 0;
@@ -141,7 +139,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             {
                 int need = Settings.Cost(c) - _pledged[c];
                 if (need <= 0) continue;
-                int took = wallet.Take(c, need, bankedOnly);
+                int took = wallet.Take(c, need);
                 _pledged.Add(c, took);
                 moved += took;
             }
@@ -163,8 +161,8 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
 
         /// <summary>
-        /// Advances the door. <paramref name="atDoor"/> lists the players standing at it now (up and not
-        /// already inside), in the order they should be let in.
+        /// Advances the door. <paramref name="atDoor"/> lists the players to take in when the countdown ends (after a
+        /// full key, everyone on the layer who isn't already inside), in the order they should be let in.
         /// </summary>
         public RaidDoorEvent Update(double now, IReadOnlyList<int> atDoor)
         {

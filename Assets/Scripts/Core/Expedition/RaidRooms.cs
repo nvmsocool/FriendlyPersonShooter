@@ -94,12 +94,6 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         public float AngleAt(double t) => (float)(Phase + Speed * t);
 
-        /// <summary>The arm's tip at room time <paramref name="t"/> (relative to the room centre).</summary>
-        public Vector3 TipAt(double t)
-        {
-            float a = AngleAt(t);
-            return Pivot + new Vector3((float)Math.Sin(a), 0f, (float)Math.Cos(a)) * Length;
-        }
     }
 
     /// <summary>

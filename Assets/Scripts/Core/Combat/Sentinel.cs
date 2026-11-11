@@ -54,8 +54,6 @@ namespace FriendlyPersonShooter.Core.Combat
 
         public bool EyeOpen => Telegraph || AfterFire > 0f;
 
-        public Vector3 Facing => BulwarkBehavior.FacingOf(Yaw);
-
         public Vector3 EyeCenter(SentinelSettings s) => EyeCenterOf(Position, Yaw, s);
 
         public static Vector3 EyeCenterOf(Vector3 position, float yaw, SentinelSettings s) =>

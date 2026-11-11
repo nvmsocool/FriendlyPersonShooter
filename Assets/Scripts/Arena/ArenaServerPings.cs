@@ -21,7 +21,6 @@ namespace FriendlyPersonShooter.Arena
         private const double PingCooldown = 0.4;
 
         private readonly Dictionary<int, double> _nextPing = new Dictionary<int, double>();
-        private int _pings;
 
         private void StepPings(EntityCommandBuffer ecb)
         {
@@ -56,7 +55,6 @@ namespace FriendlyPersonShooter.Arena
                 var rpc = ecb.CreateEntity();
                 ecb.AddComponent(rpc, new PingFx { PlayerNetworkId = id, Position = at, Kind = kind });
                 ecb.AddComponent(rpc, new SendRpcCommandRequest { TargetConnection = Entity.Null });
-                _pings++;
             }
         }
     }

@@ -12,7 +12,7 @@ namespace FriendlyPersonShooter.Core.Tests
         private static readonly int[] None = new int[0];
 
         [Test]
-        public void StrangersPoolTheKeyCarriedFirstThenBanked()
+        public void BotsPoolTheKeyCarriedFirstThenBanked()
         {
             var door = new RaidDoor();
             var bank = new EssenceAmounts();
@@ -40,38 +40,21 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void PlayersPledgeBankedEssenceOnly()
-        {
-            var door = new RaidDoor();
-            var a = new EssenceWallet(1);
-            a.PickUp(EssenceColor.Blue, 4);
-            a.BankAll();
-            a.PickUp(EssenceColor.Blue, 7);
-            a.PickUp(EssenceColor.Green, 5);
-            Assert.That(door.Pledge(a, bankedOnly: true), Is.EqualTo(4));
-            Assert.That(a.Carried(EssenceColor.Blue), Is.EqualTo(7), "carried essence is banked by shooting first");
-            Assert.That(a.Carried(EssenceColor.Green), Is.EqualTo(5));
-            Assert.That(door.Pledged(EssenceColor.Blue), Is.EqualTo(4));
-        }
-
-        [Test]
-        public void FullKeyWaitsForSomeoneToStartTheCountdown()
+        public void BeginStartsTheCountdownOnceTheKeyIsFull()
         {
             var door = new RaidDoor();
             Assert.That(door.Begin(0), Is.False, "the key isn't full");
             door.FillKey();
             Assert.That(door.Ready, Is.True);
-            Assert.That(door.Update(1, new[] { 5, 6 }), Is.EqualTo(RaidDoorEvent.None), "standing at the door doesn't start it");
-            Assert.That(door.Phase, Is.EqualTo(RaidPhase.Collecting));
             Assert.That(door.Begin(2), Is.True);
             Assert.That(door.Phase, Is.EqualTo(RaidPhase.Gathering));
             Assert.That(door.Ready, Is.False);
-            Assert.That(door.Begin(3), Is.False, "pressing again doesn't restart the countdown");
+            Assert.That(door.Begin(3), Is.False, "a running countdown doesn't restart");
             Assert.That(door.TimeLeft(3), Is.EqualTo(door.Settings.GatherSeconds - 1).Within(1e-9));
         }
 
         [Test]
-        public void StartedCountdownGathersWhoeverIsAtTheDoorThenRuns()
+        public void CountdownTakesTheListedPlayersInThenRuns()
         {
             var door = new RaidDoor();
             door.FillKey();
@@ -93,7 +76,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(door.Update(100, None), Is.EqualTo(RaidDoorEvent.GatherCancelled));
             Assert.That(door.Phase, Is.EqualTo(RaidPhase.Collecting));
             Assert.That(door.KeyFull, Is.True);
-            Assert.That(door.Ready, Is.True, "someone can start it again");
+            Assert.That(door.Ready, Is.True, "the next pledge or bot visit starts it again");
         }
 
         [Test]

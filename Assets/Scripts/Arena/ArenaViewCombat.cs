@@ -479,7 +479,7 @@ namespace FriendlyPersonShooter.Arena
                 if (entities[i] == local) continue;
                 var v = vitals[i];
                 var pc = ArenaHud.PayloadColor(loadouts[i].Payload);
-                var allyGun = Gun.Unpack(loadouts[i].Active == 0 ? loadouts[i].GunA : loadouts[i].GunB);
+                var allyGun = Gun.Unpack(loadouts[i].Gun);
                 string allyPayload = loadouts[i].Payload == PayloadKind.None ? "plain" : loadouts[i].Payload.ToString();
                 hud.Team.Append($"{PlayerColors.Tag(owners[i].NetworkId)}  <color=#{ColorUtility.ToHtmlStringRGB(pc)}>{allyPayload} {GunFrames.Name(allyGun.Frame)}</color>  " +
                                 (v.Health <= 0f ? $"<color=#FF6B6B>DOWN</color> {v.ReviveProgress * 100f:0}%, {v.RespawnIn:0}s"

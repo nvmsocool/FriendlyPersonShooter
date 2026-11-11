@@ -9,11 +9,11 @@ namespace FriendlyPersonShooter.Core.Expedition
     {
         /// <summary>Hunt the gate's color until carried + banked covers the cost.</summary>
         Gather = 0,
-        /// <summary>Enough in hand, but not enough banked: get to the gate (or raid door), which banks it.</summary>
+        /// <summary>Enough in hand, but not enough banked: shoot the gate's empty slots to bank it.</summary>
         Bank = 1,
-        /// <summary>Enough banked: walk to the gate and pay.</summary>
+        /// <summary>Enough banked: the gate opens itself as soon as no raid or layer move holds it.</summary>
         Unlock = 2,
-        /// <summary>Access bought: go through the gate.</summary>
+        /// <summary>The gate is open: the group goes through together after the countdown.</summary>
         PassThrough = 3,
         /// <summary>Through the gate. The session's ending.</summary>
         Complete = 4,
@@ -30,7 +30,7 @@ namespace FriendlyPersonShooter.Core.Expedition
     /// so ~5 shots and ~0.6 hits per window: ~5 windows, ~11 s of fighting per kill. Add ~9 s to
     /// find and reach the next one: ~20 s a kill, about 3 kills a minute.</item>
     /// <item>40 kills ≈ 13 minutes of hunting, plus ~3 minutes to walk the 2 zones to the gate and
-    /// ~1 minute of slack: about 17 minutes. (The gate banks, so there is no detour to bank.) Blooms, other players' shared drops and
+    /// ~1 minute of slack: about 17 minutes. (Banking is at the gate, so there is no detour to bank.) Blooms, other players' shared drops and
     /// chains make it faster; a bleed-out (half of carried lost to a cache) makes it slower.</item>
     /// </list>
     /// </summary>
@@ -66,9 +66,9 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// One player's goal for the MVP step-4 session: gather the gate's color, bank it (at the gate or raid door),
-    /// pay at the gate, go through. The phase is worked out from the wallet and gate each update, so
-    /// it moves back if the player bleeds out and loses carried essence, or gifts it away. Records
+    /// One player's goal for the session: gather the gate's color, bank it into the gate's slots, and go through once
+    /// it opens. The phase is worked out from the wallet and gate each update, so it moves back if the player bleeds
+    /// out and loses carried essence. Records
     /// when each phase was first reached and when the run finished.
     /// </summary>
     public sealed class ExpeditionTracker
@@ -114,8 +114,6 @@ namespace FriendlyPersonShooter.Core.Expedition
         }
         public ExpeditionPhase Phase { get; private set; }
         public bool IsComplete => _completedAt.HasValue;
-        /// <summary>When the player went through the gate, or null.</summary>
-        public double? CompletedAt => _completedAt;
         public EssenceColor GoalColor => _gate.Color;
         public int GoalAmount => _gate.Cost;
         /// <summary>The latest objective from <see cref="Update"/>.</summary>

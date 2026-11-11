@@ -39,7 +39,7 @@ namespace FriendlyPersonShooter.Core.Combat
         public float SlowFloor { get; set; } = 0.2f;
 
         // Frenzy.
-        /// <summary>Extra fire rate and reload speed a Frenzied player gets.</summary>
+        /// <summary>Extra fire rate and capsule-regrowth speed a Frenzied player gets.</summary>
         public float FrenzyBonus { get; set; } = 0.3f;
         public float FrenzyDuration { get; set; } = 6f;
         /// <summary>How much slower a Jammed enemy attacks (its attack clock runs at 1 / (1 + this)).</summary>

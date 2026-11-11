@@ -17,7 +17,7 @@ namespace FriendlyPersonShooter.Core.Tests
         public void SetUp()
         {
             _map = LayerGenerator.Generate(2026, LayerSettings.MvpTiling(), LayerSettings.ForMvp());
-            _gate = new Gate(_map.Gates[0], _map.Seed);
+            _gate = new Gate(_map.Gates[0]);
             _wallet = new EssenceWallet(1);
             _blooms = new BloomSchedule(_map);
             _tracker = new ExpeditionTracker(_map, _gate, _wallet, 0, _blooms);

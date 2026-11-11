@@ -20,7 +20,6 @@ namespace FriendlyPersonShooter.Arena
         public const float LandmarkHeight = 14f;
         public const float GateWidth = 8f;
         public const float GateHeight = 7f;
-        public const float ShrineRadius = 4f;
         public const float GateUseRadius = 6f;
         public const float GatePassRadius = 2.5f;
         public const float CachePickupRadius = 2f;

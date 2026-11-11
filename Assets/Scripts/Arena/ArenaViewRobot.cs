@@ -129,7 +129,7 @@ namespace FriendlyPersonShooter.Arena
                 RenderRobotMesh(parts.Spinner, headM * Matrix4x4.TRS(parts.SpinnerAt, Quaternion.Euler(0f, t * (downed ? 90f : 900f), 0f), Vector3.one));
             }
 
-            var gun = loadout.HasValue ? Gun.Unpack(loadout.Value.Active == 0 ? loadout.Value.GunA : loadout.Value.GunB) : default;
+            var gun = loadout.HasValue ? Gun.Unpack(loadout.Value.Gun) : default;
             if (!downed && !gun.IsEmpty)
             {
                 // Held out in front of the right side of the chest, pointing where they look.

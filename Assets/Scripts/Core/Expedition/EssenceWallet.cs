@@ -2,26 +2,14 @@ using System;
 
 namespace FriendlyPersonShooter.Core.Expedition
 {
-    /// <summary>Which of the giver's pools a gift comes out of.</summary>
-    public enum GiftSource : byte
-    {
-        /// <summary>Carried essence first, then banked to make up the rest.</summary>
-        CarriedFirst = 0,
-        CarriedOnly = 1,
-        BankedOnly = 2,
-    }
-
     /// <summary>
     /// One player's essence, split into <em>carried</em> (picked up, at risk until banked) and
-    /// <em>banked</em> (safe; stored at the raid door or a gate, see <see cref="Banking"/>).
+    /// <em>banked</em> (safe, in the party's shared bank: shooting the gate's empty slots banks it).
     ///
     /// Rules where the design doc was silent:
     /// <list type="bullet">
-    /// <item>Spending (gates, later raid keys) uses banked essence only. Banking is the step that
-    /// commits essence, so a run has a clear "bank it" beat; the gate banks too, so paying needs no detour.</item>
-    /// <item>Gifts move pool to pool: carried essence arrives carried, banked essence arrives banked.
-    /// So handing a friend banked essence at the gate lets them pay right away, while carried
-    /// essence stays at risk until they bank it. By default carried goes first.</item>
+    /// <item>The gate is paid from banked essence only. Banking is the step that commits essence, so a run
+    /// has a clear "bank it" beat. A raid key takes carried essence first, then banked.</item>
     /// <item>A player carries at most <see cref="CarryCap"/> of each color; anything over it is lost. Banked
     /// essence (the party's pool) has no cap. The game's wallets pass the cap in; a wallet built without one
     /// (tests of other rules) carries any amount.</item>
@@ -82,7 +70,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             return n;
         }
 
-        /// <summary>Adds essence straight to carried (up to the cap; the rest is lost) or banked (gifts, cache returns).</summary>
+        /// <summary>Adds essence straight to carried (up to the cap; the rest is lost) or banked (cache returns).</summary>
         public void Receive(EssenceAmounts amounts, bool banked)
         {
             if (amounts == null) throw new ArgumentNullException(nameof(amounts));
@@ -94,7 +82,7 @@ namespace FriendlyPersonShooter.Core.Expedition
             foreach (var c in EssenceColors.All) PickUp(c, amounts[c]);
         }
 
-        /// <summary>Moves all carried essence to banked (standing at the raid door or a gate). Returns what moved.</summary>
+        /// <summary>Moves all carried essence to banked (a bot at the raid door or a gate). Returns what moved.</summary>
         public EssenceAmounts BankAll()
         {
             var moved = _carried.Clone();
@@ -112,14 +100,6 @@ namespace FriendlyPersonShooter.Core.Expedition
             return n;
         }
 
-        /// <summary>Loses up to <paramref name="amount"/> carried essence of one color (a missed banking target). Returns how much.</summary>
-        public int LoseCarried(EssenceColor color, int amount)
-        {
-            int n = Math.Max(0, Math.Min(amount, _carried[color]));
-            _carried[color] -= n;
-            return n;
-        }
-
         /// <summary>True when banked essence covers the amount. Carried essence can't be spent.</summary>
         public bool CanSpend(EssenceColor color, int amount) => amount >= 0 && _banked[color] >= amount;
 
@@ -131,47 +111,14 @@ namespace FriendlyPersonShooter.Core.Expedition
             return true;
         }
 
-        /// <summary>How much a gift from <paramref name="source"/> could give right now.</summary>
-        public int Giftable(EssenceColor color, GiftSource source)
-        {
-            switch (source)
-            {
-                case GiftSource.CarriedOnly: return _carried[color];
-                case GiftSource.BankedOnly: return _banked[color];
-                default: return _carried[color] + _banked[color];
-            }
-        }
-
-        /// <summary>
-        /// Gives any amount of one color to another player, for free. All or nothing: returns false
-        /// (and moves nothing) if the amount isn't available from <paramref name="source"/>, or the
-        /// recipient is this same player.
-        /// </summary>
-        public bool TryGift(EssenceWallet to, EssenceColor color, int amount, GiftSource source = GiftSource.CarriedFirst)
-        {
-            if (to == null) throw new ArgumentNullException(nameof(to));
-            if (amount <= 0 || to == this || to.PlayerId == PlayerId) return false;
-            if (Giftable(color, source) < amount) return false;
-
-            int fromCarried = source == GiftSource.BankedOnly ? 0 : Math.Min(amount, _carried[color]);
-            int fromBanked = amount - fromCarried;
-            // Carried essence arrives carried, so it has to fit under their cap.
-            if (fromCarried > to.Room(color)) return false;
-            _carried[color] -= fromCarried;
-            _banked[color] -= fromBanked;
-            to._carried.Add(color, fromCarried);
-            to._banked.Add(color, fromBanked);
-            return true;
-        }
-
         /// <summary>
         /// Takes up to <paramref name="amount"/> of one color, carried first, then banked (a raid key pledge).
-        /// With <paramref name="bankedOnly"/>, carried essence is left alone. Returns how much was taken.
+        /// Returns how much was taken.
         /// </summary>
-        public int Take(EssenceColor color, int amount, bool bankedOnly = false)
+        public int Take(EssenceColor color, int amount)
         {
             if (amount <= 0) return 0;
-            int fromCarried = bankedOnly ? 0 : Math.Min(amount, _carried[color]);
+            int fromCarried = Math.Min(amount, _carried[color]);
             _carried[color] -= fromCarried;
             int fromBanked = Math.Min(amount - fromCarried, _banked[color]);
             _banked[color] -= fromBanked;

@@ -6,14 +6,14 @@ using UnityEngine;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// Guns you can see: the one in your hands (it kicks when you fire, flashes at the muzzle, dips to
-    /// reload, comes up after a swap and moves to the centre when you zoom), and the ones other players'
+    /// Guns you can see: the one in your hands (it kicks when you fire, flashes at the muzzle, comes up after a
+    /// new gun and moves to the centre when you zoom), and the ones other players'
     /// robots hold (ArenaViewRobot). Each frame is a few boxes with a stripe in its payload's colour.
     /// </summary>
     public partial class ArenaView
     {
         private const float FlashSeconds = 0.05f;
-        private const float SwapRaiseSeconds = 0.3f;
+        private const float NewGunRaiseSeconds = 0.3f;
 
         private struct GunPart
         {
@@ -35,8 +35,9 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Matrix4x4> _gunDark = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _muzzleFlash = new List<Matrix4x4>();
         private readonly Dictionary<PayloadKind, List<Matrix4x4>> _gunAccent = new Dictionary<PayloadKind, List<Matrix4x4>>();
-        private float _kick, _flashUntil, _swapAt = -10f, _zoomBlend;
-        private int _heldActive = -1;
+        private float _kick, _flashUntil, _newGunAt = -10f, _zoomBlend;
+        /// <summary>The held gun's frame (-1 = none), to raise a new gun into view.</summary>
+        private int _heldFrame = -1;
         private Matrix4x4 _heldPose = Matrix4x4.identity;
         private Vector3 _heldMuzzle;
 
@@ -133,7 +134,7 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Where our tracers start: the held gun's muzzle (last frame's pose).</summary>
         private Vector3 HeldMuzzle(Vector3 eye)
         {
-            return _heldActive >= 0 ? _heldMuzzle : eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
+            return _heldFrame >= 0 ? _heldMuzzle : eye + viewCamera.transform.right * 0.25f - Vector3.up * 0.25f;
         }
 
         private void AddGun(Matrix4x4 basis, FrameKind frame, PayloadKind payload)
@@ -151,21 +152,21 @@ namespace FriendlyPersonShooter.Arena
         {
             if (viewCamera == null || !alive)
             {
-                _heldActive = -1;
+                _heldFrame = -1;
                 return;
             }
-            var gun = Gun.Unpack(lo.Active == 0 ? lo.GunA : lo.GunB);
+            var gun = Gun.Unpack(lo.Gun);
             if (gun.IsEmpty)
             {
-                _heldActive = -1;
+                _heldFrame = -1;
                 return;
             }
             float now = Time.unscaledTime;
             float dt = Time.unscaledDeltaTime;
-            if (lo.Active != _heldActive)
+            if ((int)gun.Frame != _heldFrame)
             {
-                if (_heldActive >= 0) _swapAt = now;
-                _heldActive = lo.Active;
+                if (_heldFrame >= 0) _newGunAt = now;
+                _heldFrame = (int)gun.Frame;
             }
             _kick = Mathf.MoveTowards(_kick, 0f, dt * 6f);
             _zoomBlend = Mathf.MoveTowards(_zoomBlend, ArenaLocalInputSystem.Zooming ? 1f : 0f, dt * 7f);
@@ -176,7 +177,7 @@ namespace FriendlyPersonShooter.Arena
             float pitchUp = _kick * 7f;
             pos.z -= _kick * 0.05f;
             float roll = 0f;
-            float raise = Mathf.Clamp01((now - _swapAt) / SwapRaiseSeconds);
+            float raise = Mathf.Clamp01((now - _newGunAt) / NewGunRaiseSeconds);
             pos.y -= (1f - raise) * 0.25f;
 
             var cam = viewCamera.transform;

@@ -189,11 +189,11 @@ namespace FriendlyPersonShooter.Arena
                 {
                     _roundKnown = true;
                     _roundSerial = g.Serial;
-                    _round = new GalleryRound(GalleryDifficulty.For((GalleryKind)g.Kind, g.Layer, g.Targets), g.Seed);
+                    _round = new GalleryRound(GalleryDifficulty.For((GalleryKind)g.Kind, g.Layer), g.Seed);
                     _lastHitCount = 0;
                 }
                 float t = math.max(0f, GalleryClock.Seconds(1) * (viewTick - g.StartTick));
-                _round.Restore(g.Hits, g.HitCount, g.Next, GalleryClock.Seconds(g.NextTick - g.StartTick), (GalleryOutcome)g.Outcome, g.Chosen,
+                _round.Restore(g.Hits, g.HitCount, (GalleryOutcome)g.Outcome, g.Chosen,
                     GalleryClock.Seconds(g.EndTick - g.StartTick));
                 open = g.Outcome == (byte)GalleryOutcome.Running;
                 if (g.HitCount > _lastHitCount)
@@ -268,13 +268,11 @@ namespace FriendlyPersonShooter.Arena
             Vector3 eye = cam.transform.position;
             bool flash = now < _hitFlashUntil;
 
-            // One at a time (banking can deal many targets): the one that's up uses the first slot.
-            bool oneAtATime = spec.Rule == GalleryRule.Sequence;
             for (int slot = 0; slot < MaxTargets; slot++)
             {
                 var ring = _targetRings[slot];
-                int i = oneAtATime ? (slot == 0 ? _round.Next : -1) : slot;
-                if (i < 0 || i >= _round.Count || !_round.Visible(i, t))
+                int i = slot;
+                if (i >= _round.Count || !_round.Visible(i, t))
                 {
                     ring.gameObject.SetActive(false);
                     continue;
@@ -323,17 +321,7 @@ namespace FriendlyPersonShooter.Arena
 
             _galleryTitle.text = GalleryTitle(kind);
             _galleryHint.text = GalleryHint(kind, g);
-            float left, full;
-            if (spec.Rule == GalleryRule.Sequence)
-            {
-                left = _round.TargetTimeLeft(t);
-                full = spec.PerTarget;
-            }
-            else
-            {
-                left = _round.TimeLeft(t);
-                full = spec.Duration;
-            }
+            float left = _round.TimeLeft(t), full = spec.Seconds;
             bool timed = full > 0f && !float.IsInfinity(left);
             _galleryBarBack.gameObject.SetActive(timed);
             if (timed)

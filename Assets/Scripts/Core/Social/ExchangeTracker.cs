@@ -6,18 +6,14 @@ namespace FriendlyPersonShooter.Core.Social
     /// <summary>Something useful that passed between two strangers. Step 5 asks for info, buff, revive or group.</summary>
     public enum ExchangeKind : byte
     {
-        /// <summary>Heard an info quick-chat line from the other, or swapped sightings with something new in them.</summary>
+        /// <summary>Heard an info quick-chat line from the other.</summary>
         Info = 0,
         /// <summary>One hit the other with an ally shot (buff or chain).</summary>
         Buff = 1,
         /// <summary>One shot the other's revive fragments.</summary>
         Revive = 2,
-        /// <summary>They joined the same group.</summary>
-        Group = 3,
-        /// <summary>One gave the other essence.</summary>
-        Gift = 4,
         /// <summary>One returned the other's cache.</summary>
-        CacheReturn = 5,
+        CacheReturn = 3,
     }
 
     /// <summary>Tunables for measuring stranger encounters. Seconds.</summary>

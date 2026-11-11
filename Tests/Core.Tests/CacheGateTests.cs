@@ -73,7 +73,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void Gate_UnlockPaysFromBankedAndGrantsPersonalAccess()
         {
-            var gate = new Gate(Site(), 1);
+            var gate = new Gate(Site());
             var a = new EssenceWallet(1);
             a.PickUp(EssenceColor.Yellow, 45);
             Assert.That(gate.Unlock(a), Is.EqualTo(GateUnlockOutcome.NotEnough), "carried doesn't count");
@@ -89,50 +89,9 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void Gate_GroupPassesOnlyWhenEveryoneHasAccess_GiftingFixesIt()
-        {
-            var gate = new Gate(Site(), 1, new GateSettings { Color = EssenceColor.Yellow, Cost = 40 });
-            var a = new EssenceWallet(1);
-            var b = new EssenceWallet(2);
-            a.PickUp(EssenceColor.Yellow, 70);
-            a.BankAll();
-            b.PickUp(EssenceColor.Yellow, 10);
-            b.BankAll();
-            gate.Unlock(a);
-
-            Assert.That(gate.CanGroupPass(new[] { 1, 2 }), Is.False);
-            Assert.That(gate.MissingAccess(new[] { 1, 2 }), Is.EqualTo(new[] { 2 }));
-            Assert.That(gate.Unlock(b), Is.EqualTo(GateUnlockOutcome.NotEnough));
-
-            Assert.That(a.TryGift(b, EssenceColor.Yellow, gate.Shortfall(b), GiftSource.BankedOnly));
-            Assert.That(gate.Unlock(b), Is.EqualTo(GateUnlockOutcome.Unlocked));
-            Assert.That(gate.CanGroupPass(new[] { 1, 2 }));
-            Assert.That(gate.CanGroupPass(new int[0]), Is.False);
-            Assert.That(gate.CanGoUp(3), "going up is always free");
-        }
-
-        [Test]
-        public void Gate_AccessResetsWithTheSeed()
-        {
-            var gate = new Gate(Site(), 1);
-            var a = new EssenceWallet(1);
-            a.PickUp(EssenceColor.Yellow, 80);
-            a.BankAll();
-            gate.Unlock(a);
-            Assert.That(gate.TryGetAccessSeed(1, out uint bought) && bought == 1u);
-
-            gate.Reseed(2);
-            Assert.That(gate.HasAccess(1), Is.False);
-            Assert.That(gate.CanGroupPass(new[] { 1 }), Is.False);
-            Assert.That(gate.Unlock(a), Is.EqualTo(GateUnlockOutcome.Unlocked));
-            Assert.That(a.Banked(EssenceColor.Yellow), Is.EqualTo(0));
-            Assert.That(gate.HasAccess(1));
-        }
-
-        [Test]
         public void Gate_ShutsAfterItsOpenTime_AndCostsMoreEachTime()
         {
-            var gate = new Gate(Site(), 1, new GateSettings { Cost = 40, CostStep = 20, OpenSeconds = 90 });
+            var gate = new Gate(Site(), new GateSettings { Cost = 40, CostStep = 20, OpenSeconds = 90 });
             var a = new EssenceWallet(1);
             a.PickUp(EssenceColor.Yellow, 200);
             a.BankAll();

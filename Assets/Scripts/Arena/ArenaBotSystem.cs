@@ -104,7 +104,7 @@ namespace FriendlyPersonShooter.Arena
             var vitals = EntityManager.GetComponentData<ArenaVitals>(me);
             var loadout = EntityManager.GetComponentData<ArenaLoadout>(me);
             var payload = loadout.Payload;
-            var gun = Gun.Unpack(loadout.Active == 0 ? loadout.GunA : loadout.GunB);
+            var gun = Gun.Unpack(loadout.Gun);
             _range = GunFrames.For(gun.Frame)?.Range ?? 60f;
             var input = new ArenaInput();
 

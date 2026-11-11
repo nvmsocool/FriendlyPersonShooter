@@ -25,11 +25,8 @@ namespace FriendlyPersonShooter.Core.Gallery
         /// <summary>Layer index 0..2 for a layer number (1 = surface).</summary>
         public static int Tier(int layer) => Math.Clamp(layer - 1, 0, 2);
 
-        /// <summary>
-        /// The spec for a gallery of <paramref name="kind"/> on <paramref name="layer"/> (1 = surface).
-        /// <paramref name="targets"/> sets the target count where it varies (banking: one per chunk).
-        /// </summary>
-        public static GallerySpec For(GalleryKind kind, int layer, int targets = 0)
+        /// <summary>The spec for a gallery of <paramref name="kind"/> on <paramref name="layer"/> (1 = surface).</summary>
+        public static GallerySpec For(GalleryKind kind, int layer)
         {
             int k = Tier(layer);
             float radius = Radius[k], speed = BaseSpeed * SpeedScale[k], time = TimeScale[k];
@@ -37,16 +34,16 @@ namespace FriendlyPersonShooter.Core.Gallery
             {
                 case GalleryKind.Starter:
                     // Slow, big and no limit: a new player's first look at a gallery.
-                    return new GallerySpec(kind, GalleryRule.Choose, 3, 0f, 0f, false, 5f, 4f);
+                    return new GallerySpec(kind, GalleryRule.Choose, 3, 0f, false, 5f, 4f);
                 case GalleryKind.Box:
                 case GalleryKind.Reward:
-                    return new GallerySpec(kind, GalleryRule.Choose, 3, 10f * time, 0f, true, radius, speed);
+                    return new GallerySpec(kind, GalleryRule.Choose, 3, 10f * time, true, radius, speed);
                 case GalleryKind.Cache:
-                    return new GallerySpec(kind, GalleryRule.All, CacheTargets[k], 10f * time, 0f, false, radius, speed);
+                    return new GallerySpec(kind, GalleryRule.All, CacheTargets[k], 10f * time, false, radius, speed);
                 case GalleryKind.Travel:
-                    return new GallerySpec(kind, GalleryRule.Choose, 1, 8f * time, 0f, false, radius, speed * 1.6f);
+                    return new GallerySpec(kind, GalleryRule.Choose, 1, 8f * time, false, radius, speed * 1.6f);
                 default:
-                    return new GallerySpec(GalleryKind.None, GalleryRule.Choose, 1, 1f, 0f, true, radius, speed);
+                    return new GallerySpec(GalleryKind.None, GalleryRule.Choose, 1, 1f, true, radius, speed);
             }
         }
 

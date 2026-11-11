@@ -49,15 +49,6 @@ namespace FriendlyPersonShooter.Core.Arsenal
             return t < 0.07f ? ModTier.Epic : t < 0.35f ? ModTier.Rare : ModTier.Common;
         }
 
-        /// <summary>A new player's kit: one random gun with one random common payload mod.</summary>
-        public static Gun StartingGun(uint seed)
-        {
-            var rng = new CombatRandom(seed == 0 ? 1u : seed);
-            var frame = GunFrames.All[rng.NextInt(GunFrames.All.Length)];
-            var payload = GunMods.PayloadKinds[rng.NextInt(GunMods.PayloadKinds.Length)];
-            return new Gun(frame, payload0: new Mod(payload));
-        }
-
         /// <summary>How many starting guns a new player picks from.</summary>
         public const int StartingChoiceCount = 3;
 

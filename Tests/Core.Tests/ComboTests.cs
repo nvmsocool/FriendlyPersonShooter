@@ -160,13 +160,5 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(events[0].FirstDiscovery, Is.False);
         }
 
-        [Test]
-        public void Discovery_CarriesOverOnMerge()
-        {
-            var other = new ComboTracker();
-            other.MarkDiscovered(_lobby.Combos.Discovered | ComboKind.Plague);
-            Assert.That(other.IsDiscovered(ComboKind.Plague), Is.True);
-            Assert.That(other.IsDiscovered(ComboKind.Blitz), Is.False);
-        }
     }
 }

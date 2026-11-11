@@ -98,7 +98,7 @@ namespace FriendlyPersonShooter.Arena
             "Left mouse  fire    Right mouse  zoom\n" +
             "Middle mouse  ping a spot or an enemy\n" +
             "Everything else is a shot: loot boxes, items, essence orbs,\n" +
-            "  the gate and its empty essence slots, portals, the raid door and its key slots\n" +
+            "  the gate's empty essence slots, the up-portal, the raid door's key slots\n" +
             "Out of payload: shoot your capsule out of the air\n" +
             "Esc  open or close this menu\n" +
             "Click the game  capture the mouse\n\n" +
@@ -198,22 +198,6 @@ namespace FriendlyPersonShooter.Arena
                 case FrameKind.Marksman: return "Slow, hard-hitting, long range";
                 case FrameKind.Beam: return "A steady beam that ramps up";
                 case FrameKind.Launcher: return "Shells that burst where they land";
-                default: return "";
-            }
-        }
-
-        /// <summary>What a payload does to allies and enemies (gallery cards).</summary>
-        public static string PayloadBlurb(PayloadKind payload)
-        {
-            switch (payload)
-            {
-                case PayloadKind.Vigor: return "allies: heal + shield\nenemies: wither";
-                case PayloadKind.Might: return "allies: +damage\nenemies: expose";
-                case PayloadKind.Haste: return "allies: +speed, +jump\nenemies: slow";
-                case PayloadKind.Relay: return "allies: their hits carry Might\nenemies: hits splash";
-                case PayloadKind.Frenzy: return "allies: fire faster, capsule regrows faster\nenemies: attack less";
-                case PayloadKind.Ward: return "allies: damage shield\nenemies: armor weakens";
-                case PayloadKind.Focus: return "allies: bigger weak points\nenemies: weak points grow";
                 default: return "";
             }
         }

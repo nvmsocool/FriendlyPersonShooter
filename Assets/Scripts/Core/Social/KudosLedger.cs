@@ -14,10 +14,6 @@ namespace FriendlyPersonShooter.Core.Social
         Chain = 2,
         /// <summary>Picked up your cache and sent it back.</summary>
         CacheReturn = 3,
-        /// <summary>Gave you essence.</summary>
-        Gift = 4,
-        /// <summary>Shared a sighting or tip that led to drops or a bloom.</summary>
-        Tip = 5,
     }
 
     public enum KudosOutcome : byte

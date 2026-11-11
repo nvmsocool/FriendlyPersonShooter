@@ -10,8 +10,8 @@ using UnityEngine;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// Things you shoot to use them: your essence orbs, the bank crystal beside each gate and raid door (an orb per
-    /// color you carry), and a prompt when your crosshair is on the gate, the up-portal, the raid door or a cache.
+    /// Things you shoot to use them: your essence orbs, and a prompt when your crosshair is on the gate, its essence
+    /// slots, the up-portal, the raid door's key slots or a cache.
     /// </summary>
     public partial class ArenaView
     {
@@ -38,7 +38,7 @@ namespace FriendlyPersonShooter.Arena
             }
         }
 
-        /// <summary>Draws your orbs and the bank crystals, and says what shooting the thing under your crosshair does.</summary>
+        /// <summary>Draws your orbs, and says what shooting the thing under your crosshair does.</summary>
         private void DrawShootables(World world, Entity local)
         {
             EnsureShootableMaterials();
@@ -50,7 +50,6 @@ namespace FriendlyPersonShooter.Arena
             }
             var em = world.EntityManager;
             int myId = em.GetComponentData<GhostOwner>(local).NetworkId;
-            float now = Time.time;
             Vector3 eye = viewCamera != null ? viewCamera.transform.position : Vector3.zero;
             var dir = viewCamera != null ? (float3)viewCamera.transform.forward : new float3(0f, 0f, 1f);
             float reach = math.min(ShootPromptRange, ArenaLayout.RaycastCover(eye, dir, ShootPromptRange));

@@ -9,7 +9,7 @@ namespace FriendlyPersonShooter.Core.Combat
         Vigor = 0,
         Might = 1,
         Haste = 2,
-        /// <summary>Allies fire and reload faster; enemies are Jammed (attack less often).</summary>
+        /// <summary>Allies fire faster and regrow their capsule faster; enemies are Jammed (attack less often).</summary>
         Frenzy = 3,
         /// <summary>Allies get a damage shield; enemies turn Brittle (armor and shells weaken).</summary>
         Ward = 4,
@@ -29,7 +29,7 @@ namespace FriendlyPersonShooter.Core.Combat
         Empower = 1,
         /// <summary>Player buff from Haste. Strength is a move-speed bonus fraction (0.3 = +30%); jumps grow in proportion.</summary>
         Hasted = 2,
-        /// <summary>Player buff from Frenzy. Strength is a fire-rate and reload-speed bonus fraction (0.3 = 30% faster).</summary>
+        /// <summary>Player buff from Frenzy. Strength is a fire-rate and capsule-regrowth bonus fraction (0.3 = 30% faster).</summary>
         Frenzied = 3,
         /// <summary>Player buff from Ward. Strength is shield points; absorbs damage after Vigor's shield.</summary>
         Warded = 4,
@@ -131,7 +131,7 @@ namespace FriendlyPersonShooter.Core.Combat
         Plague = 1,
         /// <summary>Haste + Might on a player: their Empower damage bonus counts double.</summary>
         Blitz = 2,
-        /// <summary>Haste + Frenzy on a player: their shots use no ammo (no reloads) while both last.</summary>
+        /// <summary>Haste + Frenzy on a player: their shots don't drain the payload capsule while both last.</summary>
         Overdrive = 4,
         /// <summary>Might + Focus on a player: their weak-point hits deal 3x instead of the normal bonus.</summary>
         Deadeye = 8,

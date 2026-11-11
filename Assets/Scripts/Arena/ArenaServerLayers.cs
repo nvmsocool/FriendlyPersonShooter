@@ -124,7 +124,7 @@ namespace FriendlyPersonShooter.Arena
             var settings = ExpeditionWorld.Settings;
             _blooms = new BloomSchedule(_map, settings.Blooms());
             _schedule = new SpawnSchedule(_map, _blooms, settings.Spawns());
-            _gate = new Gate(_map.Gates[0], LayerSettings.SeedFor(NetTestSettings.WorldSeed, layer), settings.Gate());
+            _gate = new Gate(_map.Gates[0], settings.Gate());
             _chat = new QuickChatChannel(_map);
             _doors = new RaidDoorRotation(ExpeditionWorld.RaidDoors.Count);
             ExpeditionWorld.RaidDoorIndex = _doors.Active;

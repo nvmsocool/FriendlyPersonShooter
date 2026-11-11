@@ -12,10 +12,11 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// Where and when carried essence goes into the party bank. Banking happens at the layer's doors (the
-    /// raid door and the gates), not at shrines: shrines are where you respawn and where "Reset position"
-    /// takes you, so banking there would make a reset a free trip home. A reset also locks a player out of
-    /// banking for <see cref="BankingSettings.ResetLockoutSeconds"/>, since every door has a shrine nearby.
+    /// When carried essence can go into the party bank. Players bank by shooting the gate's empty slots; bots, who
+    /// can't aim at slots, bank by walking up to the raid door or a gate (<see cref="TryBank"/>). Never at shrines:
+    /// shrines are where you respawn and where "Reset position" takes you, so banking there would make a reset a free
+    /// trip home. A reset also locks a player out of banking (and filling a raid key) for
+    /// <see cref="BankingSettings.ResetLockoutSeconds"/>, since every door has a shrine nearby.
     /// </summary>
     public sealed class Banking
     {
@@ -43,10 +44,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         public BankingSettings Settings { get; }
 
-        /// <summary>The number of places that bank.</summary>
-        public int SiteCount => _sites.Count;
-
-        /// <summary>Makes standing within <paramref name="radius"/> metres of <paramref name="point"/> bank.</summary>
+        /// <summary>Makes a bot standing within <paramref name="radius"/> metres of <paramref name="point"/> bank.</summary>
         public void AddSite(Vector2 point, float radius)
         {
             if (radius <= 0f) throw new ArgumentOutOfRangeException(nameof(radius), "Radius must be positive.");

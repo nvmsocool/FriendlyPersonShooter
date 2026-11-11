@@ -45,9 +45,9 @@ namespace FriendlyPersonShooter.Arena
             public PositionHistory History = new PositionHistory(64);
             /// <summary>The gun (Core.Arsenal; slot 1 stays empty), its firing state and final stats; null until the starting kit is handed out.</summary>
             public Loadout Loadout;
-            public GunState[] Guns = new GunState[2];
-            public GunStats[] Stats = new GunStats[2];
-            public ulong[] Packed = new ulong[2];
+            public GunState Gun;
+            public GunStats Stats;
+            public ulong Packed;
             /// <summary>A bot already got its role's kit.</summary>
             public bool BotKit;
             /// <summary>The shooting gallery: the open one, or the last one (for its result).</summary>
@@ -61,7 +61,7 @@ namespace FriendlyPersonShooter.Arena
             /// <summary>Ticks this player sees the world behind (their interpolation delay).</summary>
             public int AimDelay;
             /// <summary>Where they last looked (degrees).</summary>
-            public float LastYaw, LastPitch;
+            public float LastYaw;
             /// <summary>Boss rewards not yet claimed; each lands as a chest beside its player, one at a time.</summary>
             public System.Collections.Generic.Queue<LootItem[]> Rewards = new System.Collections.Generic.Queue<LootItem[]>();
             /// <summary>The reward chest waiting to be shot: where, its three items, and its card colours' seed.</summary>
@@ -136,7 +136,6 @@ namespace FriendlyPersonShooter.Arena
         private readonly CombatSettings _combat = new CombatSettings();
         private readonly WispSettings _wisp = new WispSettings();
         private readonly SkitterSettings _skitter = new SkitterSettings();
-        private readonly MiteSwarmSettings _mites = new MiteSwarmSettings();
         private LobbyCombat _lobby;
         private readonly Dictionary<int, FragmentGhost> _fragments = new Dictionary<int, FragmentGhost>();
         private readonly List<int> _fragmentScratch = new List<int>();

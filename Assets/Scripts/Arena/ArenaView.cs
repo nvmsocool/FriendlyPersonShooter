@@ -218,7 +218,7 @@ namespace FriendlyPersonShooter.Arena
             if (_sceneLights == null)
             {
                 // The zones bring their own sun.
-                _sceneLights = FindObjectsByType<Light>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+                _sceneLights = FindObjectsByType<Light>(FindObjectsInactive.Exclude);
                 foreach (var l in _sceneLights)
                 {
                     if (l.gameObject.scene == gameObject.scene) l.enabled = false;

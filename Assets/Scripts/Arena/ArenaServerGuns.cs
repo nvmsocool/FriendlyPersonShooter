@@ -13,13 +13,12 @@ using Vector3 = System.Numerics.Vector3;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// The guns half of the server: every player's two found guns (Core.Arsenal), firing each frame's
+    /// The guns half of the server: every player's gun (Core.Arsenal), firing each frame's
     /// way (hitscan, burst, beam, launcher shells that burst on landing), ricochet and self-share,
     /// loot boxes (one personal roll per player per box), items on the ground, and raid-clear loot.
     /// </summary>
     public partial class ArenaServerSystem
     {
-        private const float InteractRange = 2.5f;
         /// <summary>A box roll or raid reward waits this long for its owner.</summary>
         private const float PersonalItemLife = 180f;
         /// <summary>An item someone swapped out stays on the ground this long, for anyone.</summary>
@@ -47,7 +46,6 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Blast> _blasts = new List<Blast>();
         private readonly Dictionary<Entity, GroundItem> _items = new Dictionary<Entity, GroundItem>();
         private readonly List<Entity> _itemScratch = new List<Entity>();
-        private readonly List<(PlayerState State, float3 Feet)> _interacts = new List<(PlayerState, float3)>();
         private readonly LootBoxLedger _boxLedger = new LootBoxLedger();
         private IReadOnlyList<LootBox> _boxes;
         private int _boxesLayer;
@@ -85,19 +83,18 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>After a loadout change: new stats; a new gun comes with a full capsule, a re-modded one keeps its charge.</summary>
         private void Refit(PlayerState s)
         {
-            for (int i = 0; i < 2; i++)
+            var gun = s.Loadout.InHand;
+            ulong packed = gun.Pack();
+            if (packed != s.Packed || (s.Stats == null && !gun.IsEmpty))
             {
-                var gun = s.Loadout.Get(i);
-                ulong packed = gun.Pack();
-                if (packed == s.Packed[i] && (s.Stats[i] != null || gun.IsEmpty)) continue;
-                bool newGun = gun.Frame != Gun.Unpack(s.Packed[i]).Frame;
-                s.Stats[i] = GunStats.For(gun);
-                if (newGun) s.Guns[i] = GunState.Full(s.Stats[i]);
-                else FireControl.Refit(ref s.Guns[i], s.Stats[i]);
-                s.Packed[i] = packed;
+                bool newGun = gun.Frame != Gun.Unpack(s.Packed).Frame;
+                s.Stats = GunStats.For(gun);
+                if (newGun) s.Gun = GunState.Full(s.Stats);
+                else FireControl.Refit(ref s.Gun, s.Stats);
+                s.Packed = packed;
             }
             // A Relay bullet hands on the gun's other payload (a Split gun's second), else Might.
-            var gun0 = s.Loadout.InHand;
+            var gun0 = gun;
             var other = gun0.Payload == PayloadKind.Relay ? gun0.SecondPayload : gun0.Payload;
             s.Vitals.RelayCarry = other == PayloadKind.None || other == PayloadKind.Relay ? PayloadKind.Might : other;
         }
@@ -105,10 +102,10 @@ namespace FriendlyPersonShooter.Arena
         private ArenaLoadout LoadoutGhost(PlayerState s)
         {
             var l = s.Loadout;
-            var st = s.Guns[l.Active];
+            var st = s.Gun;
             var ghost = new ArenaLoadout
             {
-                Payload = l.InHand.Payload, GunA = l.GunA.Pack(), GunB = l.GunB.Pack(), Active = (byte)l.Active,
+                Payload = l.InHand.Payload, Gun = l.InHand.Pack(),
                 Charge = st.Charge, Capsule = (byte)st.Capsule, Grown = st.CapsuleGrown(_time),
             };
             return ghost;
@@ -150,7 +147,6 @@ namespace FriendlyPersonShooter.Arena
                 int seenTick = tick - delay;
                 shooter.AimDelay = delay;
                 shooter.LastYaw = input.ValueRO.Yaw;
-                shooter.LastPitch = input.ValueRO.Pitch;
                 bool trigger = input.ValueRO.Fire != 0 && !shooter.Vitals.IsDown;
                 // In a shooting gallery, shots go at its targets.
                 if (shooter.Gallery.Open)
@@ -159,12 +155,11 @@ namespace FriendlyPersonShooter.Arena
                     continue;
                 }
                 shooter.FireHeld = trigger;
-                int slot = shooter.Loadout.Active;
-                var stats = shooter.Stats[slot];
+                var stats = shooter.Stats;
                 if (stats == null) continue;
                 int ranks = shooter.Progress.PackedRanks;
                 // Frenzy speeds fire and capsule regrowth; Overdrive (Haste + Frenzy) stops the payload running out.
-                var step = FireControl.Step(ref shooter.Guns[slot], stats, _time, trigger,
+                var step = FireControl.Step(ref shooter.Gun, stats, _time, trigger,
                     PlayerProgress.FireRateFor(ranks) * shooter.Vitals.FireRateMultiplier, shooter.Vitals.ReloadSpeedMultiplier,
                     shooter.Vitals.NoReload);
                 int shots = step.Shots;
@@ -250,7 +245,7 @@ namespace FriendlyPersonShooter.Arena
                     else
                     {
                         float mult = stats.Mode == FireMode.Beam
-                            ? FireControl.BeamMultiplier(ref shooter.Guns[slot], stats, landed && !hit.IsPlayer ? hit.TargetId : -1, _time)
+                            ? FireControl.BeamMultiplier(ref shooter.Gun, stats, landed && !hit.IsPlayer ? hit.TargetId : -1, _time)
                             : 1f;
                         if (landed)
                         {
@@ -522,7 +517,6 @@ namespace FriendlyPersonShooter.Arena
                 Refit(ps);
             }
 
-
             if (ExpeditionWorld.Active && (_boxes == null || _boxesLayer != ExpeditionWorld.Layer))
             {
                 _boxesLayer = ExpeditionWorld.Layer;
@@ -535,41 +529,6 @@ namespace FriendlyPersonShooter.Arena
             {
                 _items.Remove(e);
                 ecb.DestroyEntity(e);
-            }
-
-            // Collected first: taking or opening spawns items, which can't happen mid-query.
-            _interacts.Clear();
-            foreach (var (input, transform, entity) in SystemAPI.Query<RefRO<ArenaInput>, RefRO<LocalTransform>>()
-                         .WithAll<ArenaPlayer>().WithEntityAccess())
-            {
-                if (!input.ValueRO.Interact.IsSet || !_players.TryGetValue(entity, out var state)) continue;
-                if (!state.BotKit || state.Loadout == null || state.Vitals.IsDown || state.Gallery.Open) continue;
-                _interacts.Add((state, transform.ValueRO.Position));
-            }
-            foreach (var (state, feet) in _interacts) Interact(state, feet, ecb);
-        }
-
-        /// <summary>
-        /// A bot's interact: take the nearest item it may take. (Players do this by shooting.)
-        /// </summary>
-        private void Interact(PlayerState state, float3 feet, EntityCommandBuffer ecb)
-        {
-            int id = state.Vitals.Id;
-            Entity bestItem = Entity.Null;
-            float bestD = InteractRange * InteractRange;
-            foreach (var kv in _items)
-            {
-                if (kv.Value.Owner != 0 && kv.Value.Owner != id) continue;
-                float d = math.distancesq(ExpeditionWorld.Near(kv.Value.Position, feet), feet + new float3(0f, 0.8f, 0f));
-                if (d >= bestD) continue;
-                bestD = d;
-                bestItem = kv.Key;
-            }
-            if (bestItem != Entity.Null)
-            {
-                if (!Take(state, _items[bestItem].Item, feet, ecb)) return;
-                _items.Remove(bestItem);
-                ecb.DestroyEntity(bestItem);
             }
         }
 

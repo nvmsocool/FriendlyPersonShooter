@@ -84,7 +84,7 @@ namespace FriendlyPersonShooter.Core.Arsenal
         public const float ScopeZoom = 0.5f;
         public const float ScopeSpreadBonus = 0.3f;
         public const float MagazineBonus = 0.25f;
-        /// <summary>Reload time is multiplied by (1 - this).</summary>
+        /// <summary>Capsule regrowth time is multiplied by (1 - this).</summary>
         public const float ReloadBonus = 0.15f;
         /// <summary>Strength of a payload mod's effects by tier (heals, buff and debuff strength).</summary>
         public static float PayloadStrength(ModTier tier) => tier == ModTier.Epic ? 1.2f : tier == ModTier.Rare ? 1.1f : 1f;
@@ -98,7 +98,6 @@ namespace FriendlyPersonShooter.Core.Arsenal
 
         public static bool IsPayload(ModKind k) => k >= ModKind.Vigor && k <= ModKind.Focus;
         public static bool IsSpecial(ModKind k) => k >= ModKind.Split && k <= ModKind.SelfShare;
-        public static bool IsStat(ModKind k) => k >= ModKind.Damage && k <= ModKind.Reload;
 
         public static PayloadKind Payload(ModKind k)
         {

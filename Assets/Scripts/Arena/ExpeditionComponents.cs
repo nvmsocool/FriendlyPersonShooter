@@ -19,6 +19,11 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>Essence the gate costs, and its color.</summary>
         [GhostField] public int Goal;
         [GhostField] public EssenceColor GoalColor;
+        /// <summary>Which of the gate tablet's slots are lit (slots 0-63, then 64-127; see EssenceSlots).</summary>
+        [GhostField] public ulong GateSlots0;
+        [GhostField] public ulong GateSlots1;
+        /// <summary>Which of the raid door's key slots are lit, each key color in turn (see RaidKey.SlotOffset).</summary>
+        [GhostField] public ulong KeySlots;
         /// <summary>The layer everyone is on (1 = the top). Clients build that layer's map from it.</summary>
         [GhostField] public byte Layer;
         /// <summary>Changing layer: seconds until everyone moves (0 = not changing), and to which layer.</summary>
@@ -135,6 +140,28 @@ namespace FriendlyPersonShooter.Arena
         {
             foreach (var c in RaidDoor.KeyColors) if (EssencePack.Get(key, c) < Rules.Cost(c)) return false;
             return true;
+        }
+
+        /// <summary>Essence of <paramref name="color"/> the key needs.</summary>
+        public static int Cost(EssenceColor color) => Rules.Cost(color);
+
+        /// <summary>Where <paramref name="color"/>'s slots start in <see cref="ExpeditionStatus.KeySlots"/>.</summary>
+        public static int SlotOffset(EssenceColor color)
+        {
+            int offset = 0;
+            foreach (var c in RaidDoor.KeyColors)
+            {
+                if (c == color) return offset;
+                offset += Rules.Cost(c);
+            }
+            return offset;
+        }
+
+        /// <summary>Is key slot <paramref name="k"/> of <paramref name="color"/> lit in <paramref name="slots"/>?</summary>
+        public static bool SlotLit(ulong slots, EssenceColor color, int k)
+        {
+            int bit = SlotOffset(color) + k;
+            return bit < 64 && ((slots >> bit) & 1UL) != 0;
         }
 
         /// <summary>How full one color of the key is, 0 to 1.</summary>

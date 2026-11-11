@@ -56,6 +56,42 @@ namespace FriendlyPersonShooter.Arena
         public InputEvent Unstuck;
         /// <summary>Middle mouse: ping what you're pointing at.</summary>
         public InputEvent Ping;
+        /// <summary>
+        /// How far between ticks the enemies this player saw were drawn (NetworkTime.InterpolationTickFraction).
+        /// The server rewinds targets to exactly that moment, not just the whole tick, so small fast enemies
+        /// (Mites) are where the player saw them.
+        /// </summary>
+        public float SeenFraction;
+
+        /// <summary>
+        /// The player's own hit test (see LocalShots): the tick these shot reports are for (0 = none), and for each of
+        /// that tick's first shots what it hit (LocalShots.Miss, Enemy, EnemyWeak, Player, Fragment), its id, and how
+        /// far along the shot it was (or where the shot stopped, for a miss).
+        /// </summary>
+        public int ShotTick;
+        public int ShotKind0, ShotKind1, ShotKind2;
+        public int ShotId0, ShotId1, ShotId2;
+        public float ShotDist0, ShotDist1, ShotDist2;
+
+        public void SetShot(int n, int kind, int id, float distance)
+        {
+            switch (n)
+            {
+                case 0: ShotKind0 = kind; ShotId0 = id; ShotDist0 = distance; break;
+                case 1: ShotKind1 = kind; ShotId1 = id; ShotDist1 = distance; break;
+                default: ShotKind2 = kind; ShotId2 = id; ShotDist2 = distance; break;
+            }
+        }
+
+        public void GetShot(int n, out int kind, out int id, out float distance)
+        {
+            switch (n)
+            {
+                case 0: kind = ShotKind0; id = ShotId0; distance = ShotDist0; break;
+                case 1: kind = ShotKind1; id = ShotId1; distance = ShotDist1; break;
+                default: kind = ShotKind2; id = ShotId2; distance = ShotDist2; break;
+            }
+        }
     }
 
     /// <summary>

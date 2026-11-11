@@ -28,6 +28,8 @@ namespace FriendlyPersonShooter.Arena
         private Material _raidFloorMat, _raidTileAMat, _raidTileBMat, _raidWallMat, _raidRockMat;
         private Material _raidGlowMat, _raidStateMat, _raidBeamMat;
         private Material _doorMat, _doorGlowMat, _doorPanelMat, _doorRingMat, _runeOffMat, _runeRedMat, _runeGreenMat, _runeBlueMat, _runePurpleMat;
+        /// <summary>Runes of the open door not yet filled: their colour, faint, so the door shows what its key needs.</summary>
+        private Material _runeGreenDimMat, _runeBlueDimMat, _runePurpleDimMat;
         private Material _bossMat, _bossArmorMat, _bossSeamMat, _bossThrustMat, _plateShutMat, _plateWarnMat, _plateOpenMat;
 
         // Arena
@@ -50,6 +52,9 @@ namespace FriendlyPersonShooter.Arena
         private readonly List<Matrix4x4> _dRuneGreen = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _dRuneBlue = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _dRunePurple = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _dRuneGreenDim = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _dRuneBlueDim = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _dRunePurpleDim = new List<Matrix4x4>();
         private float[] _doorRingGround;
         private System.Numerics.Vector2 _doorRingFor;
         // Boss
@@ -98,6 +103,9 @@ namespace FriendlyPersonShooter.Arena
             _runeGreenMat = MakeGlow(KeyGreenColor, 1.8f);
             _runeBlueMat = MakeGlow(KeyBlueColor, 1.8f);
             _runePurpleMat = MakeGlow(KeyPurpleColor, 1.8f);
+            _runeGreenDimMat = MakeGlow(KeyGreenColor * 0.6f, 0.6f);
+            _runeBlueDimMat = MakeGlow(KeyBlueColor * 0.6f, 0.6f);
+            _runePurpleDimMat = MakeGlow(KeyPurpleColor * 0.6f, 0.6f);
 
             _bossMat = MakeMat(new Color(0.3f, 0.2f, 0.4f));
             _bossArmorMat = MakeMat(new Color(0.48f, 0.42f, 0.56f));
@@ -314,13 +322,13 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// The raid doors. The open one has posts with key runes (red on the left, green on the right, lit as the
-        /// key fills), a panel that fills, a ring on the ground where to stand, motes swirling while it gathers,
+        /// The raid doors. The open one has posts with key runes (blue on the left, green on the right, purple across
+        /// the top: faint in their colour, lit as the key fills, so the door shows which colours it needs), a panel that fills, a ring on the ground where to stand, motes swirling while it gathers,
         /// and a beam. The others stand dark: bare stone with unlit runes.
         /// </summary>
         private void DrawDoor(ExpeditionStatus status)
         {
-            foreach (var l in new[] { _dStone, _dGlow, _dPanel, _dRing, _dRuneOff, _dRuneRed, _dRuneGreen, _dRuneBlue, _dRunePurple }) l.Clear();
+            foreach (var l in new[] { _dStone, _dGlow, _dPanel, _dRing, _dRuneOff, _dRuneRed, _dRuneGreen, _dRuneBlue, _dRunePurple, _dRuneGreenDim, _dRuneBlueDim, _dRunePurpleDim }) l.Clear();
             var doors = ExpeditionWorld.RaidDoors;
             for (int i = 0; i < doors.Count; i++)
             {
@@ -336,6 +344,9 @@ namespace FriendlyPersonShooter.Arena
             DrawList(_dRuneGreen, _runeGreenMat);
             DrawList(_dRuneBlue, _runeBlueMat);
             DrawList(_dRunePurple, _runePurpleMat);
+            DrawList(_dRuneGreenDim, _runeGreenDimMat);
+            DrawList(_dRuneBlueDim, _runeBlueDimMat);
+            DrawList(_dRunePurpleDim, _runePurpleDimMat);
         }
 
         private const float DoorWidth = 7f, DoorHeight = 8f;
@@ -363,13 +374,24 @@ namespace FriendlyPersonShooter.Arena
             var p = Near(ExpeditionWorld.ToFloat3(door, GroundAt(door)));
             if ((p - (Vector3)_camRef).sqrMagnitude > 400f * 400f) return;
             AddDoorStone(p);
-            for (int k = 0; k < 5; k++)
+            foreach (var c in RaidDoor.KeyColors) KeySlots(p, c, 0UL, false, _dRuneOff, _dRuneOff);
+        }
+
+        /// <summary>
+        /// One slot per essence of <paramref name="color"/> the key needs (see <see cref="EssenceSlots.DoorSlot"/>),
+        /// lit where <paramref name="lit"/> says (bits as in <see cref="ExpeditionStatus.KeySlots"/>).
+        /// </summary>
+        private static void KeySlots(Vector3 p, EssenceColor color, ulong lit, bool all, List<Matrix4x4> on, List<Matrix4x4> off)
+        {
+            int n = RaidKey.Cost(color);
+            var diamond = Quaternion.Euler(0f, 0f, 45f);
+            for (int k = 0; k < n; k++)
             {
-                float y = 1.6f + k * 1.25f;
-                foreach (float face in new[] { -0.72f, 0.72f })
+                Vector3 at = EssenceSlots.DoorSlot(color, k, out float size);
+                var list = all || RaidKey.SlotLit(lit, color, k) ? on : off;
+                foreach (float face in new[] { -1f, 1f })
                 {
-                    Box(_dRuneOff, p + new Vector3(-DoorWidth * 0.5f, y, face), Quaternion.identity, new Vector3(0.7f, 0.7f, 0.08f));
-                    Box(_dRuneOff, p + new Vector3(DoorWidth * 0.5f, y, face), Quaternion.identity, new Vector3(0.7f, 0.7f, 0.08f));
+                    Box(list, p + new Vector3(at.x, at.y, at.z * face), diamond, new Vector3(size, size, 0.08f));
                 }
             }
         }
@@ -386,23 +408,14 @@ namespace FriendlyPersonShooter.Arena
             AddDoorStone(p);
             Box(_dGlow, p + new Vector3(0f, h + 1.4f, 0f), Quaternion.Euler(0f, 0f, 45f), new Vector3(0.6f, 0.6f, 1.75f));
 
-            // Key runes on the front and back: Blue up the left post, Green up the right, Purple across the top;
-            // five each, lit by how full that color is.
+            // Key slots on the front and back, one per essence: Blue up the left post, Green up the right, Purple
+            // across the top. Shooting an empty one puts one of your essence of that color in, and it lights.
             bool collecting = status.RaidPhase == RaidPhase.Collecting;
-            float blueFill = gathering ? 1f : collecting ? RaidKey.Fill(status.Key, EssenceColor.Blue) : 0f;
-            float greenFill = gathering ? 1f : collecting ? RaidKey.Fill(status.Key, EssenceColor.Green) : 0f;
-            float purpleFill = gathering ? 1f : collecting ? RaidKey.Fill(status.Key, EssenceColor.Purple) : 0f;
-            for (int k = 0; k < 5; k++)
+            foreach (var c in RaidDoor.KeyColors)
             {
-                float y = 1.6f + k * 1.25f;
-                float need = (k + 1) / 5f - 0.001f;
-                foreach (float face in new[] { -0.72f, 0.72f })
-                {
-                    Box(blueFill >= need ? _dRuneBlue : _dRuneOff, p + new Vector3(-w * 0.5f, y, face), id, new Vector3(0.7f, 0.7f, 0.08f));
-                    Box(greenFill >= need ? _dRuneGreen : _dRuneOff, p + new Vector3(w * 0.5f, y, face), id, new Vector3(0.7f, 0.7f, 0.08f));
-                    Box(purpleFill >= need ? _dRunePurple : _dRuneOff, p + new Vector3((k - 2) * (w - 1.4f) / 5f, h + 0.45f, face), id,
-                        new Vector3(0.55f, 0.55f, 0.08f));
-                }
+                var on = c == EssenceColor.Blue ? _dRuneBlue : c == EssenceColor.Green ? _dRuneGreen : _dRunePurple;
+                var off = c == EssenceColor.Blue ? _dRuneBlueDim : c == EssenceColor.Green ? _dRuneGreenDim : _dRunePurpleDim;
+                KeySlots(p, c, collecting ? status.KeySlots : 0UL, gathering, on, off);
             }
 
             // The panel fills from the bottom as the key fills; it pulses while the door gathers.
@@ -702,13 +715,13 @@ namespace FriendlyPersonShooter.Arena
             switch (s.RaidPhase)
             {
                 case RaidPhase.Collecting when RaidKey.Full(s.Key):
-                    e.Append($"<color=#D9B3FF><b>Raid key full</b></color> {where}: anyone can <color=#FFD84D>shoot the door</color> to start the countdown\n");
+                    e.Append($"<color=#D9B3FF><b>Raid key full</b></color> {where}: the raid starts after the layer move\n");
                     break;
                 case RaidPhase.Collecting:
                     e.Append($"<color=#D9B3FF>Raid door</color> {where}: key {RaidKey.Text(s.Key)}\n");
                     break;
                 case RaidPhase.Gathering:
-                    e.Append($"<color=#D9B3FF><b>RAID DOOR OPEN</b></color> {where}: stand at it, going in in {t}s\n");
+                    e.Append($"<color=#D9B3FF><b>RAID IN {t}s</b></color>: the whole group goes in, wherever you are\n");
                     break;
                 case RaidPhase.Running:
                     e.Append($"<color=#B8B0D8>A group is in the raid ({t / 60}:{t % 60:00} left)</color>\n");
@@ -729,8 +742,8 @@ namespace FriendlyPersonShooter.Arena
             {
                 case AnnounceKind.RaidGathering:
                     return m.PlayerNetworkId != 0
-                        ? $"{PlayerColors.Tag(m.PlayerNetworkId)} <color=#D9B3FF>started the raid! Stand at the raid door: going in in {m.Value}s</color>\n"
-                        : $"<color=#D9B3FF>RAID STARTING! Stand at the raid door: going in in {m.Value}s</color>\n";
+                        ? $"{PlayerColors.Tag(m.PlayerNetworkId)} <color=#D9B3FF>filled the raid key! Everyone goes into the raid in {m.Value}s, wherever you are</color>\n"
+                        : $"<color=#D9B3FF>RAID STARTING! Everyone goes in in {m.Value}s, wherever you are</color>\n";
                 case AnnounceKind.RaidStarted:
                     return $"<color=#D9B3FF>{m.Value} player{(m.Value == 1 ? "" : "s")} went into the raid</color>\n";
                 case AnnounceKind.RaidCleared:
@@ -744,15 +757,17 @@ namespace FriendlyPersonShooter.Arena
                 case AnnounceKind.RaidPledged:
                     return $"{PlayerColors.Tag(m.PlayerNetworkId)} pledged {m.Value} to the raid key\n";
                 case AnnounceKind.GateUnlocked:
-                    return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} opened the gate ({m.Value} {(EssenceColor)m.OtherNetworkId})! It shuts in {(int)GateLook.OpenSeconds}s</color>\n";
+                    return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} filled the gate ({m.Value} {(EssenceColor)m.OtherNetworkId}) and it opened!</color>\n";
                 case AnnounceKind.ExpeditionComplete:
                     return $"<color=#FFE14D>{PlayerColors.Tag(m.PlayerNetworkId)} went through the gate in {m.Value / 60}:{m.Value % 60:00}</color>\n";
                 case AnnounceKind.GateClosed:
                     return $"<color=#FFB040>The gate shut. Opening it again costs {m.Value} {(EssenceColor)m.OtherNetworkId}</color>\n";
                 case AnnounceKind.LayerTravel:
                     if (m.Value == 0) return "<color=#FF9A40>The layer move was called off: a raid is starting</color>\n";
+                    if (m.OtherNetworkId == ExpeditionWorld.Layer)
+                        return $"<color=#9AD8FF><b>The last gate is open!</b> The expedition ends for everyone in {m.Value}s</color>\n";
                     return m.OtherNetworkId > ExpeditionWorld.Layer
-                        ? $"<color=#9AD8FF><b>{PlayerColors.Tag(m.PlayerNetworkId)} went through the gate!</b> The whole group drops to layer {m.OtherNetworkId} in {m.Value}s</color>\n"
+                        ? $"<color=#9AD8FF><b>The gate is open!</b> The whole group drops to layer {m.OtherNetworkId} in {m.Value}s, wherever you are</color>\n"
                         : $"<color=#9AD8FF><b>{PlayerColors.Tag(m.PlayerNetworkId)} stepped into the portal!</b> The whole group climbs to layer {m.OtherNetworkId} in {m.Value}s</color>\n";
                 case AnnounceKind.LayerArrived:
                     return m.Value > m.OtherNetworkId

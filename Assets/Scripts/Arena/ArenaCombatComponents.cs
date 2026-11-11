@@ -219,6 +219,10 @@ namespace FriendlyPersonShooter.Arena
         [GhostField(Quantization = 10)] public float Pitch;
         /// <summary>Seed for how this enemy looks (see Core.Avatars.BugLook), so every client draws the same bug.</summary>
         [GhostField] public uint LookSeed;
+        /// <summary>The enemy's id, so a player's own hit test can name what it hit (see LocalShots).</summary>
+        [GhostField] public int Id;
+        /// <summary>Weak points grow by this (Mark), for the player's own hit test.</summary>
+        [GhostField(Quantization = 100)] public float WeakScale;
     }
 
     /// <summary>A downed player's soul fragment. Shoot it to help revive them.</summary>
@@ -226,6 +230,8 @@ namespace FriendlyPersonShooter.Arena
     {
         [GhostField] public int OwnerNetworkId;
         [GhostField(Quantization = 100)] public float Opacity;
+        /// <summary>The fragment's hit target id, for a player's own hit test.</summary>
+        [GhostField] public int TargetId;
     }
 
     /// <summary>Singleton holding the soul fragment ghost prefab built in code.</summary>

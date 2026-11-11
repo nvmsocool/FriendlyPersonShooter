@@ -98,6 +98,20 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
+        public void DeepestGate_CountsDownToTheEnd()
+        {
+            var t = new LayerTravel(LayerSettings.LayerCount);
+            Assert.That(t.BeginDown(0.0, 1), Is.False);
+            Assert.That(new LayerTravel(1).BeginFinish(0.0, 1), Is.False, "only the deepest layer's gate ends the run");
+            Assert.That(t.BeginFinish(5.0, 2), Is.True);
+            Assert.That(t.Finishing && t.StartedBy == 2, Is.True);
+            Assert.That(t.Step(5.0 + LayerTravel.Countdown - 0.1), Is.False);
+            Assert.That(t.Step(5.0 + LayerTravel.Countdown), Is.True);
+            Assert.That(t.Layer, Is.EqualTo(LayerSettings.LayerCount));
+            Assert.That(t.Pending || t.Finishing, Is.False);
+        }
+
+        [Test]
         public void Map_RemembersItsLayer()
         {
             // The zone art builds each layer's own biome from this.

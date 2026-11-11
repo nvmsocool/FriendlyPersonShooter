@@ -152,6 +152,8 @@ namespace FriendlyPersonShooter.Arena
 
         private float _yaw;
         private float _pitch;
+        /// <summary>When the trigger was last held: a burst keeps firing a moment after it's let go, so shots are reported a little longer.</summary>
+        private double _lastFire = -10;
 
         protected override void OnCreate()
         {
@@ -193,12 +195,24 @@ namespace FriendlyPersonShooter.Arena
             bool unstuck = RequestUnstuck;
             RequestUnstuck = false;
 
-            foreach (var input in SystemAPI.Query<RefRW<ArenaInput>>().WithAll<GhostOwnerIsLocal, ArenaPlayer>())
+            double now = SystemAPI.Time.ElapsedTime;
+            if (fire) _lastFire = now;
+            var time = SystemAPI.GetSingleton<NetworkTime>();
+            foreach (var (input, entity) in SystemAPI.Query<RefRW<ArenaInput>>().WithAll<GhostOwnerIsLocal, ArenaPlayer>().WithEntityAccess())
             {
-                var i = new ArenaInput { Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0, Zoom = zoom ? 1 : 0, Sprint = sprint ? 1 : 0 };
+                var i = new ArenaInput
+                {
+                    Horizontal = h, Vertical = v, Yaw = _yaw, Pitch = _pitch, Fire = fire ? 1 : 0, Zoom = zoom ? 1 : 0, Sprint = sprint ? 1 : 0,
+                    SeenFraction = SystemAPI.GetSingleton<NetworkTime>().InterpolationTickFraction,
+                };
                 if (jump) i.Jump.Set();
                 if (unstuck) i.Unstuck.Set();
                 if (ping) i.Ping.Set();
+                // The player decides their own hits.
+                if (now - _lastFire < 0.5 && time.ServerTick.IsValid)
+                {
+                    LocalShots.Report(EntityManager, entity, (int)time.ServerTick.TickIndexForValidTick, ref i);
+                }
                 input.ValueRW = i;
             }
         }

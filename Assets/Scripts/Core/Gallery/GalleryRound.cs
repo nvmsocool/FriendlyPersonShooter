@@ -17,14 +17,8 @@ namespace FriendlyPersonShooter.Core.Gallery
         Reward = 3,
         /// <summary>Claiming a dropped essence cache.</summary>
         Cache = 4,
-        /// <summary>Banking one colour of essence, a target at a time.</summary>
-        Bank = 5,
-        /// <summary>Unlocking the gate down.</summary>
-        Gate = 6,
-        /// <summary>Starting the group's move to another layer (gate portal or up-portal).</summary>
+        /// <summary>Starting the group's move up a layer (the up-portal).</summary>
         Travel = 7,
-        /// <summary>Starting the raid's gather at the door.</summary>
-        RaidStart = 8,
     }
 
     /// <summary>How a gallery is won.</summary>

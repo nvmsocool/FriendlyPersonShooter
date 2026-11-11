@@ -32,8 +32,8 @@ A session is an expedition of about 20–40 minutes: head out, hunt drills for t
 flowchart LR
     A["Explore a region<br/>follow tips and landmarks"] --> B["Hunt drill enemies<br/>each family drops its color"]
     B --> C["Regroup with friends<br/>trade tips, buffs, essence"]
-    C --> D["Bank essence<br/>carried until a door or gate"]
-    D --> E["Open a gate or raid<br/>spend essence, often pooled"]
+    C --> D["Bank essence<br/>shoot the gate's empty slots"]
+    D --> E["Fill a gate or raid key<br/>the last slot sends everyone"]
     E --> F["Loot mods and frames<br/>then head somewhere harder"]
     F --> A
 ```
@@ -94,14 +94,14 @@ Essence comes in six colors, one per enemy family, and its main use is opening g
 **Carried vs. banked**
 
 - You can carry at most **7 of each color**. Essence over that is lost (an orb you shoot when that color is full is wasted), so you go back and bank often. Banked essence, the party's pool, has no cap.
-- Essence you pick up is *carried* until you bank it at a **bank crystal**, which stands beside every **raid door** and **gate**. One orb per color you carry circles the crystal; shoot one to bank that color in a shooting gallery: targets appear one at a time, each holding up to 5 of that color. Hit one and its essence is banked; let it run out and its essence is lost. Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank for 60 seconds. Standing at a raid door pledges banked essence to its key (bots pledge carried essence too).
+- Essence you pick up is *carried* until you bank it by **shooting an empty slot on the gate** (see Gates below): each hit on an empty slot banks one essence of the gate's color from what you carry, and that slot lights. A shot at a lit slot, or with none of that color carried, does nothing. Carrying 5 and hitting 3 empty slots banks 3. There's no gallery and no bank crystal. Shrines don't bank: they're where you respawn and where Reset position takes you, so banking there would make a reset a free trip home. After a Reset position you can't bank or fill a raid key for 60 seconds. The raid key fills the same way: shoot an empty slot on the raid door (see Raid keys below). Bots, who can't aim at slots, still bank at a gate and pledge at a raid door by walking up.
 - Banked essence goes into your **party's shared bank** (a party is a group you've teamed up with): everyone in the party banks into it and spends from it. Carried essence and caches stay personal. A solo player's bank is their own.
 - When you bleed out (see Downed and revive), half your carried essence drops as a **cache** where you fell. Shoot a cache to claim it in a gallery (hit every target in time). Any player who claims your cache sends it back to you and gets a small kudos reward. Returning a friend's lost essence becomes a common good deed.
 
 **What it's for**
 
-- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access. An opening lasts 90 seconds; then the gate shuts and the next opening costs 20 more (40, 60, 80...), so the gate stays a goal instead of a door left open.
-- **Raid keys** cost several colors at once (today 12 Blue + 8 Purple + 12 Green). One player rarely has the mix, so groups pool essence.
+- **Gates** to deeper regions cost one color in bulk (for example 40 Yellow). A party pays once from its shared bank, and every member gets access. An opening lasts 90 seconds; then the gate shuts and the next opening costs 20 more (40, 60, 80...), so the gate stays a goal instead of a door left open. A stone tablet over the gate has one slot per essence the price needs (40 slots for 40 Yellow, ten to a row), in the gate's color. Shooting an empty slot banks one carried essence of that color and lights that slot, so you can count what's left; essence banked another way (a bot) lights the first empty ones. **When the last slot lights, the gate opens by itself** and the whole group's 10-second countdown down a layer starts at once (see Moving between layers); there's nothing else to shoot. If a raid is on or another move is pending, it opens as soon as that's over.
+- **Raid keys** cost several colors at once (today 12 Blue + 8 Purple + 12 Green). One player rarely has the mix, so groups pool essence. The open raid door has one slot per essence of the key (12 Blue up the left post, 12 Green up the right, 8 Purple across the lintel), faint until filled. Shooting an empty slot puts one essence of its color into the key (carried first, then banked) and lights that slot; anyone can fill it, party or not. **When the last slot lights, the raid's 20-second countdown starts at once**, and at its end every player on the layer goes in, wherever they are (see Raids).
 - **Attunement** (small, optional): spend essence to reroll a mod's secondary stat.
 
 **Gifting, not trading.** Players can give essence to anyone nearby, for free, including players outside their party. There's no market, no currency and no way to ask for something in return inside the game. This keeps the economy social and gives bots and sellers nothing to sell.
@@ -140,15 +140,12 @@ Every action is a shot (pillar 5). Small ones happen at once: shoot an essence o
 | Starting gun | (opens when you arrive) | 3 gun cards drift slowly | none | The gun you shot is yours |
 | Loot box, boss reward | the box or reward chest | 3 item targets, each in its preview color | 10 s, one shot | The item you shot is equipped; a miss or time-out spends it |
 | Dropped cache | the cache | 3 targets, hit them all | 10 s | The cache is claimed |
-| Banking | a color's orb at a bank crystal | one target at a time, up to 5 essence each | 3 s per target | Hits are banked, misses lost |
-| Gate | the gate, when the party bank can pay | 3 numbered targets, in order | 10 s | The gate opens for the party |
-| Changing layer | the open gate, or the up-portal | 1 fast target | 8 s | The 10 s group countdown starts |
-| Raid start | the raid door, key full | 1 target | 10 s | The 20 s gather countdown starts |
+| Going up a layer | the up-portal | 1 fast target | 8 s | The 10 s group countdown starts |
 | Reload | your flung payload capsule | none: it's in the world | 2.2 s flight | A full capsule (see Guns, mods and builds) |
 
-**Deeper is harder.** Targets shrink (4°, 3°, then 2.2° across), move faster (×1, ×1.5, ×2) and give less time (×1, ×0.85, ×0.7) on layers 1, 2 and 3. Caches need 3, 5, then 7 hits, and gates 3, 4, then 5 in order.
+**Deeper is harder.** Targets shrink (4°, 3°, then 2.2° across), move faster (×1, ×1.5, ×2) and give less time (×1, ×0.85, ×0.7) on layers 1, 2 and 3. Caches need 3, 5, then 7 hits. Gates and raids have no gallery: filling their last slot starts the countdown.
 
-**Bots** can't see galleries, so they still bank, open gates, claim caches and travel by walking up, as before. They catch their capsule 95%, 85% or 75% of the time by layer.
+**Bots** can't see galleries, so they still bank, claim caches and travel by walking up, as before. They catch their capsule 95%, 85% or 75% of the time by layer.
 
 ## Chains and combos
 
@@ -267,16 +264,16 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 
 **Moving between layers (built).** The group moves together, so friends are never on different layers.
 
-- Shooting the open gate on layer 1 or 2 (and hitting its gallery's target) starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then the whole group goes to the next layer's start.
-- On layers 2 and 3, an **up-portal** (a stone ring with a blue beam) stands 12 m from the start. Shooting it (and its gallery's target) starts the same countdown back up, and the group lands just in front of the upper gate. That gate stays open to them for free, so they can go back down.
-- Layer 3's gate ends the expedition.
-- Moving can't start while a raid gathers, runs or celebrates. A countdown already going is called off if a raid starts.
+- Filling the gate's last slot on layer 1 or 2 opens it and starts a 10-second countdown for everyone, with a HUD line and a big number for the last 5 seconds. Then every player on the layer goes to the next layer's start, wherever they are. A gate that's open to the group without a countdown (they came back up, or a raid called the move off) starts it when anyone shoots it.
+- On layers 2 and 3, an **up-portal** (a stone ring with a blue beam) stands 12 m from the start. Shooting it (and its gallery's target) starts the same countdown back up, and the group lands just in front of the upper gate. That gate stays open to them for free: shooting it starts the countdown back down.
+- Layer 3's gate ends the expedition: filling it starts the same 10-second countdown, and then everyone's run is complete.
+- Moving can't start while a raid gathers, runs or celebrates. A full raid key waits for a layer countdown to finish before its own starts.
 - Each layer has its own map from the world seed, with its own enemies, gate, raid doors, loot boxes and Colossus. Carried essence, the party bank, the raid key, kudos and the run clock carry over. Dropped caches go back to their owners.
 - Gate colors: 40 Yellow on layer 1, 40 Blue on layer 2, 40 Purple on layer 3.
 - Layer 2 has more spawns and more zones mixing two colors. Layer 3 has only Skitters, Sentinels, Bulwarks and Divers, and half as many blooms.
 
 - **Gates** sit in specific zones and lead down one layer. Access is paid in essence and resets with each reseed. A party pays once from its shared bank and every member gets access. A party can pass only once every member has access, so someone who joins later is covered by the shared bank or a gift. Going back up is always free, so experienced players can return and help newer ones.
-- **Raids** are doors in the world. Once its key is fully pooled, anyone can shoot the door (and its gallery's target) to start a short countdown, so the group goes when it's ready; whoever is standing at the door when it ends goes in together, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot (XP and an item; raids never pay essence, and enemies inside drop none), and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
+- **Raids** are doors in the world. When its key's last slot is filled, a 20-second countdown starts at once; when it ends, every player on the layer goes in together, wherever they are and whether they're up or down, party or not. Raids take 4–8 players, the boss scales to the group size. When the boss dies it blows apart, everyone inside is paid on the spot (XP and an item; raids never pay essence, and enemies inside drop none), and the group can stay up there to celebrate for up to 5 minutes; each player goes home through an exit portal whenever they like. After a wipe or a timeout everyone returns to the door's zone.
 - **Several raid doors, one open at a time.** A layer has 4 raid doors by shrines, spread at least 150 m apart; the first stands near the start. Only one is open. Clearing its raid spends it: it goes dark, and the next door opens somewhere else, so the group travels to raid again. Once all four are spent they all come back except the one just cleared. A wipe or a timeout leaves the door open. Every door banks essence, open or dark.
 - **A raid is a run, not one fight.** Each run strings together random rooms (puzzles and skill checks), then a boss, plus one run modifier, so no two runs play the same. Rooms need the group to work together without voice (the HUD and the room itself say what to do), reward shooting allies or accurate aim, and scale to the group. Failing a room costs time, never the run; solving one pays everyone inside and opens a portal to the next. Every room has at least two enemies in it until it's solved, from the moment the group arrives: Skitters climb on at the room's edge, and Wisps hover over the Gauntlet's stones. The build order lives in `Docs/RaidDevPlan.md`.
 - **World bosses** land in the open on a timer, near a landmark close to where players are. No key and no group needed: anyone who shows up can fight, and everyone who hits it is paid. A tall beam and a HUD line point everyone to it. A world boss fights differently from raid bosses: raid bosses test aim under pressure in a closed room, world bosses test movement in the open (dodging, jumping, using cover).
@@ -289,7 +286,7 @@ The world is a set of zone maps that wrap around at the edges, one map per diffi
 - Neighboring zones meet at the same ground height all along their shared edge, so the seams don't show.
 - Zones are stitched from hand-built tiles (ruins, rivers, towers, canyons) using the seed. Hand-built pieces keep the shooting spaces good; the seed changes their layout and color bias.
 - Every zone has a few named **landmarks** ("the Broken Tower", "Twin Falls") so players can give directions: "purple's past the Broken Tower." The compass and quick-chat use these names.
-- Every zone has a few **shrines** for respawning. Banking happens at the raid door and gates (every raid door banks, open or dark).
+- Every zone has a few **shrines** for respawning. Banking happens at the gate's slots, and the raid key fills at the open raid door's slots.
 - **Trails.** Worn paths about 3 m wide link every zone's landmarks, shrines, gate and raid door to a hub (the landmark nearest the middle), and run out to the middle of each zone edge, where the neighbour's trail picks up. They follow gentle ground and avoid water and hex columns. No trees grow within 5 m and no rocks sit on them, so following a trail always leads somewhere named.
 - **Open ground.** How thick plants grow depends on the zone: forests stay dense, while meadows have about a quarter of the trees and other zones under half. About a third of the ground is open glade with no trees. Most shrubs stay under 1.5 m, so you can see over them, and landmarks, shrines and gates stand in wide clearings.
 - **No dead ends.** Generation fills small pits so one step climbs out. If you still get stuck, **Reset position** in the Esc menu sends you to the nearest shrine (3-second cooldown). You keep your carried essence but can't bank it for 60 seconds.
@@ -357,7 +354,9 @@ Cheating is pointless here because there is no one to beat and nothing to sell, 
 
 **What a cheater actually does to others:** very little, and some of it helps. An aimbotting medic lands every heal. The main harm is trivializing a shared raid, which only matters to that group.
 
-**Still enforced on the server:** hit validation, movement speed, essence pickups and drop rates. The host's game is the server, so a modded client can't spoil the group's run (no teleporting to blooms, no conjuring essence to gift). There are no leaderboards to protect.
+**Each player decides their own hits.** A shot hits what you saw it hit: your own game tests it against the enemies and friends where your screen drew them, and the host takes your word for it (it only checks the target is alive and within your gun's reach). A modded client could fake hits, but that only kills enemies faster for the whole group. Crystals, world objects (orbs, boxes, the capsule, the gate) and bots' shots are still tested by the host.
+
+**Still enforced on the server:** movement speed, essence pickups and drop rates. The host's game is the server, so a modded client can't spoil the group's run (no teleporting to blooms, no conjuring essence to gift). There are no leaderboards to protect.
 
 **Watch out for:** any future feature that ranks players (speedrun boards, raid clear times) brings back the reason to cheat. Keep such boards opt-in, separate and cosmetic-only.
 
@@ -546,19 +545,29 @@ Steps 1–4 are built and pass their bot-only checks; steps 5 and 6 are built. E
 - Checked in the Editor with bots: the starting-gun, loot box, reward chest, cache, bank, gate, travel (down and up) and raid-start galleries all work. So do a time-out, lost bank targets, protection from damage, orbs and the capsule. 402 Core tests pass.
 - **Balance to watch:** with no reload pauses, sustained damage over a long fight is 30% (Beam) to 59% (Launcher) higher than before, though the plain shots after the capsule empties carry no payload. Damage is unchanged until the playtest shows whether enemies die too fast.
 
-**Easier Wisps (Nov 9, 2026; not yet playtested).** Wisps were much harder than the other families. Their hit sphere grows from 0.35 m to 0.5 m radius (drawn to match) and they stay hittable for 0.9 s after each blink (was 0.6 s); deeper tiers still shrink both. The objective's light beam is hidden within 40 m of the objective, so it no longer stands in the middle of the fight.
+**Easier Wisps (Nov 9, 2026; not yet playtested).** Wisps were much harder than the other families. Their hit sphere grows from 0.35 m to 0.5 m radius (drawn to match) and they stay hittable for 0.9 s after each blink (was 0.6 s); deeper tiers still shrink both. The objective's light beam is hidden within 40 m of the objective, so it no longer stands in the middle of the fight (the beam was later removed altogether).
 
 **Carry cap and a text-free HUD (Nov 9, 2026; not yet playtested).**
 - Players carry at most 7 of each color; anything over is lost. Bots too. Banked essence has no cap.
 - The HUD is almost free of text. Top left: an hourglass that empties over the run's 20 minutes (red in the last 2), and for each color a cluster of 7 slots that fill as you carry it. Health, shield and XP are bars without numbers; the XP bar turns gold when you have skill points to spend. The minimap loses its range label. The chain you hold hangs in the top right as coloured links (see Chains and combos) instead of a text line.
 - Buffs are small icons above the bars, each in its payload's colour and its own shape (Might a triangle, Haste a diamond, Frenzy a hexagon, Ward a shield, Focus a target, Relay a circle with a dot per hit left). Each fills clockwise with its time left, and a gold backing marks buffs in a combo. The shield timer is gone; the shield bar shows the shield.
-- The objective, layer, banked amounts, directions, raid key, raid rooms and boss bars are no longer on screen. The light beams, the bank crystals and the galleries still guide you.
+- The objective, layer, banked amounts, directions, raid key, raid rooms and boss bars are no longer on screen. The light beams (the Colossus, the raid door and the up-portal), the bank crystals and the galleries still guide you.
 - The gun, your totals, the team list and the join code show only with the Esc menu.
 - Still text: quick-chat and kudos lines, ping labels, damage numbers, shoot prompts, gallery titles and the big center messages.
 
 **Enemies in every raid room (Nov 9, 2026; not yet playtested).** Each room keeps at least 2 enemies until it's solved, topped up at once (Skitters, or Wisps over the Gauntlet). The Gauntlet had none before, and the puzzle rooms had none for their first 10 s.
 
 **Robotic insect enemies (Nov 9, 2026; first pass, not yet playtested).** The cubes and pillars are replaced by low-poly robotic insects in the robots' style, each built from a seed every client shares. Each is sized to its hit sphere. Walkers scuttle on alternating legs while they move, fliers beat their wings, and Skitters, Wisps and Mites turn to face where they're going. The gameplay marks stay on top: the Sentinel's eye and lid, the Bulwark's plate (on its nose), the elite crown, bars and debuff marks. A Wisp between blinks is a small grey ghost, and a telegraph turns the whole bug orange. Mites share 12 looks to keep swarms cheap. Glimmers are little butterflies hovering in place, their wings banded in all six essence colours (the colours they can drop), in a different order on each. The raid bosses and the Colossus are unchanged.
+
+**Esc, Mites, gate and door colors, no objective beam, own hits (Nov 9, 2026; not yet playtested).**
+- The light beam over the current objective is gone. It pointed at the hunting ground for the gate's color whatever that was, so it gave the answer away; players now go and look at the gate (and the raid door) to see which colors they need. The Colossus and up-portal beams stay.
+- Esc closes the Esc menu again (it only opened it).
+- Hits on small, fast enemies: the server rewound targets to the whole tick a player saw, but clients draw enemies between ticks. A Mite (0.15 m hit sphere) was drawn up to 0.11 m from where the server checked the shot, even with no network lag, so the fastest Mite of a swarm could be all but unhittable. Inputs now carry the in-between fraction and the server rewinds to exactly the drawn moment (measured: 0.000 m off).
+- The gate and the open raid door show what they need as one slot per essence, lit as it's banked or pledged (see Essence above).
+- Banking is shooting an empty slot on the gate (one essence each, from what you carry); the raid key fills by shooting the door's empty slots. The bank crystals, their color orbs and the banking gallery are gone.
+- Filling the gate's last slot opens it and starts the 10 s countdown at once; filling the raid key's last slot starts the 20 s raid countdown at once. When either ends, every player on the layer is moved, wherever they are (layer 3's gate completes everyone's run instead). The gate, layer-move and raid-start galleries are gone, and bots no longer press E at the door. Checked in the Editor with 3 bots: the gate opened as its bank filled and 10 s later all 4 players (two ~700 m away) were on layer 2; the raid key's last essence started the countdown and 20 s later all 4 went in from ~600 m away; layer 3's gate completed all 4 runs.
+- Each player now decides their own hits (see Anti-cheat by design): a shot hits exactly what the shooter saw, however laggy the connection. Both sides draw the shot spread from the same seed, so the host fires the same shots; if a player's report doesn't arrive in time the host tests that shot itself.
+- Bug fixed: a player could never hit the enemy whose number matched their own player number (the hit test skipped "the shooter" by number, enemies included). This was the Mite in each swarm that couldn't be shot.
 
 **Layer biomes (Nov 9, 2026; first pass, not yet playtested).** Layers 2 and 3 have their own biomes, Wonderwood and Glowdeep (see Biomes above), with their own colour moods, plants, lighting, sky, terrain character and landmark mix. Layer 1 builds exactly as before. Checked over 6 zones per layer: walkable ground is 86–95% on layer 2 and 87–97% on layer 3 (layer 1: 90–96%), and the server's headless build matches the clients' colliders in all 12.
 

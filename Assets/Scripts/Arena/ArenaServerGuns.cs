@@ -52,7 +52,7 @@ namespace FriendlyPersonShooter.Arena
         private IReadOnlyList<LootBox> _boxes;
         private int _boxesLayer;
         private readonly Dictionary<int, Entity> _connections = new Dictionary<int, Entity>();
-        private int _boxesOpened, _itemsTaken, _blastCount, _ricochets;
+        private int _boxesOpened, _itemsTaken, _blastCount, _ricochets, _reportedHits, _unreported, _ownShots;
         /// <summary>Playtest tuning numbers (humans only), logged as a [Guns] line.</summary>
         private readonly GunUsage _usage = new GunUsage();
         private double _nextGunLog = 30;
@@ -176,14 +176,17 @@ namespace FriendlyPersonShooter.Arena
                 var aim = math.normalize(ArenaSettings.Forward(input.ValueRO.Yaw, input.ValueRO.Pitch));
                 bool zoomed = input.ValueRO.Zoom != 0;
                 float reach = stats.Range * PlayerProgress.RangeFor(ranks);
-                BuildTargets(seenTick, shooter.Vitals.Id, eye);
+                BuildTargets(seenTick, shooter.Vitals.Id, eye, input.ValueRO.SeenFraction);
                 var payloadFx = EffectsOf(stats);
                 // Shots after the capsule runs dry are plain: damage, and the plain heal on allies.
                 var plainFx = payloadFx;
                 plainFx.Payload = PayloadKind.None;
                 plainFx.Second = PayloadKind.None;
-                var rng = new CombatRandom(NextSeed() | 1u);
                 int shooterId = owner.ValueRO.NetworkId;
+                // Spread from a seed the player's game knows too, so its own hit test (LocalShots) fired the same shots.
+                var rng = new CombatRandom(LocalShots.Seed(shooterId, tick));
+                // Players decide their own hits; bots, and a tick the player didn't report, use the host's test.
+                bool reported = !shooter.BotKit && input.ValueRO.ShotTick == tick;
                 double seenTime = _time - GalleryClock.Seconds(delay);
                 if (step.Launched) LaunchCapsule(shooter, shooterId, eye, input.ValueRO.Yaw, input.ValueRO.Pitch, payloadFx.Payload, ecb);
 
@@ -194,13 +197,26 @@ namespace FriendlyPersonShooter.Arena
                     var dir = ToFloat3(d);
                     float range = math.min(reach, ArenaLayout.RaycastCover(eye, dir, reach));
                     // Raid Color Locks: a crystal in front stops the shot.
+                    bool ownTest = reported && n < LocalShots.Claims;
+                    if (!shooter.BotKit) { if (ownTest) _ownShots++; else _unreported++; }
+                    int claimKind = LocalShots.Miss, claimId = 0;
+                    float claimDist = 0f;
+                    if (ownTest)
+                    {
+                        // The player's own terrain and cover decided how far the shot went; the host only checks reach.
+                        input.ValueRO.GetShot(n, out claimKind, out claimId, out claimDist);
+                        range = math.min(math.max(0f, claimDist), reach);
+                    }
                     int crystal = CrystalOnShot(shooter.Vitals.Id, eye, dir, range, out float crystalAt);
                     if (crystal >= 0) range = crystalAt;
                     // Loot boxes, items and reward chests are opened and taken by shooting them; the capsule is caught.
                     var obj = shooter.BotKit || _time < shooter.NextObjectShot ? default : WorldObjectOnShot(shooter, eye, dir, range, seenTime);
                     if (obj.Kind != ShotObjectKind.None) range = obj.At;
                     var end = eye + dir * range;
-                    bool landed = HitScan.Cast(ToVec(eye), d, range, _targets, out var hit, shooter.Vitals.Id);
+                    // A crystal or a world object in front of what the player hit takes the shot instead.
+                    bool landed = ownTest
+                        ? Reported(shooterId, claimKind, claimId, claimDist, range, eye, d, out var hit)
+                        : HitScan.Cast(ToVec(eye), d, range, _targets, out hit, shooter.Vitals.Id);
                     if (landed) end = ToFloat3(hit.Point);
                     if (!landed && obj.Kind != ShotObjectKind.None)
                     {
@@ -240,7 +256,8 @@ namespace FriendlyPersonShooter.Arena
                         {
                             var confirm = new HitConfirm { Point = end };
                             float damage = stats.Damage * stats.FalloffAt(hit.Distance) * mult;
-                            if (ApplyHit(shooter, stats, fx, hit.IsPlayer, hit.TargetId, hit.WeakPoint, damage, hit.Point, ref confirm, ecb))
+                            if (ApplyHit(shooter, stats, fx, hit.IsPlayer, hit.TargetId, hit.WeakPoint, damage, hit.Point, ref confirm, ecb) &&
+                                hit.Index >= 0)
                             {
                                 var t = _targets[hit.Index];
                                 t.Hittable = false;
@@ -253,6 +270,27 @@ namespace FriendlyPersonShooter.Arena
                     SendShot(shooterId, eye - new float3(0f, 0.2f, 0f), end, fx.Payload, stats.Frame.Kind, ecb);
                 }
             }
+        }
+
+        /// <summary>
+        /// A shot the player's own game reported (LocalShots) as a hit. The host takes their word for it, checking only
+        /// that it's within the shot's reach (and in front of any crystal or world object) and isn't the shooter.
+        /// Dead or missing targets are dropped later by ApplyHit.
+        /// </summary>
+        private bool Reported(int shooterId, int kind, int id, float distance, float range, float3 eye, Vector3 dir, out ScanHit hit)
+        {
+            hit = default;
+            if (kind == LocalShots.Miss || distance > range + 0.05f) return false;
+            bool player = kind == LocalShots.Player;
+            if (player && id == shooterId) return false;
+            if (kind == LocalShots.Fragment && id < FragmentIdBase) return false;
+            hit = new ScanHit
+            {
+                Index = -1, TargetId = id, IsPlayer = player, Distance = distance, WeakPoint = kind == LocalShots.EnemyWeak,
+                Point = ToVec(eye) + dir * distance,
+            };
+            _reportedHits++;
+            return true;
         }
 
         /// <summary>Launcher shells landing: everything within the burst is hit (enemies take less further out).</summary>
@@ -512,8 +550,7 @@ namespace FriendlyPersonShooter.Arena
         }
 
         /// <summary>
-        /// A bot's interact: take the nearest item it may take; failing that, start the raid countdown if it's at the
-        /// door with a full key. (Players do all of this by shooting.)
+        /// A bot's interact: take the nearest item it may take. (Players do this by shooting.)
         /// </summary>
         private void Interact(PlayerState state, float3 feet, EntityCommandBuffer ecb)
         {
@@ -533,9 +570,7 @@ namespace FriendlyPersonShooter.Arena
                 if (!Take(state, _items[bestItem].Item, feet, ecb)) return;
                 _items.Remove(bestItem);
                 ecb.DestroyEntity(bestItem);
-                return;
             }
-            TryStartRaid(id, feet);
         }
 
         /// <summary>

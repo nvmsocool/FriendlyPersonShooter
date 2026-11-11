@@ -71,7 +71,8 @@ namespace FriendlyPersonShooter.Core.Combat
 
         /// <summary>
         /// Casts a ray (direction need not be normalized) and returns true with the nearest hit
-        /// within <paramref name="maxRange"/>. Skips <paramref name="ignoreId"/> (the shooter).
+        /// within <paramref name="maxRange"/>. Skips the player <paramref name="ignoreId"/> (the shooter); an enemy
+        /// with the same number is still hit (enemy and player ids are counted separately).
         /// </summary>
         public static bool Cast(Vector3 origin, Vector3 direction, float maxRange, IReadOnlyList<HitTarget> targets,
             out ScanHit hit, int ignoreId = int.MinValue)
@@ -85,7 +86,7 @@ namespace FriendlyPersonShooter.Core.Combat
             for (int i = 0; i < targets.Count; i++)
             {
                 var t = targets[i];
-                if (!t.Hittable || t.Id == ignoreId) continue;
+                if (!t.Hittable || (t.IsPlayer && t.Id == ignoreId)) continue;
 
                 bool bodyHit = HitGeometry.RaySphere(origin, dir, t.BodyCenter, t.BodyRadius, out float bodyDist) &&
                                bodyDist <= maxRange;

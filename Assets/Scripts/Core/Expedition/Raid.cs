@@ -40,7 +40,7 @@ namespace FriendlyPersonShooter.Core.Expedition
 
     public enum RaidPhase : byte
     {
-        /// <summary>Taking pledges toward the key; with a full key, waiting for someone to shoot the door.</summary>
+        /// <summary>Taking pledges toward the key (a full key starts the gather at once).</summary>
         Collecting = 0,
         /// <summary>Someone started the countdown; when it ends, whoever stands at the door goes in.</summary>
         Gathering = 1,
@@ -115,10 +115,10 @@ namespace FriendlyPersonShooter.Core.Expedition
             }
         }
 
-        /// <summary>The key is full and the door waits for someone at it to start the countdown.</summary>
+        /// <summary>The key is full and the countdown hasn't started (only while a layer move is pending).</summary>
         public bool Ready => Phase == RaidPhase.Collecting && KeyFull;
 
-        /// <summary>Someone at the door pressed E: with a full key, the countdown starts. Returns true if it did.</summary>
+        /// <summary>With a full key, the countdown starts. Returns true if it did.</summary>
         public bool Begin(double now)
         {
             if (!Ready) return false;
@@ -146,6 +146,20 @@ namespace FriendlyPersonShooter.Core.Expedition
                 moved += took;
             }
             return moved;
+        }
+
+        /// <summary>
+        /// A player shot an empty key slot: one <paramref name="color"/> essence (carried first, then banked) goes
+        /// into the key. Only while collecting, and only while that color isn't full. Returns whether it did.
+        /// </summary>
+        public bool PledgeOne(EssenceWallet wallet, EssenceColor color)
+        {
+            if (wallet == null) throw new ArgumentNullException(nameof(wallet));
+            if (Phase != RaidPhase.Collecting || Array.IndexOf(KeyColors, color) < 0) return false;
+            if (_pledged[color] >= Settings.Cost(color)) return false;
+            if (wallet.Take(color, 1) <= 0) return false;
+            _pledged.Add(color, 1);
+            return true;
         }
 
         /// <summary>

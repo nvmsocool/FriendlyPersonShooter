@@ -19,9 +19,7 @@ namespace FriendlyPersonShooter.Arena
 
         private EntityQuery _orbQuery;
         private Material[] _essenceMats;
-        private Material _crystalMat;
         private readonly List<Matrix4x4>[] _essenceLists = new List<Matrix4x4>[EssenceColors.Count];
-        private readonly List<Matrix4x4> _crystals = new List<Matrix4x4>();
 
         private void CreateShootableQueries(EntityManager em)
         {
@@ -38,7 +36,6 @@ namespace FriendlyPersonShooter.Arena
                 _essenceMats[(int)c] = MakeGlow(color, 0.45f);
                 _essenceLists[(int)c] = new List<Matrix4x4>();
             }
-            _crystalMat = MakeGlow(new Color(0.75f, 0.9f, 1f), 1.1f);
         }
 
         /// <summary>Draws your orbs and the bank crystals, and says what shooting the thing under your crosshair does.</summary>
@@ -46,7 +43,6 @@ namespace FriendlyPersonShooter.Arena
         {
             EnsureShootableMaterials();
             foreach (var l in _essenceLists) l.Clear();
-            _crystals.Clear();
             if (local == Entity.Null || !_wrap)
             {
                 FlushShootables();
@@ -76,47 +72,19 @@ namespace FriendlyPersonShooter.Arena
             if (TryGetStatus(out var status) && !status.InRaid)
             {
                 var map = ExpeditionWorld.Map;
-                float spin = now * 50f;
-                foreach (var site in ShotTargets.BankSites(map))
-                {
-                    if (!ShotTargets.Bank(site, out var crystalAt)) continue;
-                    Vector3 c = Near(crystalAt);
-                    if ((c - eye).sqrMagnitude > 250f * 250f) continue;
-                    _crystals.Add(Matrix4x4.TRS(c, Quaternion.Euler(0f, spin, 0f), new Vector3(0.7f, 1.6f, 0.7f)));
-                    _crystals.Add(Matrix4x4.TRS(c - Vector3.up * (ShotTargets.BankHeight * 0.5f), Quaternion.identity, new Vector3(0.3f, ShotTargets.BankHeight, 0.3f)));
-                    foreach (var color in EssenceColors.All)
-                    {
-                        int carried = EssencePack.Get(status.CarriedAll, color);
-                        if (carried <= 0) continue;
-                        Vector3 o = Near(ShotTargets.BankOrb(crystalAt, color));
-                        _essenceLists[(int)color].Add(Matrix4x4.TRS(o, Quaternion.Euler(0f, spin * 2f, 0f), Vector3.one * (ShotTargets.BankOrbRadius * 2f)));
-                        if (RayHits(eye, dir, o, ShotTargets.BankOrbRadius, best, out float d))
-                        {
-                            best = d;
-                            prompt = $"Shoot to bank your {EssencePack.Named(color)} ({carried}): hit each target as it appears. A missed target's essence is lost.";
-                        }
-                    }
-                }
-
                 if (ShotTargets.Gate(map.Gates.Count > 0 ? map.Gates[0].Point.World : default, out var gate) && map.Gates.Count > 0 &&
                     RayHits(eye, dir, Near(gate), ShotTargets.GateRadius, best, out float gd))
                 {
                     best = gd;
-                    prompt = status.Phase >= ExpeditionPhase.PassThrough
-                        ? (ExpeditionWorld.Layer >= LayerSettings.LayerCount ? "Shoot the gate to finish the expedition" : "Shoot the gate to head down a layer")
-                        : "Shoot the gate to unlock it (when the party bank can pay)";
+                    prompt = status.Phase == ExpeditionPhase.PassThrough && status.LayerNext == 0
+                        ? (ExpeditionWorld.Layer >= LayerSettings.LayerCount ? "Shoot the gate to start the countdown to the end" : "Shoot the gate to start the countdown down a layer")
+                        : null;
                 }
                 if (LayerTravel.TryPortal(map, ExpeditionWorld.Layer, out var portalSpot) && ShotTargets.Portal(portalSpot, out var portal) &&
                     RayHits(eye, dir, Near(portal), ShotTargets.PortalRadius, best, out float pd))
                 {
                     best = pd;
                     prompt = "Shoot the portal to head up a layer";
-                }
-                if (status.RaidPhase == RaidPhase.Collecting && RaidKey.Full(status.Key) && ShotTargets.Door(ExpeditionWorld.RaidDoor, out var door) &&
-                    RayHits(eye, dir, Near(door), ShotTargets.DoorRadius, best, out float dd))
-                {
-                    best = dd;
-                    prompt = "Shoot the raid door to start the countdown";
                 }
                 using (var caches = _cacheQuery.ToComponentDataArray<LocalTransform>(Allocator.Temp))
                 {
@@ -127,15 +95,49 @@ namespace FriendlyPersonShooter.Arena
                         prompt = "Shoot the cache, then hit every target";
                     }
                 }
+                string slotPrompt = SlotPrompt(map, status, eye, dir, best);
+                if (slotPrompt != null) prompt = slotPrompt;
             }
             if (prompt != null) _prompt = prompt;
             FlushShootables();
         }
 
+        /// <summary>What shooting the essence slot under the crosshair would do (the slot takes the shot over the gate or door).</summary>
+        private string SlotPrompt(LayerMap map, ExpeditionStatus status, float3 eye, float3 dir, float range)
+        {
+            if (map.Gates.Count > 0 && status.Phase < ExpeditionPhase.PassThrough && status.Goal > 0)
+            {
+                var site = map.Gates[0].Point.World;
+                float3 foot = Near(ExpeditionWorld.ToFloat3(site, GroundAt(site)));
+                if (EssenceSlots.GateOnShot(foot, status.Goal, eye, dir, range, out int k, out _))
+                {
+                    var color = status.GoalColor;
+                    if (GateSlotLit(status, k)) return $"That slot is full: {status.Banked}/{status.Goal} {EssencePack.Named(color)} banked";
+                    return status.Carried > 0
+                        ? $"Shoot an empty slot to bank one {EssencePack.Named(color)} ({status.Carried} carried, {status.Banked}/{status.Goal} banked)"
+                        : $"Bring {EssencePack.Named(color)} and shoot an empty slot to bank it ({status.Banked}/{status.Goal} banked)";
+                }
+            }
+            if (status.RaidPhase == RaidPhase.Collecting)
+            {
+                var door = ExpeditionWorld.RaidDoor;
+                float3 foot = Near(ExpeditionWorld.ToFloat3(door, GroundAt(door)));
+                if (EssenceSlots.DoorOnShot(foot, eye, dir, range, out var color, out int k, out _))
+                {
+                    int have = EssencePack.Get(status.CarriedAll, color) + EssencePack.Get(status.BankedAll, color);
+                    string key = $"{EssencePack.Get(status.Key, color)}/{RaidKey.Cost(color)}";
+                    if (RaidKey.SlotLit(status.KeySlots, color, k)) return $"That slot is full: raid key {EssencePack.Named(color)} {key}";
+                    return have > 0
+                        ? $"Shoot an empty slot to put one {EssencePack.Named(color)} into the raid key ({key}; you have {have})"
+                        : $"Bring {EssencePack.Named(color)} and shoot an empty slot to put it into the raid key ({key})";
+                }
+            }
+            return null;
+        }
+
         private void FlushShootables()
         {
             for (int i = 0; i < _essenceLists.Length; i++) DrawList(_essenceLists[i], _essenceMats[i], _sphere);
-            DrawList(_crystals, _crystalMat);
         }
     }
 }

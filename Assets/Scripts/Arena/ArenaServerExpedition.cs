@@ -38,6 +38,9 @@ namespace FriendlyPersonShooter.Arena
         private Gate _gate;
         private CacheRegistry _caches;
         private Banking _banking;
+        /// <summary>Which slots on the gate's tablet and the raid door are lit (banking is shooting an empty one).</summary>
+        private readonly SlotBoard _gateSlots = new SlotBoard();
+        private readonly Dictionary<EssenceColor, SlotBoard> _keySlots = new Dictionary<EssenceColor, SlotBoard>();
         private readonly Dictionary<int, EssenceWallet> _wallets = new Dictionary<int, EssenceWallet>();
         /// <summary>Banked essence is one pool for the whole party; carried essence stays personal.</summary>
         private readonly EssenceAmounts _partyBank = new EssenceAmounts();
@@ -290,9 +293,35 @@ namespace FriendlyPersonShooter.Arena
             _spawned.Clear();
         }
 
+        /// <summary>
+        /// Keeps the lit slots matching what's in: the party bank of the gate's color (all lit while it's open) and
+        /// the raid key. A slot that was shot stays lit; essence from elsewhere lights the first empty ones.
+        /// </summary>
+        private void SyncSlots()
+        {
+            if (_gate != null) _gateSlots.Sync(_gate.Cost, _gate.IsOpen ? _gate.Cost : _partyBank[_gate.Color]);
+            if (_raid == null) return;
+            foreach (var c in RaidDoor.KeyColors)
+            {
+                if (!_keySlots.TryGetValue(c, out var board)) _keySlots[c] = board = new SlotBoard();
+                int have = _raid.Phase == RaidPhase.Collecting ? _raid.Pledged(c) : _raid.Phase == RaidPhase.Gathering ? _raid.Cost(c) : 0;
+                board.Sync(_raid.Cost(c), have);
+            }
+        }
+
+        private ulong KeySlotBits()
+        {
+            ulong bits = 0;
+            foreach (var kv in _keySlots) bits |= kv.Value.Bits() << RaidKey.SlotOffset(kv.Key);
+            return bits;
+        }
+
         /// <summary>Banking, the gate and caches for every player, then their HUD status.</summary>
         private void UpdateExpeditionPlayers()
         {
+            OpenFullGate();
+            SyncSlots();
+            ulong keySlots = KeySlotBits();
             foreach (var (owner, transform, status, entity) in SystemAPI
                          .Query<RefRO<GhostOwner>, RefRO<LocalTransform>, RefRW<ExpeditionStatus>>()
                          .WithAll<ArenaPlayer>().WithEntityAccess())
@@ -309,7 +338,8 @@ namespace FriendlyPersonShooter.Arena
                 {
                     lockedAtBank = !_banking.CanBank(id, _time) && _banking.IsAtBank(pos) && !wallet.CarriedAll().IsEmpty;
                 }
-                // Players do all of this by shooting (ArenaServerGallery); bots, who can't, by walking up.
+                // Players do all of this by shooting (ArenaServerGallery; banking is shooting the gate's empty
+                // slots); bots, who can't, by walking up.
                 if (state.BotKit && !state.Vitals.IsDown && !inRaid)
                 {
                     // At the raid door this runs after the key took its Red and Green (StepRaid goes first);
@@ -320,10 +350,9 @@ namespace FriendlyPersonShooter.Arena
                         if (banked > 0) Banked(id, banked);
                     }
 
-                    float toGate = _map.Distance(_gate.Site.Point.World, pos);
-                    if (toGate <= ExpeditionWorld.GateUseRadius) UnlockGate(id);
-                    // Layers 1 and 2: the gate leads down (the whole group, after a countdown). The deepest ends the run.
-                    if (toGate <= ExpeditionWorld.GatePassRadius) PassGate(id);
+                    // The gate opens itself once the bank fills it (OpenFullGate). A bot walking into a gate that's
+                    // open to it starts the countdown, as a player's shot does.
+                    if (_map.Distance(_gate.Site.Point.World, pos) <= ExpeditionWorld.GatePassRadius) BeginGateTravel(id);
 
                     _intScratch.Clear();
                     foreach (var c in _caches.All)
@@ -359,6 +388,9 @@ namespace FriendlyPersonShooter.Arena
                     BankedAll = EssencePack.Pack(wallet.BankedAll()),
                     Goal = tracker.GoalAmount,
                     GoalColor = color,
+                    GateSlots0 = _gateSlots.Bits(0),
+                    GateSlots1 = _gateSlots.Bits(64),
+                    KeySlots = keySlots,
                     Layer = (byte)ExpeditionWorld.Layer,
                     LayerCountdown = _travel != null ? _travel.SecondsLeft(_time) : 0f,
                     LayerNext = (byte)(_travel != null && _travel.Pending ? _travel.Target : 0),
@@ -382,7 +414,64 @@ namespace FriendlyPersonShooter.Arena
         private void Banked(int id, int amount)
         {
             _banked += amount;
+            _lastBanker = id;
             AddXp(id, amount * XpRewards.PerEssenceBanked);
+        }
+
+        /// <summary>Who banked last: the gate's opening is announced as theirs.</summary>
+        private int _lastBanker;
+
+        /// <summary>
+        /// The gate's last slot lit (the party bank can pay): it opens and the whole group's countdown starts at once.
+        /// It waits while a raid is on or another move is pending, and doesn't fire for a group that came back up
+        /// (the gate is already open to them; they shoot it to go down).
+        /// </summary>
+        private void OpenFullGate()
+        {
+            if (_gate == null || _travel == null || _gate.IsOpen || _travel.Pending || !RaidAllowsTravel) return;
+            if (_partyBank[_gate.Color] < _gate.Cost) return;
+            int id = _lastBanker;
+            if (WalletOf(id) == null || _gate.HasAccess(id))
+            {
+                id = 0;
+                foreach (int member in _wallets.Keys)
+                {
+                    if (_gate.HasAccess(member) || !_playerById.ContainsKey(member)) continue;
+                    id = member;
+                    break;
+                }
+                if (id == 0) return;
+            }
+            if (UnlockGate(id)) BeginGateTravel(id);
+        }
+
+        /// <summary>
+        /// Starts the whole group's countdown through the gate: down a layer, or on the deepest layer to the end of
+        /// the run. Needs the gate open to <paramref name="id"/>.
+        /// </summary>
+        private void BeginGateTravel(int id)
+        {
+            if (_travel == null || _gate == null || !_gate.HasAccess(id)) return;
+            if (_travel.CanGoDown)
+            {
+                TryGoDown(id);
+                return;
+            }
+            if (RaidAllowsTravel && _travel.BeginFinish(_time, id))
+                _announce.Add((AnnounceKind.LayerTravel, (int)LayerTravel.Countdown, id, _travel.Target));
+        }
+
+        /// <summary>The deepest gate's countdown ran out: everyone's run is complete, wherever they are.</summary>
+        private void FinishExpedition()
+        {
+            foreach (var kv in _trackers)
+            {
+                _gate.GrantAccess(kv.Key);
+                if (!kv.Value.PassedGate(_time)) continue;
+                _completions++;
+                _announce.Add((AnnounceKind.ExpeditionComplete, (int)kv.Value.Elapsed(_time), kv.Key, 0));
+                Debug.Log($"[Expedition] player {kv.Key} completed in {kv.Value.TimerText(_time)}");
+            }
         }
 
         /// <summary>Unlocks the gate with this player's party bank, if it isn't open to them and the bank can pay.</summary>
@@ -395,16 +484,6 @@ namespace FriendlyPersonShooter.Arena
             foreach (int member in _wallets.Keys) _gate.GrantAccess(member);
             _announce.Add((AnnounceKind.GateUnlocked, _gate.Cost, id, (int)_gate.Color));
             return true;
-        }
-
-        /// <summary>Through the open gate: the group heads down, or (on the deepest layer) the run is complete.</summary>
-        private void PassGate(int id)
-        {
-            var tracker = TrackerOf(id);
-            if (TryGoDown(id) || tracker == null || !tracker.PassedGate(_time)) return;
-            _completions++;
-            _announce.Add((AnnounceKind.ExpeditionComplete, (int)tracker.Elapsed(_time), id, 0));
-            Debug.Log($"[Expedition] player {id} completed in {tracker.TimerText(_time)}");
         }
 
         /// <summary>Claims a dropped cache: your own back into your pocket, someone else's into their bank (kudos to you).</summary>

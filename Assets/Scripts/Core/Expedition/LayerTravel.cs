@@ -13,9 +13,9 @@ namespace FriendlyPersonShooter.Core.Expedition
     }
 
     /// <summary>
-    /// The group moves between layers together. Walking through an open gate (layers 1 and 2) or into the
-    /// up-portal by the start (layers 2 and 3) starts a short countdown for everyone, so friends can catch up;
-    /// then the whole group moves. The deepest layer's gate ends the expedition instead.
+    /// The group moves between layers together. Filling the gate's slots (layers 1 and 2) or shooting the
+    /// up-portal by the start (layers 2 and 3) starts a short countdown for everyone; then the whole group moves,
+    /// wherever they are. The deepest layer's gate counts down the same way and then ends the expedition instead.
     /// </summary>
     public sealed class LayerTravel
     {
@@ -51,6 +51,12 @@ namespace FriendlyPersonShooter.Core.Expedition
 
         /// <summary>Someone stepped into the up-portal: the group heads back up. False on layer 1 or while a move is pending.</summary>
         public bool BeginUp(double now, int playerId) => Begin(now, playerId, Layer - 1, LayerArrival.Gate, CanGoUp);
+
+        /// <summary>The deepest layer's gate opened: the countdown ends the expedition instead of moving. False above it or while a move is pending.</summary>
+        public bool BeginFinish(double now, int playerId) => Begin(now, playerId, Layer, LayerArrival.Start, !CanGoDown);
+
+        /// <summary>The pending countdown ends the expedition (the deepest layer's gate) rather than changing layer.</summary>
+        public bool Finishing => Pending && Target == Layer;
 
         public void Cancel() => Pending = false;
 

@@ -12,13 +12,16 @@ namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
     /// The expedition half of the view (MVP step 4): zone floors coloured by tile, landmarks,
-    /// shrines, the gate, dropped caches, a beacon on the current objective, and the expedition HUD.
+    /// shrines, the gate, dropped caches and the expedition HUD (no beacon on the objective: you go and look at the gate).
     /// The world wraps, so everything is drawn at its copy nearest the camera.
     /// </summary>
     public partial class ArenaView
     {
         private Material[] _tileMats;
-        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _beaconMat, _worldBossBeaconMat, _upPortalMat, _upPortalCoreMat;
+        /// <summary>The gate's colour runes, per essence colour: lit (banked) and faint (still needed).</summary>
+        private Material[] _gateRuneMats, _gateRuneDimMats;
+        private readonly List<Matrix4x4> _gateRunesLit = new List<Matrix4x4>(), _gateRunesDim = new List<Matrix4x4>();
+        private Material _landmarkMat, _shrineMat, _gateMat, _gateOpenMat, _cacheMat, _worldBossBeaconMat, _upPortalMat, _upPortalCoreMat;
         private EntityQuery _cacheQuery, _statusQuery;
         private readonly List<Matrix4x4> _x = new List<Matrix4x4>();
         private float3 _camRef;
@@ -38,13 +41,21 @@ namespace FriendlyPersonShooter.Arena
             for (int i = 0; i < tiles.Length; i++) _tileMats[i] = MakeMat(tiles[i]);
             _landmarkMat = MakeMat(new Color(0.55f, 0.5f, 0.45f));
             _shrineMat = MakeMat(new Color(0.4f, 0.95f, 1f));
-            _gateMat = MakeMat(new Color(0.75f, 0.6f, 0.2f));
+            // Neutral stone, so the runes of the gate's colour stand out.
+            _gateMat = MakeMat(new Color(0.4f, 0.38f, 0.42f));
             _gateOpenMat = MakeMat(new Color(1f, 0.95f, 0.4f));
             _cacheMat = MakeMat(new Color(1f, 0.85f, 0.1f));
-            _beaconMat = MakeMat(new Color(1f, 1f, 0.6f));
             _worldBossBeaconMat = MakeMat(new Color(1f, 0.55f, 0.15f));
             _upPortalMat = MakeMat(new Color(0.55f, 0.6f, 0.7f));
             _upPortalCoreMat = MakeGlow(new Color(0.45f, 0.8f, 1f), 1.2f);
+            _gateRuneMats = new Material[EssenceColors.Count];
+            _gateRuneDimMats = new Material[EssenceColors.Count];
+            foreach (var c in EssenceColors.All)
+            {
+                ColorUtility.TryParseHtmlString(EssencePack.Hex(c), out var color);
+                _gateRuneMats[(int)c] = MakeGlow(color, 1.8f);
+                _gateRuneDimMats[(int)c] = MakeGlow(color * 0.6f, 0.6f);
+            }
         }
 
         /// <summary>
@@ -72,9 +83,6 @@ namespace FriendlyPersonShooter.Arena
             status = all[0];
             return true;
         }
-
-        /// <summary>Within this many metres of the objective, its beacon isn't drawn.</summary>
-        private const float BeaconHideRange = 40f;
 
         private void DrawExpeditionWorld()
         {
@@ -140,6 +148,7 @@ namespace FriendlyPersonShooter.Arena
                 if (open) _x.Add(Matrix4x4.TRS(p + new Vector3(0f, h * 0.5f, 0f), Quaternion.identity, new Vector3(w - 1f, h - 0.5f, 0.1f)));
             }
             DrawList(_x, open ? _gateOpenMat : _gateMat);
+            DrawGateRunes(map, status, open);
 
             // The up-portal by the start (layers 2 and 3): a stone ring with a glowing, turning core.
             if (LayerTravel.TryPortal(map, ExpeditionWorld.Layer, out var portal))
@@ -171,16 +180,7 @@ namespace FriendlyPersonShooter.Arena
             }
             DrawList(_x, _cacheMat);
 
-            // A tall thin beacon over the current objective, gone once you're there (it would stand in the fight).
-            var beacon = status.HasTarget ? Near(new float3(status.Target.x, 0f, status.Target.y)) : Vector3.zero;
-            if (status.HasTarget && !status.Complete &&
-                Vector2.Distance(new Vector2(beacon.x, beacon.z), new Vector2(_camRef.x, _camRef.z)) > BeaconHideRange)
-            {
-                var p = Near(new float3(status.Target.x, GroundAt(new System.Numerics.Vector2(status.Target.x, status.Target.y)), status.Target.y));
-                _x.Clear();
-                _x.Add(Matrix4x4.TRS(p + Vector3.up * 30f, Quaternion.identity, new Vector3(0.4f, 60f, 0.4f)));
-                DrawList(_x, _beaconMat);
-            }
+            // No beacon over the objective: players go and look at the gate to see what it needs.
 
             // A thick orange pillar over the Colossus, so it can be found from anywhere.
             if (status.WorldBoss && !status.InRaid)
@@ -191,6 +191,55 @@ namespace FriendlyPersonShooter.Arena
                 _x.Add(Matrix4x4.TRS(p + Vector3.up * 60f, Quaternion.identity, new Vector3(1.2f, 120f, 1.2f)));
                 DrawList(_x, _worldBossBeaconMat);
             }
+        }
+
+
+        /// <summary>
+        /// The gate shows the essence it needs: runes of its colour up both posts (front and back), faint until the
+        /// party bank holds enough to light them, and a gem of that colour on the lintel. All lit once it's open.
+        /// </summary>
+        /// <summary>
+        /// A stone tablet over the gate with one slot per essence the gate costs, in the gate's color (see
+        /// <see cref="EssenceSlots"/>). Shooting an empty one banks a carried essence and lights it; all are lit once it's open.
+        /// </summary>
+        private void DrawGateRunes(LayerMap map, ExpeditionStatus status, bool open)
+        {
+            var color = LayerSettings.ForLayer(ExpeditionWorld.Layer).Gate().Color;
+            int slots = status.Goal > 0 && status.GoalColor == color ? status.Goal : 0;
+            if (slots <= 0) return;
+            float tabletH = EssenceSlots.GateTabletHeight(slots);
+            _gateRunesLit.Clear();
+            _gateRunesDim.Clear();
+            _x.Clear();
+            var size = new Vector3(EssenceSlots.GateSize, EssenceSlots.GateSize, 0.08f);
+            var diamond = Quaternion.Euler(0f, 0f, 45f);
+            foreach (var g in map.Gates)
+            {
+                var p = Near(ExpeditionWorld.ToFloat3(g.Point.World, GroundAt(g.Point.World)));
+                if ((p - (Vector3)_camRef).sqrMagnitude > 400f * 400f) continue;
+                _x.Add(Matrix4x4.TRS(p + new Vector3(0f, EssenceSlots.GateTabletBase + tabletH * 0.5f, 0f), Quaternion.identity,
+                    new Vector3(EssenceSlots.GateColumns * EssenceSlots.GatePitch + 0.6f, tabletH, 0.6f)));
+                for (int k = 0; k < slots; k++)
+                {
+                    Vector3 at = EssenceSlots.GateSlot(k, slots);
+                    var list = open || GateSlotLit(status, k) ? _gateRunesLit : _gateRunesDim;
+                    foreach (float face in new[] { -EssenceSlots.GateFace, EssenceSlots.GateFace })
+                    {
+                        list.Add(Matrix4x4.TRS(p + at + new Vector3(0f, 0f, face), diamond, size));
+                    }
+                }
+            }
+            DrawList(_x, open ? _gateOpenMat : _gateMat);
+            DrawList(_gateRunesLit, _gateRuneMats[(int)color]);
+            DrawList(_gateRunesDim, _gateRuneDimMats[(int)color]);
+        }
+
+        /// <summary>Is gate slot <paramref name="k"/> lit? (Past slot 128 the first ones light in order.)</summary>
+        private static bool GateSlotLit(ExpeditionStatus status, int k)
+        {
+            if (k < 64) return ((status.GateSlots0 >> k) & 1UL) != 0;
+            if (k < 128) return ((status.GateSlots1 >> (k - 64)) & 1UL) != 0;
+            return k < status.Banked;
         }
 
         private readonly Dictionary<System.Numerics.Vector2, float> _groundCache = new Dictionary<System.Numerics.Vector2, float>();
@@ -253,7 +302,7 @@ namespace FriendlyPersonShooter.Arena
                 float distance = math.length(delta.xz);
                 float bearing = math.degrees(math.atan2(delta.x, delta.z));
                 float relative = Mathf.DeltaAngle(ArenaLocalInputSystem.LocalLook.x, bearing);
-                e.Append($"<color=#FFE14D>{distance:0} m {Direction(relative)}</color>  (follow the light beam)\n");
+                e.Append($"<color=#FFE14D>{distance:0} m {Direction(relative)}</color>\n");
             }
             if (s.BloomNear)
             {
@@ -275,7 +324,12 @@ namespace FriendlyPersonShooter.Arena
             {
                 bool down = s.LayerNext > s.Layer;
                 int left = Mathf.CeilToInt(s.LayerCountdown);
-                e.Append($"<color=#9AD8FF><b>{(down ? "DROPPING" : "CLIMBING")} TO LAYER {s.LayerNext} in {left}s</b>: the whole group moves together</color>\n");
+                if (s.LayerNext == s.Layer)
+                {
+                    e.Append($"<color=#9AD8FF><b>EXPEDITION ENDS in {left}s</b>: the last gate is open</color>\n");
+                    return;
+                }
+                e.Append($"<color=#9AD8FF><b>{(down ? "DROPPING" : "CLIMBING")} TO LAYER {s.LayerNext} in {left}s</b>: the whole group moves together, wherever you are</color>\n");
                 if (left <= 5 && !s.InRaid) _center.text = $"Layer {s.LayerNext} in {left}";
                 return;
             }

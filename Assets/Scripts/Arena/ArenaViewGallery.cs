@@ -268,10 +268,13 @@ namespace FriendlyPersonShooter.Arena
             Vector3 eye = cam.transform.position;
             bool flash = now < _hitFlashUntil;
 
-            for (int i = 0; i < MaxTargets; i++)
+            // One at a time (banking can deal many targets): the one that's up uses the first slot.
+            bool oneAtATime = spec.Rule == GalleryRule.Sequence;
+            for (int slot = 0; slot < MaxTargets; slot++)
             {
-                var ring = _targetRings[i];
-                if (i >= _round.Count || !_round.Visible(i, t))
+                var ring = _targetRings[slot];
+                int i = oneAtATime ? (slot == 0 ? _round.Next : -1) : slot;
+                if (i < 0 || i >= _round.Count || !_round.Visible(i, t))
                 {
                     ring.gameObject.SetActive(false);
                     continue;
@@ -289,7 +292,7 @@ namespace FriendlyPersonShooter.Arena
                 ring.rectTransform.anchoredPosition = lp;
                 float size = Mathf.Max(18f, spec.Radius * 2f * pxPerDeg);
                 ring.rectTransform.sizeDelta = new Vector2(size, size);
-                _targetDots[i].rectTransform.sizeDelta = new Vector2(size * 0.32f, size * 0.32f);
+                _targetDots[slot].rectTransform.sizeDelta = new Vector2(size * 0.32f, size * 0.32f);
 
                 Color color = TargetColor;
                 string label = "";
@@ -308,22 +311,14 @@ namespace FriendlyPersonShooter.Arena
                         color = CardColors[colors[i]];
                         label = $"<size=19>{ItemLabel(ChoiceOf(g, i))}</size>";
                         break;
-                    case GalleryKind.Gate:
-                        label = (i + 1).ToString();
-                        if (i != _round.Next) color = Color.Lerp(color, Color.grey, 0.6f);
-                        break;
-                    case GalleryKind.Bank:
-                        if (g.Subject >= 0 && g.Subject < EssenceColors.Count)
-                            ColorUtility.TryParseHtmlString(EssencePack.Hex((EssenceColor)g.Subject), out color);
-                        break;
                     case GalleryKind.Travel:
                         color = new Color(0.45f, 0.8f, 1f);
                         break;
                 }
                 if (flash) color = Color.Lerp(color, Color.white, 0.5f);
                 ring.color = color;
-                _targetDots[i].color = color;
-                _targetLabels[i].text = label;
+                _targetDots[slot].color = color;
+                _targetLabels[slot].text = label;
             }
 
             _galleryTitle.text = GalleryTitle(kind);
@@ -367,10 +362,7 @@ namespace FriendlyPersonShooter.Arena
                 case GalleryKind.Box: return "LOOT BOX: SHOOT ONE";
                 case GalleryKind.Reward: return "BOSS REWARD: SHOOT ONE";
                 case GalleryKind.Cache: return "CACHE: HIT THEM ALL";
-                case GalleryKind.Bank: return "BANK: HIT EACH ONE";
-                case GalleryKind.Gate: return "UNLOCK THE GATE: IN ORDER";
                 case GalleryKind.Travel: return "TRAVEL: HIT IT";
-                case GalleryKind.RaidStart: return "START THE RAID: HIT IT";
                 default: return "";
             }
         }
@@ -383,14 +375,7 @@ namespace FriendlyPersonShooter.Arena
                 case GalleryKind.Box:
                 case GalleryKind.Reward: return "One shot. Miss, or run out of time, and the items are gone.";
                 case GalleryKind.Cache: return "Hit every target before time runs out.";
-                case GalleryKind.Bank:
-                {
-                    string color = g.Subject >= 0 && g.Subject < EssenceColors.Count ? EssencePack.Named((EssenceColor)g.Subject) : "essence";
-                    return $"Each target holds up to {GalleryDifficulty.BankChunk} {color}. Hit it to bank that; miss it and it's lost.";
-                }
-                case GalleryKind.Gate: return "Hit them in order: the bright one is next.";
-                case GalleryKind.Travel: return g.Subject == 1 ? "Hit it to head up a layer." : "Hit it to head through the gate.";
-                case GalleryKind.RaidStart: return "Hit it to start the countdown. Everyone gathers at the door.";
+                case GalleryKind.Travel: return "Hit it to head up a layer.";
                 default: return "";
             }
         }

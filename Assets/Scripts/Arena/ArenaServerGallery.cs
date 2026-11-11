@@ -30,7 +30,6 @@ namespace FriendlyPersonShooter.Arena
         /// <summary>A reward chest that ends up farther than this from its player (they travelled) moves back beside them.</summary>
         private const float ChestFollowRange = 40f;
         private const float BoxHitRadius = 0.8f, ItemHitRadius = 0.55f, ChestHitRadius = 0.9f, CacheHitRadius = 0.6f;
-        private readonly List<int> _missedTargets = new List<int>();
 
         private sealed class GalleryState
         {
@@ -47,8 +46,6 @@ namespace FriendlyPersonShooter.Arena
             public int Subject = -1;
             /// <summary>Where the player stood when it opened (an item that can't be equipped drops here).</summary>
             public float3 At;
-            /// <summary>A bank gallery's essence: what each target holds, and what was banked and lost.</summary>
-            public BankRun Bank;
             public bool Open => Round != null && !Round.Over;
         }
 
@@ -63,7 +60,10 @@ namespace FriendlyPersonShooter.Arena
             FriendCapsule,
             Orb,
             Cache,
-            BankOrb,
+            /// <summary>A slot on the gate's tablet (Id): banks one carried essence of the gate's color.</summary>
+            GateSlot,
+            /// <summary>A raid key slot (Color, Id): puts one essence of that color into the key.</summary>
+            KeySlot,
             Gate,
             Portal,
             Door,
@@ -102,7 +102,6 @@ namespace FriendlyPersonShooter.Arena
             g.ColorSeed = colorSeed;
             g.Subject = subject;
             g.At = new float3(s.Position.X, s.Position.Y, s.Position.Z);
-            g.Bank = null;
             // A short pause, so the click that opened it can't also be a gallery shot.
             s.NextGalleryShot = _time + 0.2;
         }
@@ -133,28 +132,13 @@ namespace FriendlyPersonShooter.Arena
             {
                 float yaw = AimMath.DeltaAngle(g.Yaw0, input.Yaw);
                 float pitch = input.Pitch - g.Pitch0;
-                var shot = g.Round.Shoot(yaw, pitch, input.Pitch, t);
-                if (shot.Counted && g.Bank != null)
-                {
-                    var wallet = WalletOf(s.Vitals.Id);
-                    int n = wallet == null ? 0 : g.Bank.Hit(shot.Target, wallet);
-                    if (n > 0) Banked(s.Vitals.Id, n);
-                }
+                g.Round.Shoot(yaw, pitch, input.Pitch, t);
             }
             if (g.Round.Over) SettleGallery(s, ecb);
         }
 
-        /// <summary>Moves a gallery on to time <paramref name="t"/>: bank targets that ran out lose their essence.</summary>
-        private void StepRound(PlayerState s, float t)
-        {
-            var g = s.Gallery;
-            _missedTargets.Clear();
-            g.Round.Step(t, _missedTargets);
-            if (g.Bank == null || _missedTargets.Count == 0) return;
-            var wallet = WalletOf(s.Vitals.Id);
-            if (wallet == null) return;
-            foreach (int i in _missedTargets) g.Bank.Miss(i, wallet);
-        }
+        /// <summary>Moves a gallery on to time <paramref name="t"/>.</summary>
+        private static void StepRound(PlayerState s, float t) => s.Gallery.Round.Step(t);
 
         /// <summary>Time-outs and cancels, boss reward chests, and each player's gallery ghost.</summary>
         private void StepGalleries(EntityCommandBuffer ecb)
@@ -256,30 +240,15 @@ namespace FriendlyPersonShooter.Arena
                 case GalleryKind.Cache:
                     if (won) PickUpCache(g.Subject, id);
                     break;
-                case GalleryKind.Bank:
-                    if (g.Bank != null)
-                    {
-                        _bankLost += g.Bank.Lost;
-                        UnityEngine.Debug.Log($"[Gallery] player {id} banked {g.Bank.Banked} {g.Bank.Color}, lost {g.Bank.Lost}");
-                    }
-                    break;
-                case GalleryKind.Gate:
-                    if (won) UnlockGate(id);
-                    break;
                 case GalleryKind.Travel:
-                    if (!won) break;
-                    if (g.Subject == 1) TryGoUp(id);
-                    else PassGate(id);
-                    break;
-                case GalleryKind.RaidStart:
-                    if (won && _raid != null && _raid.Ready && _raid.Begin(_time)) AnnounceGather(id);
+                    if (won) TryGoUp(id);
                     break;
             }
             _galleries++;
             if (won) _galleriesWon++;
         }
 
-        private int _galleries, _galleriesWon, _bankLost;
+        private int _galleries, _galleriesWon, _slotsBanked, _slotsPledged;
 
         /// <summary>A waiting boss reward lands as a chest beside its player (not inside the raid), one at a time.</summary>
         private void PlaceChest(PlayerState s)
@@ -370,20 +339,24 @@ namespace FriendlyPersonShooter.Arena
                     if (RaySphere(eye, dir, c, CacheHitRadius, best.At, out at)) best = new ShotObject { Kind = ShotObjectKind.Cache, Id = cache.Id, At = at };
                 }
             }
-            var wallet = WalletOf(id);
-            if (wallet != null && _banking != null && _banking.CanBank(id, _time))
+            // Essence slots on the gate's tablet and the raid door. They sit on the gate and door, inside their big
+            // hit spheres, so a slot in front of anything else takes the shot over the gate or door behind it.
+            var slot = default(ShotObject);
+            if (_gate != null && !_gate.IsOpen)
             {
-                foreach (var site in ShotTargets.BankSites(_map))
-                {
-                    if (!ShotTargets.Bank(site, out var crystal)) continue;
-                    foreach (var color in EssenceColors.All)
-                    {
-                        if (wallet.Carried(color) <= 0) continue;
-                        var c = ExpeditionWorld.Near(ShotTargets.BankOrb(crystal, color), eye);
-                        if (RaySphere(eye, dir, c, ShotTargets.BankOrbRadius, best.At, out at))
-                            best = new ShotObject { Kind = ShotObjectKind.BankOrb, Color = color, At = at };
-                    }
-                }
+                float y = ShotTargets.Ground(_gate.Site.Point.World);
+                var foot = ExpeditionWorld.Near(new float3(_gate.Site.Point.World.X, y, _gate.Site.Point.World.Y), eye);
+                if (!float.IsNaN(y) && EssenceSlots.GateOnShot(foot, _gate.Cost, eye, dir, best.At, out int k, out float d))
+                    slot = new ShotObject { Kind = ShotObjectKind.GateSlot, Id = k, At = d };
+            }
+            if (_raid != null && _raid.Phase == RaidPhase.Collecting)
+            {
+                var doorPoint = RaidDoorPoint;
+                float y = ShotTargets.Ground(doorPoint);
+                var foot = ExpeditionWorld.Near(new float3(doorPoint.X, y, doorPoint.Y), eye);
+                if (!float.IsNaN(y) && EssenceSlots.DoorOnShot(foot, eye, dir, slot.Kind != ShotObjectKind.None ? slot.At : best.At,
+                        out var keyColor, out int k, out float d))
+                    slot = new ShotObject { Kind = ShotObjectKind.KeySlot, Color = keyColor, Id = k, At = d };
             }
             if (_gate != null && ShotTargets.Gate(_gate.Site.Point.World, out var gate) &&
                 RaySphere(eye, dir, ExpeditionWorld.Near(gate, eye), ShotTargets.GateRadius, best.At, out at))
@@ -394,6 +367,7 @@ namespace FriendlyPersonShooter.Arena
             if (_raid != null && ShotTargets.Door(RaidDoorPoint, out var door) &&
                 RaySphere(eye, dir, ExpeditionWorld.Near(door, eye), ShotTargets.DoorRadius, best.At, out at))
                 best = new ShotObject { Kind = ShotObjectKind.Door, At = at };
+            if (slot.Kind != ShotObjectKind.None) best = slot;
         }
 
         /// <summary>Where a ray first meets a sphere, if before <paramref name="maxRange"/>.</summary>
@@ -451,31 +425,46 @@ namespace FriendlyPersonShooter.Arena
                 case ShotObjectKind.Cache:
                     OpenGallery(s, GalleryKind.Cache, yaw, pitch, false, subject: obj.Id);
                     break;
-                case ShotObjectKind.BankOrb:
+                case ShotObjectKind.GateSlot:
                 {
+                    // Open to this player (back up a layer, or a move was called off): any shot at the gate starts the countdown.
+                    if (_gate != null && _gate.HasAccess(id))
+                    {
+                        BeginGateTravel(id);
+                        return;
+                    }
+                    // An empty slot banks one carried essence of the gate's color, and lights. Otherwise nothing happens.
+                    // The last slot opens the gate at once (OpenFullGate).
                     var wallet = WalletOf(id);
-                    if (wallet == null || !_banking.CanBank(id, _time) || wallet.Carried(obj.Color) <= 0) return;
-                    var run = new BankRun(obj.Color, wallet.Carried(obj.Color));
-                    OpenGallery(s, GalleryKind.Bank, yaw, pitch, false, subject: (int)obj.Color, targets: run.Targets);
-                    s.Gallery.Bank = run;
+                    if (wallet == null || _gate == null || _gate.IsOpen || !_banking.CanBank(id, _time)) return;
+                    if (_gateSlots.IsLit(obj.Id) || wallet.BankSome(_gate.Color, 1) <= 0) return;
+                    _gateSlots.Light(obj.Id);
+                    _slotsBanked++;
+                    Banked(id, 1);
+                    break;
+                }
+                case ShotObjectKind.KeySlot:
+                {
+                    // An empty key slot takes one essence of its color (carried first, then banked), and lights.
+                    var wallet = WalletOf(id);
+                    if (wallet == null || _raid == null || !_banking.CanBank(id, _time)) return;
+                    if (!_keySlots.TryGetValue(obj.Color, out var board) || board.IsLit(obj.Id) || !_raid.PledgeOne(wallet, obj.Color)) return;
+                    board.Light(obj.Id);
+                    _slotsPledged++;
+                    _raidPledged++;
+                    _lastPledger = id;
                     break;
                 }
                 case ShotObjectKind.Gate:
-                {
-                    var wallet = WalletOf(id);
-                    if (_gate.IsOpen && _gate.HasAccess(id)) OpenGallery(s, GalleryKind.Travel, yaw, pitch, false, subject: 0);
-                    else if (wallet != null && !_gate.HasAccess(id) && _gate.Shortfall(wallet) == 0) OpenGallery(s, GalleryKind.Gate, yaw, pitch, false);
+                    // Filling the slots opens it; a shot only matters once it's open to you (see GateSlot).
+                    if (_gate.HasAccess(id)) BeginGateTravel(id);
                     break;
-                }
                 case ShotObjectKind.Portal:
                     if (_travel != null && !_travel.Pending && RaidAllowsTravel) OpenGallery(s, GalleryKind.Travel, yaw, pitch, false, subject: 1);
-                    break;
-                case ShotObjectKind.Door:
-                    if (_raid.Ready && !RaidArena.InRaidSpace(feet)) OpenGallery(s, GalleryKind.RaidStart, yaw, pitch, false);
                     break;
             }
         }
 
-        private string GalleryLog() => $"galleries={_galleries} galleriesWon={_galleriesWon} bankLost={_bankLost}";
+        private string GalleryLog() => $"galleries={_galleries} galleriesWon={_galleriesWon} slotsBanked={_slotsBanked} slotsPledged={_slotsPledged}";
     }
 }

@@ -29,7 +29,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void TargetsMoveButStayInView()
         {
-            var g = new GalleryRound(GalleryDifficulty.For(GalleryKind.Gate, 3), 77);
+            var g = new GalleryRound(GalleryDifficulty.For(GalleryKind.Cache, 3), 77);
             float moved = 0f;
             for (float t = 0; t < 10f; t += 0.1f)
             {
@@ -79,7 +79,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void TimeRunsOut()
         {
-            var spec = GalleryDifficulty.For(GalleryKind.RaidStart, 1);
+            var spec = GalleryDifficulty.For(GalleryKind.Travel, 1);
             var g = new GalleryRound(spec, 5);
             g.Step(spec.Seconds - 0.01f);
             Assert.That(g.Over, Is.False);
@@ -91,7 +91,7 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void OrderedNeedsTheRightOrder()
         {
-            var g = new GalleryRound(GalleryDifficulty.For(GalleryKind.Gate, 1), 11);
+            var g = new GalleryRound(new GallerySpec(GalleryKind.None, GalleryRule.Ordered, 3, 10f, 0f, false, 4f, 9f), 11);
             Assert.That(g.Count, Is.EqualTo(3));
             // Targets can overlap at a given moment; find times where each stands alone.
             float t = 0.5f;
@@ -129,10 +129,8 @@ namespace FriendlyPersonShooter.Core.Tests
         [Test]
         public void SequenceDealsTargetsOneAtATime()
         {
-            int amount = 23;
-            int n = GalleryDifficulty.BankTargets(amount);
-            Assert.That(n, Is.EqualTo(5));
-            var spec = GalleryDifficulty.For(GalleryKind.Bank, 1, n);
+            const int n = 5;
+            var spec = new GallerySpec(GalleryKind.None, GalleryRule.Sequence, n, 0f, 3f, false, 4f, 9f);
             var g = new GalleryRound(spec, 8);
             Assert.That(g.Visible(0, 0f) && !g.Visible(1, 0f), Is.True);
 
@@ -155,16 +153,6 @@ namespace FriendlyPersonShooter.Core.Tests
         }
 
         [Test]
-        public void BankChunksAddUp()
-        {
-            int total = 0;
-            for (int i = 0; i < GalleryDifficulty.BankTargets(23); i++) total += GalleryDifficulty.BankChunkAmount(23, i);
-            Assert.That(total, Is.EqualTo(23));
-            Assert.That(GalleryDifficulty.BankChunkAmount(23, 4), Is.EqualTo(3));
-            Assert.That(GalleryDifficulty.BankTargets(0), Is.EqualTo(0));
-        }
-
-        [Test]
         public void DeeperLayersAreHarder()
         {
             var a = GalleryDifficulty.For(GalleryKind.Box, 1);
@@ -172,7 +160,7 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(c.Radius, Is.LessThan(a.Radius));
             Assert.That(c.Speed, Is.GreaterThan(a.Speed));
             Assert.That(c.Seconds, Is.LessThan(a.Seconds));
-            Assert.That(GalleryDifficulty.For(GalleryKind.Gate, 3).Targets, Is.GreaterThan(GalleryDifficulty.For(GalleryKind.Gate, 1).Targets));
+            Assert.That(GalleryDifficulty.For(GalleryKind.Cache, 3).Targets, Is.GreaterThan(GalleryDifficulty.For(GalleryKind.Cache, 1).Targets));
             Assert.That(GalleryDifficulty.For(GalleryKind.Starter, 3).Seconds, Is.EqualTo(0f));
         }
 

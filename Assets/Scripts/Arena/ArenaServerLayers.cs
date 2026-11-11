@@ -9,8 +9,9 @@ using UnityEngine;
 namespace FriendlyPersonShooter.Arena
 {
     /// <summary>
-    /// Layers 2 and 3 on the server (see <see cref="LayerTravel"/>): the open gate on layers 1 and 2 and the
-    /// up-portal by the start on layers 2 and 3 start a countdown for the whole group, then everyone moves.
+    /// Layers 2 and 3 on the server (see <see cref="LayerTravel"/>): the gate opening on layers 1 and 2 and the
+    /// up-portal by the start on layers 2 and 3 start a countdown for the whole group, then everyone moves, wherever
+    /// they are. On the deepest layer the gate's countdown ends everyone's run instead.
     /// A layer change swaps the map and everything built from it (spawns, blooms, gate, banks, raid doors,
     /// the Colossus) and keeps what the players own (carried essence, the party bank, the raid key, kudos).
     /// </summary>
@@ -59,7 +60,10 @@ namespace FriendlyPersonShooter.Arena
                 }
             }
 
-            if (_travel.Step(_time)) ChangeLayer(ecb, _travel.Layer, _travel.Arrival);
+            bool finishing = _travel.Finishing;
+            if (!_travel.Step(_time)) return;
+            if (finishing) FinishExpedition();
+            else ChangeLayer(ecb, _travel.Layer, _travel.Arrival);
         }
 
         /// <summary>The up-portal was shot (or a bot stood in it): the group heads up.</summary>
@@ -71,15 +75,14 @@ namespace FriendlyPersonShooter.Arena
             return true;
         }
 
-        /// <summary>Someone went through the open gate: the group heads down (false on the deepest layer).</summary>
-        private bool TryGoDown(int id)
+        /// <summary>The gate opened (or was shot while open): the group heads down. Not on the deepest layer.</summary>
+        private void TryGoDown(int id)
         {
-            if (_travel == null || !_travel.CanGoDown) return false;
+            if (_travel == null || !_travel.CanGoDown) return;
             if (_gate.HasAccess(id) && RaidAllowsTravel && _travel.BeginDown(_time, id))
             {
                 _announce.Add((AnnounceKind.LayerTravel, (int)LayerTravel.Countdown, id, _travel.Target));
             }
-            return true;
         }
 
         private void ChangeLayer(EntityCommandBuffer ecb, int layer, LayerArrival arrival)

@@ -195,15 +195,15 @@ namespace FriendlyPersonShooter.Core.Expedition
                     string label = $"the gate {gatePlace}";
                     double locked = _banking != null ? _banking.LockedFor(PlayerId, now) : 0.0;
                     string text = locked > 0.0
-                        ? $"{Banking.LockoutText(locked)}. Then shoot the bank crystal by {label}"
-                        : $"Shoot the bank crystal by {label} to bank your {color}: {carried} carried, {banked}/{GoalAmount} banked";
+                        ? $"{Banking.LockoutText(locked)}. Then shoot the empty slots on {label}"
+                        : $"Shoot the empty slots on {label} to bank your {color}, one each: {carried} carried, {banked}/{GoalAmount} banked";
                     return new ExpeditionObjective(Phase, text, true, gatePoint, label);
                 }
                 case ExpeditionPhase.Unlock:
                 {
                     string label = $"the gate {gatePlace}";
                     return new ExpeditionObjective(Phase,
-                        $"Shoot {label} to open it: costs {GoalAmount} {color}, you have {banked} banked",
+                        $"The slots on {label} are full ({banked}/{GoalAmount} {color}): it opens once no raid or layer move is under way",
                         true, gatePoint, label);
                 }
                 case ExpeditionPhase.PassThrough:
@@ -211,7 +211,7 @@ namespace FriendlyPersonShooter.Core.Expedition
                     string label = $"the gate {gatePlace}";
                     // Access without a running opening: the group came back up through this gate, and it stays open to them.
                     string open = _gate.IsOpen ? $"Gate open for {(int)Math.Ceiling(_gate.OpenLeft(now))}s" : "The gate is open to you";
-                    return new ExpeditionObjective(Phase, $"{open}. Shoot {label} to go through", true, gatePoint, label);
+                    return new ExpeditionObjective(Phase, $"{open}. The whole group goes through together; if no countdown is running, shoot {label} to start it", true, gatePoint, label);
                 }
                 default:
                     return new ExpeditionObjective(Phase,

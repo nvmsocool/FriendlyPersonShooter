@@ -98,9 +98,9 @@ namespace FriendlyPersonShooter.Arena
             "Left mouse  fire    Right mouse  zoom\n" +
             "Middle mouse  ping a spot or an enemy\n" +
             "Everything else is a shot: loot boxes, items, essence orbs,\n" +
-            "  the bank crystal, the gate, portals and the raid door\n" +
+            "  the gate and its empty essence slots, portals, the raid door and its key slots\n" +
             "Out of payload: shoot your capsule out of the air\n" +
-            "Esc  free the mouse (this menu)\n" +
+            "Esc  open or close this menu\n" +
             "Click the game  capture the mouse\n\n" +
             "<b>Quick-chat</b>\n" +
             "1 Thanks      2 Need a res\n" +
@@ -117,7 +117,7 @@ namespace FriendlyPersonShooter.Arena
             "<color=#D98CFF><b>RELAY</b></color>  allies: their next 5 hits also carry Might and add a chain link.  enemies: tag (hits splash)\n\n" +
             "<b>Chains</b>  buffing different allies in a row builds a chain; an enemy hit cashes it for bonus damage.\n" +
             "<b>Down?</b>  allies shoot your soul fragments to revive you.\n\n" +
-            "<b>Expedition</b>  gather Yellow (shoot the orbs your kills drop), bank it by shooting the crystal at the raid door or the gate, then shoot the gate to open it and again to go through (aim for under 20:00). Follow the light beam. Banked essence is shared by the party.\n" +
+            "<b>Expedition</b>  gather the color the gate needs (its runes show it; shoot the orbs your kills drop), bank it by shooting the gate's empty slots (one essence each; the raid door's slots fill its key the same way). When the last slot lights, the gate opens and 10 s later the whole group moves down, wherever they are (aim for under 20:00); a full raid key does the same for the raid after 20 s. Banked essence is shared by the party.\n" +
             "<b>Glimmers</b>  small yellow diamonds: one shot pops them for a little Yellow.\n" +
             "<b>Skills</b>  XP levels you up; spend points with the Skills button below.";
 

@@ -34,30 +34,6 @@ namespace FriendlyPersonShooter.Arena
 
         private static bool InRoom(in ExpeditionStatus s, RaidRoomKind kind) => s.InRaid && s.RaidStageCount > 0 && s.RaidRoom == kind;
 
-        private static readonly RaidSettings DoorRules = new RaidSettings();
-        /// <summary>A full key waits this long at the door before a bot presses E: people choose when to go.</summary>
-        private const double DoorPressDelay = 30.0;
-        private double _doorReadySince = -1.0;
-
-        /// <summary>
-        /// At the raid door with a full key that has waited <see cref="DoorPressDelay"/> seconds, press E to
-        /// start the countdown, so bot-only groups still raid.
-        /// </summary>
-        private void DoorPress(float3 pos, in ExpeditionStatus s, ref ArenaInput input)
-        {
-            bool ready = !s.InRaid && s.RaidPhase == RaidPhase.Collecting &&
-                         RaidKey.Full(s.Key);
-            if (!ready)
-            {
-                _doorReadySince = -1.0;
-                return;
-            }
-            double now = World.Time.ElapsedTime;
-            if (_doorReadySince < 0.0) _doorReadySince = now;
-            if (now - _doorReadySince < DoorPressDelay || RaidArena.InRaidSpace(pos)) return;
-            var door = ExpeditionWorld.Near(ExpeditionWorld.ToFloat3(RaidArena.Door), pos);
-            if (math.distance(door.xz, pos.xz) <= DoorRules.UseRadius - 1f) input.Interact.Set();
-        }
 
         /// <summary>
         /// Color Locks: aim and fire at the crystal that comes next. Waits a moment after each change (a

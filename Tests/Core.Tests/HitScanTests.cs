@@ -61,7 +61,7 @@ namespace FriendlyPersonShooter.Core.Tests
         public void Cast_RespectsMaxRangeHittableAndIgnore()
         {
             var near = HitTarget.Body(1, new Vector3(0, 0, 10), 1);
-            var far = HitTarget.Body(2, new Vector3(0, 0, 30), 1);
+            var far = HitTarget.Body(2, new Vector3(0, 0, 30), 1, isPlayer: true);
             var targets = new List<HitTarget> { near, far };
             Assert.That(HitScan.Cast(Vector3.Zero, Vector3.UnitZ, 5, targets, out _), Is.False);
 
@@ -71,6 +71,16 @@ namespace FriendlyPersonShooter.Core.Tests
             Assert.That(hit.TargetId, Is.EqualTo(2));
 
             Assert.That(HitScan.Cast(Vector3.Zero, Vector3.UnitZ, 100, targets, out _, ignoreId: 2), Is.False);
+        }
+
+        [Test]
+        public void Cast_IgnoresOnlyTheShootingPlayer_NotAnEnemyWithTheSameNumber()
+        {
+            // Player 3 shooting enemy 3: enemy and player ids are counted separately, so it must still hit.
+            var enemy = HitTarget.Body(3, new Vector3(0, 0, 10), 1);
+            var targets = new List<HitTarget> { enemy };
+            Assert.That(HitScan.Cast(Vector3.Zero, Vector3.UnitZ, 100, targets, out var hit, ignoreId: 3), Is.True);
+            Assert.That(hit.TargetId, Is.EqualTo(3));
         }
 
         [Test]

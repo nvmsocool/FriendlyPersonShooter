@@ -99,12 +99,16 @@ namespace FriendlyPersonShooter.Arena
             _center = _hud.Center;
         }
 
+        /// <summary>Whether the mouse was captured at the end of last frame (the Editor frees it on Esc before we see the key).</summary>
+        private bool _lockedLastFrame;
+
         private void Update()
         {
             var keyboard = Keyboard.current;
             var mouse = Mouse.current;
-            // Esc frees the mouse.
-            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame) Cursor.lockState = CursorLockMode.None;
+            // Esc opens the menu (frees the mouse) and closes it again (captures the mouse).
+            if (keyboard != null && keyboard.escapeKey.wasPressedThisFrame)
+                Cursor.lockState = _lockedLastFrame ? CursorLockMode.None : CursorLockMode.Locked;
             // Clicking into the game captures the mouse, except on an overlay button (the session's Leave and Copy).
             if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked &&
                 !(UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()))
@@ -112,6 +116,7 @@ namespace FriendlyPersonShooter.Arena
                 Cursor.lockState = CursorLockMode.Locked;
             }
             Cursor.visible = Cursor.lockState != CursorLockMode.Locked;
+            _lockedLastFrame = Cursor.lockState == CursorLockMode.Locked;
 
             _wrap = ExpeditionWorld.Active;
             if (!_wrap)

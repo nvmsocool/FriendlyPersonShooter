@@ -235,7 +235,7 @@ namespace FriendlyPersonShooter.Arena
                           $"fragmentHits={_fragmentHits} chainsCashed={_chainsCashed} avgChainLinks={(_chainsCashed > 0 ? (float)_chainLinksCashed / _chainsCashed : 0f):0.0} " +
                           $"chainDamage={_chainDamage:0} combos={_combosFormed} splashHits={_splashHits} splashDamage={_splashDamage:0} " +
                           $"plagueSpreads={_plagueSpreads} glimmers={_glimmersSpawned} levelUps={_levelUps} boxes={_boxesOpened} itemsTaken={_itemsTaken} " +
-                          $"blasts={_blastCount} ricochets={_ricochets} {GalleryLog()} {CapsuleLog()} {OrbLog()} hp=[{hp}]");
+                          $"blasts={_blastCount} ricochets={_ricochets} own={_ownShots} reported={_reportedHits} unreported={_unreported} {GalleryLog()} {CapsuleLog()} {OrbLog()} hp=[{hp}]");
                 if (ExpeditionWorld.Active) LogExpedition();
                 LogGuns();
             }
@@ -392,7 +392,7 @@ namespace FriendlyPersonShooter.Arena
                     EntityManager.SetComponentData(ghost.Entity, LocalTransform.FromPosition(ToFloat3(frag.Position)));
                     EntityManager.SetComponentData(ghost.Entity, new ArenaFragment
                     {
-                        OwnerNetworkId = p.Vitals.Id, Opacity = p.Revive.Opacity(frag),
+                        OwnerNetworkId = p.Vitals.Id, Opacity = p.Revive.Opacity(frag), TargetId = key,
                     });
                 }
             }
@@ -435,7 +435,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 Family = state.Family, Health = state.Vitals.Health, MaxHealth = state.Vitals.Health, Hittable = true,
                 Yaw = state.Boss.Yaw, World = state.WorldBoss, Boss = IsRaidBoss(state), Tier = (byte)state.Tier, Elite = state.Elite,
-                LookSeed = BugLook.SeedFrom((uint)id),
+                LookSeed = BugLook.SeedFrom((uint)id), Id = id, WeakScale = 1f,
             });
             _enemies[e] = state;
             _enemyById[id] = e;
@@ -611,7 +611,7 @@ namespace FriendlyPersonShooter.Arena
                     Slowed = s.Vitals.Debuffs.Has(EffectKind.Slow), Tagged = s.Vitals.IsTagged,
                     Jammed = s.Vitals.Debuffs.Has(EffectKind.Jam), Brittle = s.Vitals.Debuffs.Has(EffectKind.Brittle),
                     Marked = s.Vitals.Debuffs.Has(EffectKind.Mark), Frozen = s.Vitals.IsFrozen, Shattered = s.Vitals.IsShattered,
-                    LookSeed = BugLook.SeedFrom((uint)s.Vitals.Id),
+                    LookSeed = BugLook.SeedFrom((uint)s.Vitals.Id), Id = s.Vitals.Id, WeakScale = s.Vitals.WeakPointScale,
                 });
                 if (wither > 0f && s.Vitals.IsDead) _scratch.Add(e);
             }
@@ -735,14 +735,25 @@ namespace FriendlyPersonShooter.Arena
             _announce.Clear();
         }
 
-        /// <summary>Hit targets as the shooter saw them. In the wrapping expedition world each is moved to its copy nearest the shooter.</summary>
-        private void BuildTargets(int tick, int shooterId, float3 eye)
+        /// <summary>
+        /// Hit targets as the shooter saw them. In the wrapping expedition world each is moved to its copy nearest the shooter.
+        /// <paramref name="seenFraction"/> &gt; 0 is the client's interpolation fraction: it drew enemies at
+        /// <paramref name="tick"/> − 1 + fraction (measured: this matches the drawn positions exactly).
+        /// </summary>
+        private void BuildTargets(int tick, int shooterId, float3 eye, float seenFraction = 0f)
         {
+            int sampleTick = tick;
+            float sampleFraction = 0f;
+            if (seenFraction > 0f)
+            {
+                sampleTick = tick - 1;
+                sampleFraction = math.min(seenFraction, 1f);
+            }
             _targets.Clear();
             foreach (var kv in _players)
             {
                 if (kv.Value.Vitals.Id == shooterId || kv.Value.Vitals.IsDown) continue;
-                var p = NearVec(kv.Value.History.Sample(tick, 0f), eye);
+                var p = NearVec(kv.Value.History.Sample(sampleTick, sampleFraction), eye);
                 var center = p + new Vector3(0f, ArenaWeapon.PlayerHitHeight, 0f);
                 _targets.Add(HitTarget.Body(kv.Value.Vitals.Id, center, ArenaWeapon.PlayerHitRadius, isPlayer: true));
             }
@@ -755,47 +766,10 @@ namespace FriendlyPersonShooter.Arena
             foreach (var kv in _enemies)
             {
                 var s = kv.Value;
-                var past = s.History.SampleState(tick, 0f);
+                var past = s.History.SampleState(sampleTick, sampleFraction);
                 past.Position = NearVec(past.Position, eye);
-                HitTarget target;
-                float grow = s.Elite != EliteKind.None ? Elites.SizeMultiplier : 1f;
-                switch (s.Family)
-                {
-                    case EnemyFamily.Wisp:
-                        target = HitTarget.Body(s.Vitals.Id, past.Position, WispOf(s).BodyRadius * grow);
-                        break;
-                    case EnemyFamily.Skitter:
-                    {
-                        var k = SkitterOf(s);
-                        target = HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, k.BodyRadius * grow,
-                            past.Position + k.CoreOffset, k.CoreRadius * grow);
-                        break;
-                    }
-                    case EnemyFamily.Sentinel:
-                        target = SentinelTarget(s, past, grow);
-                        break;
-                    case EnemyFamily.Diver:
-                        target = DiverTarget(s, past, grow);
-                        break;
-                    case EnemyFamily.Glimmer:
-                        target = HitTarget.Body(s.Vitals.Id, past.Position, GlimmerRadius);
-                        break;
-                    case EnemyFamily.Bulwark:
-                    {
-                        var b = BulwarkOf(s);
-                        target = s.WorldBoss
-                            ? HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, _colossus.BodyRadius,
-                                ColossusBehavior.CoreCenterOf(past.Position, _colossus), _colossus.CoreRadius)
-                            : HitTarget.WithWeakPoint(s.Vitals.Id, past.Position, b.BodyRadius * grow,
-                                BulwarkBehavior.PlateCenterOf(past.Position, s.Boss.Yaw, b), b.PlateRadius * grow);
-                        target.WeakPointOnSurface = true;
-                        break;
-                    }
-                    default:
-                        target = HitTarget.Body(s.Vitals.Id, past.Position, _mitesTier[EnemyTiers.Clamp(s.Tier)].MiteRadius);
-                        break;
-                }
-                target.Hittable = past.Hittable;
+                var target = EnemyHitShapes.For(s.Vitals.Id, s.Family, s.Tier, s.Elite, s.WorldBoss, s.Roaming, past.Position,
+                    EnemyYaw(s), past.Hittable);
                 // Mark grows weak points for everyone.
                 if (target.HasWeakPoint) target.WeakPointRadius *= focus * s.Vitals.WeakPointScale;
                 _targets.Add(target);
@@ -805,7 +779,7 @@ namespace FriendlyPersonShooter.Arena
             {
                 int ownerId = (kv.Key - FragmentIdBase) / FragmentIdsPerPlayer;
                 if (ownerId == shooterId) continue;
-                var p = NearVec(kv.Value.History.Sample(tick, 0f), eye);
+                var p = NearVec(kv.Value.History.Sample(sampleTick, sampleFraction), eye);
                 _targets.Add(HitTarget.Body(kv.Key, p, _combat.Revive.FragmentRadius));
             }
         }

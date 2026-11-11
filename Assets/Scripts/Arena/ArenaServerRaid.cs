@@ -25,8 +25,6 @@ namespace FriendlyPersonShooter.Arena
     {
         /// <summary>Show the door's state on the HUD of anyone this close (metres).</summary>
         private const float RaidNoticeRadius = 45f;
-        /// <summary>While the door gathers, point everyone this close at it.</summary>
-        private const float RaidCallRadius = 300f;
 
         /// <summary>
         /// Debug and bot runs: fill the key, start the countdown, and take every player in at its end.
@@ -88,21 +86,31 @@ namespace FriendlyPersonShooter.Arena
             {
                 var st = kv.Value;
                 int id = st.Vitals.Id;
-                if (st.Vitals.IsDown || _raid.IsInside(id)) continue;
+                // A gather started by a full key takes everyone, downed or not, wherever they are.
+                if ((st.Vitals.IsDown && !_raidTakeEveryone) || _raid.IsInside(id)) continue;
                 var pos = EntityManager.GetComponentData<LocalTransform>(kv.Key).Position;
                 bool atDoor = _map.Distance(ExpeditionWorld.Ground(pos), door) <= _raid.Settings.UseRadius && !RaidArena.InRaidSpace(pos);
                 if (!atDoor && !_raidTakeEveryone) continue;
                 _atDoor.Add(id);
-                if (!atDoor) continue;
-                // Players pledge from the bank only; their carried essence goes through the bank crystal first.
-                int pledged = _raid.Pledge(WalletOf(id), bankedOnly: !st.BotKit);
+                if (!atDoor || st.Vitals.IsDown) continue;
+                // Players fill the key by shooting its empty slots (ArenaServerGallery); bots pledge by standing here.
+                int pledged = st.BotKit ? _raid.Pledge(WalletOf(id)) : 0;
                 if (pledged > 0)
                 {
                     _raidPledged += pledged;
+                    _lastPledger = id;
                     _announce.Add((AnnounceKind.RaidPledged, pledged, id, 0));
                 }
             }
             _atDoor.Sort();
+
+            // The key's last slot lit: the countdown starts at once, and at its end everyone goes in, wherever they
+            // are. It waits for a pending layer move to finish first.
+            if (_raid.Ready && (_travel == null || !_travel.Pending) && _raid.Begin(_time))
+            {
+                _raidTakeEveryone = true;
+                AnnounceGather(_lastPledger);
+            }
 
             switch (_raid.Update(_time, _atDoor))
             {
@@ -117,17 +125,10 @@ namespace FriendlyPersonShooter.Arena
             if (_raid.Phase == RaidPhase.Running) StepRaidRun(ecb);
         }
 
-        /// <summary>E at the raid door (called from Interact): with a full key, starts the countdown.</summary>
-        private bool TryStartRaid(int id, float3 feet)
-        {
-            if (_raid == null || !_raid.Ready || RaidArena.InRaidSpace(feet)) return false;
-            if (_map.Distance(ExpeditionWorld.Ground(feet), RaidDoorPoint) > _raid.Settings.UseRadius) return false;
-            if (!_raid.Begin(_time)) return false;
-            AnnounceGather(id);
-            return true;
-        }
+        /// <summary>Who put essence into the key last: the gather is announced as theirs.</summary>
+        private int _lastPledger;
 
-        /// <summary><paramref name="id"/> started the countdown (0 for a debug start).</summary>
+        /// <summary><paramref name="id"/> filled the key (0 for a debug start).</summary>
         private void AnnounceGather(int id)
         {
             _announce.Add((AnnounceKind.RaidGathering, (int)_raid.Settings.GatherSeconds, id, 0));
@@ -469,22 +470,22 @@ namespace FriendlyPersonShooter.Arena
                 objective = new ExpeditionObjective(phase, text, hasTarget, target, "portal");
                 return true;
             }
-            if (_raid.Phase == RaidPhase.Gathering && toDoor <= RaidCallRadius)
+            if (_raid.Phase == RaidPhase.Gathering)
             {
                 objective = new ExpeditionObjective(phase,
-                    $"RAID DOOR OPEN: stand at the door to go in! {left}s ({toDoor:0} m)", true, door, "raid door");
+                    $"RAID IN {left}s: the whole group goes in together, wherever you are", true, door, "raid door");
                 return true;
             }
             if (_raid.Ready && toDoor <= RaidNoticeRadius)
             {
                 objective = new ExpeditionObjective(phase,
-                    $"Raid key full: shoot the door to start the {_raid.Settings.GatherSeconds:0}s countdown", true, door, "raid door");
+                    "Raid key full: the raid starts once the layer move is done", true, door, "raid door");
                 return true;
             }
             if (_raid.Phase == RaidPhase.Collecting && toDoor <= RaidNoticeRadius)
             {
                 objective = new ExpeditionObjective(phase,
-                    $"Raid door: stand at it to pledge {RaidKey.ColorList()}. Key: Blue {_raid.Pledged(EssenceColor.Blue)}/{_raid.Cost(EssenceColor.Blue)}, " +
+                    $"Raid door: shoot its empty slots to fill the key with {RaidKey.ColorList()}. Key: Blue {_raid.Pledged(EssenceColor.Blue)}/{_raid.Cost(EssenceColor.Blue)}, " +
                     $"Purple {_raid.Pledged(EssenceColor.Purple)}/{_raid.Cost(EssenceColor.Purple)}, " +
                     $"Green {_raid.Pledged(EssenceColor.Green)}/{_raid.Cost(EssenceColor.Green)}", true, door, "raid door");
                 return true;
